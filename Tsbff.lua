@@ -104,7 +104,7 @@ StarterGui:SetCore("SendNotification", {
     Title = "DYHUB",
     Text = "Toggle Keybind: ( K )",
     Duration = 30,
-    Icon = "rbxassetid://104487529937",
+    Icon = "rbxassetid://104487529937663",
 })
 
 loadstring(game:HttpGet("https://pastefy.app/ZQtMnR66/raw"))()
@@ -2115,7 +2115,7 @@ Tabs.Fight:Button({
     Locked = false,
     Callback = function()
         getgenv().Settings = { TargetHealth = 50, CharacterHeight = 8, ResetStreak = false, AntiDC = false }
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/DiosDi/VexonHub/refs/heads/main/TrashCan-Farm"))()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/mabdu21/YWVATBAUBAK-FISH-IT/refs/heads/main/Trashcan.lua"))()
     end,
 })
 
@@ -3427,4 +3427,5 @@ local Discord = Info:Paragraph({
             end,
         }
     }
+
 })
