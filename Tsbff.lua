@@ -1,3 +1,4 @@
+-- hihi version 5.5
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -112,7 +113,7 @@ loadstring(game:HttpGet("https://pastefy.app/ZQtMnR66/raw"))()
 local MainWindow = WindUI:CreateWindow({
     Title = "DYHUB",
     Icon = "rbxassetid://104487529937663",
-    Author = "The Strongest Battle Grounds | Premium Version",
+    Author = "The Strongest Battlegrounds | Extra Version",
     Folder = "DYHUB_TSBG",
     Size = UDim2.fromOffset(500, 450),
     Transparent = getgenv().TransparencyEnabled,
@@ -3429,3 +3430,4 @@ local Discord = Info:Paragraph({
     }
 
 })
+
