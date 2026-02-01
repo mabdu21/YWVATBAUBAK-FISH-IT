@@ -1,4 +1,4 @@
--- l18
+-- l1552
 print("reached obfuscated version")
 print("sending webhook...")
 warn("webhook missing")
@@ -37,7 +37,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
-getgenv().AUTHORIZED = false
+getgenv().AUTHORIZED = true
 
 
 
@@ -607,10 +607,10 @@ lsc:AddButton({
 
 
 credits = Tabs.Luas:AddLeftGroupbox('credits')
-credits:AddLabel('fusion (xyz_f.) // developer')
+credits:AddLabel('dyumra // developer')
 credits:AddDivider()
-credits:AddLabel('roadtohell // beta tester')
-credits:AddLabel('Rii // beta tester')
+credits:AddLabel('nigga // beta tester')
+credits:AddLabel('sigma // beta tester')
 
 info = Tabs.Luas:AddRightGroupbox('info')
 info:AddLabel('DYHUB.LUA')
@@ -6635,7 +6635,7 @@ local WatermarkConnection = game:GetService('RunService').RenderStepped:Connect(
         FrameTimer = tick()
         FrameCounter = 0
     end
-    Library:SetWatermark(('petal.lua | %s fps | %s ms | %s | %s'):format(
+    Library:SetWatermark(('DYHUB | %s fps | %s ms | %s | %s'):format(
         math.floor(FPS),
         math.floor(game:GetService('Stats').Network.ServerStatsItem['Data Ping']:GetValue()),
         getgenv().Version .. ' ' .. (getgenv().build or 'unspecified build'),
@@ -6661,7 +6661,7 @@ end)
 
 Library:OnUnload(function()
     WatermarkConnection:Disconnect()
-    print('petal menu unloaded!')
+    print('dyhub menu unloaded!')
     Library.Unloaded = true
 end)
 
@@ -6975,11 +6975,11 @@ local discordLabel = Instance.new("TextLabel", window)
 discordLabel.Size = UDim2.new(1,0,0,18)
 discordLabel.Position = UDim2.new(0,0,0,30)
 discordLabel.BackgroundTransparency = 1
-discordLabel.TextColor3 = Color3.fromRGB(150,200,255)
+discordLabel.TextColor3 = Color3.fromRGB(255,0,0)
 discordLabel.Font = Enum.Font.Code
 discordLabel.Text = "loading niggasploit rq"
 discordLabel.TextSize = 13
-local discordMessages = {"dsc.gg/dyhub","daily updates","undetected","900m kills","developed by dyumra","nigga, expanding, developing"}
+local discordMessages = {"dsc.gg/dyhub","daily updates","undetected","900m kills","developed by dyumra","nigga, Minecraft, skibidi"}
 task.spawn(function()
     local i=1
     while window.Parent do
@@ -7067,7 +7067,7 @@ textbox.Font=Enum.Font.Code
 textbox.TextSize=14
 textbox.TextXAlignment = Enum.TextXAlignment.Center
 
-local validKeys = {"dev"}
+local validKeys = {"nigga"}
 local whitelistedUsers = {"dalostoutsider","SoggyTatorTot12","Lucyisthegoat6772","Corobodko0","bigdirandy_w","umessingr13","coolone112","shirozbas123","tsbeenmlody"}
 local scripts = {
     playeresp = "https://codeberg.org/fuse/sma/raw/branch/main/lmn",
@@ -7168,4 +7168,5 @@ end
 
 print("starting loader...")
 startLoader()
+
 print("loader started")
