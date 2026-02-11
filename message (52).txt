@@ -1,5 +1,5 @@
 -- =========================
-local version = "5.7.9"
+local version = "5.8.0"
 -- =========================
 
 if setfpscap then
@@ -60,7 +60,7 @@ local GlobalTables = {
         "ThunderStorm", "Zombie", "Christmas", "Hell", "DarkDimension", "Astro"
     },
     Gamepasst = {"LuckyBoost", "RareLuckyBoost", "LegendaryLuckyBoost", "All"},
-    Items = {"Clock Spider", "Transmitter", "Flash Drive", "Astro Samples (Bugs)", "X-18", "The Present"},
+    Items = {"Clock Spider", "Transmitter", "Flash Drive", "Astro Samples (Bugs)", "X-18", "The Present", "Lightning module", "Drive"},
     gachaCharOptions = {"1SpinLucky", "10Spins", "1Spin"},
     gachaSkinOptions = {"1SpinLucky", "1Spin", "10Spins"},
     shop1 = {"1", "2", "3", "4", "5"}
@@ -3402,3 +3402,4 @@ task.spawn(function()
         end
     end
 end)
+
