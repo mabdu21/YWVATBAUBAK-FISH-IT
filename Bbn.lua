@@ -1,8 +1,8 @@
 -- ==========================================
--- Test V517
+-- Test V517 - Fixed & Enhanced
 -- ==========================================
 
-local version = "5.4.0"
+local version = "1.3.4"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -39,7 +39,9 @@ local MAX_DISTANCE = 500
 
 local Settings = {
     Auto = {
-        Generator = false
+        Barricade = false,
+        Generator = false,
+        AC = true
     },
     Setting = {
         Delay = 6,
@@ -47,13 +49,14 @@ local Settings = {
         Name = true,
         Distance = true,
         Health = true,
-        Class = true
+        Class = false
     },
     ESP = {
         Survivor = false,
         Killer = false,
         Generator = false,
         FuseBox = false,
+        Trap = false,
         Batteries = false
     }
 }
@@ -110,6 +113,7 @@ pcall(function()
 end)
 
 local InfoTab = Window:Tab({ Title = "Information", Icon = "info" })
+local MainDivider = Window:Divider()
 local Main = Window:Tab({ Title = "Main", Icon = "rocket" })
 local EspTab = Window:Tab({ Title = "ESP", Icon = "eye" })
 Window:SelectTab(1)
@@ -126,13 +130,11 @@ task.spawn(function()
             local gen = gui and gui:FindFirstChild("Gen")
 
             if gen then
-                -- ครั้งแรกที่เจอ
                 if not hasStarted then
                     hasStarted = true
                     task.wait(Settings.Setting.Delay)
                 end
 
-                -- ยิงตลอดทุก 6 วิ
                 pcall(function()
                     local args = {
                         [1] = {
@@ -145,9 +147,7 @@ task.spawn(function()
                 end)
 
                 task.wait(Settings.Setting.Delay)
-
             else
-                -- ถ้า GUI หาย รีเซ็ตสถานะ
                 hasStarted = false
             end
         end
@@ -198,6 +198,15 @@ local function addESP(obj, color, role)
     connections[obj] = RunService.Heartbeat:Connect(function()
         if not obj or not obj.Parent then removeESP(obj) return end
         
+        -- ตรวจสอบว่าถ้าปิด ESP กลางคัน ให้ลบทิ้งทันที
+        local roleCheck = role:gsub(" ", "")
+        if roleCheck == "Survivor" and not Settings.ESP.Survivor then removeESP(obj) return end
+        if roleCheck == "Killer" and not Settings.ESP.Killer then removeESP(obj) return end
+        if roleCheck == "Generators" and not Settings.ESP.Generator then removeESP(obj) return end
+        if roleCheck == "FuseBoxes" and not Settings.ESP.FuseBox then removeESP(obj) return end
+        if roleCheck == "Batteries" and not Settings.ESP.Batteries then removeESP(obj) return end
+        if roleCheck == "Trap" and not Settings.ESP.Trap then removeESP(obj) return end
+
         local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not root then return end
         local dist = (root.Position - part.Position).Magnitude
@@ -223,7 +232,8 @@ end
 local COLORS = {
     Survivor = Color3.fromRGB(0, 170, 255),
     Killer = Color3.fromRGB(255, 0, 0),
-    Generator = Color3.fromRGB(255, 255, 0),
+    Trap = Color3.fromRGB(255, 65, 65),
+    Generators = Color3.fromRGB(255, 255, 0),
     FuseBoxes = Color3.fromRGB(0, 255, 255),
     Batteries = Color3.fromRGB(0, 255, 0)
 }
@@ -237,7 +247,7 @@ local function scan()
                 if model:IsA("Model") and model ~= LocalPlayer.Character then
                     if folder.Name == "ALIVE" and Settings.ESP.Survivor then addESP(model, COLORS.Survivor, "Survivor")
                     elseif folder.Name == "KILLER" and Settings.ESP.Killer then addESP(model, COLORS.Killer, "Killer")
-                    else removeESP(model) end
+                    end
                 end
             end
         end
@@ -246,17 +256,43 @@ local function scan()
     local maps = workspace:FindFirstChild("MAPS")
     if maps then
         for _,map in pairs(maps:GetChildren()) do
+            -- ฟังก์ชันตรวจจับ Object ปกติ
             local function checkObj(fName, setVal)
                 local f = map:FindFirstChild(fName)
                 if f and setVal then
                     for _,o in pairs(f:GetChildren()) do addESP(o, COLORS[fName] or Color3.new(1,1,1), fName) end
                 end
             end
+            
             checkObj("Generators", Settings.ESP.Generator)
             checkObj("FuseBoxes", Settings.ESP.FuseBox)
             checkObj("Batteries", Settings.ESP.Batteries)
+
+            -- ตรวจสอบ Trap ในโฟลเดอร์ IGNORE ตามที่ระบุ
+            if Settings.ESP.Trap then
+                local ignoreFolder = workspace:FindFirstChild("IGNORE")
+                if ignoreFolder then
+                    for _,o in pairs(ignoreFolder:GetChildren()) do
+                        if o.Name == "Trap" then
+                            addESP(o, COLORS.Trap, "Trap")
+                        end
+                    end
+                end
+                -- ตรวจสอบเผื่อมี Trap อยู่ข้างนอก IGNORE
+                local trapFolder = workspace:FindFirstChild("Trap")
+                if trapFolder then
+                    for _,o in pairs(trapFolder:GetChildren()) do
+                        addESP(o, COLORS.Trap, "Trap")
+                    end
+                end
+            end
         end
     end
+end
+
+-- ฟังก์ชันล้าง ESP ทั้งหมดเมื่อสั่งปิด
+local function clearAllESP()
+    for obj, _ in pairs(highlights) do removeESP(obj) end
 end
 
 task.spawn(function()
@@ -267,9 +303,88 @@ task.spawn(function()
 end)
 
 -- ====================== GUI TABS ======================
+Main:Section({ Title = "Anti Cheat", Icon = "cpu" })
+-- Toggle
+Main:Toggle({
+    Title = "Bypass Anti Cheat",
+    Description = "Automatically clean Anti Cheat",
+    Value = false,
+    Callback = function(v)
+        Settings.Auto.AC = v
+    end
+})
+
+-- ================= BYPASS ANTI CHEAT =================
+task.spawn(function()
+    local mt = getrawmetatable(game)
+    setreadonly(mt, false)
+
+    local oldNamecall = mt.__namecall
+
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+
+        if Settings.Auto.AC then
+            if method == "FireServer" then
+                local name = tostring(self):lower()
+
+                if name:find("anti") 
+                or name:find("cheat") 
+                or name:find("kick") 
+                or name:find("ban") 
+                or name:find("detect") then
+                    return task.wait(math.huge)
+                end
+            end
+        end
+
+        return oldNamecall(self, ...)
+    end)
+
+    setreadonly(mt, true)
+end)
 
 -- Main Tab
 Main:Section({ Title = "Auto Object", Icon = "zap" })
+-- Toggle
+Main:Toggle({
+    Title = "Auto Barricade",
+    Description = "Automatically perfect Barricade",
+    Value = false,
+    Callback = function(v)
+        Settings.Auto.Barricade = v
+    end
+})
+
+-- ================= AUTO BARRICADE (CENTER) =================
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+
+        if Settings.Auto.Barricade then
+            pcall(function()
+                local player = game:GetService("Players").LocalPlayer
+                local gui = player:FindFirstChild("PlayerGui")
+
+                if gui then
+                    local dot = gui:FindFirstChild("Dot")
+
+                    if dot 
+                    and dot:FindFirstChild("Container") 
+                    and dot.Container:FindFirstChild("Frame") then
+                        
+                        local frame = dot.Container.Frame
+
+                        -- ตั้งให้อยู่กลางจอ
+                        frame.AnchorPoint = Vector2.new(0.5, 0.5)
+                        frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+                    end
+                end
+            end)
+        end
+    end
+end)
 Main:Toggle({
     Title = "Auto Generator",
     Description = "Automatically fixing Generator",
@@ -285,65 +400,45 @@ Main:Slider({
 
 -- ESP Tab
 EspTab:Section({ Title = "Player ESP", Icon = "user" })
-EspTab:Toggle({ Title = "Survivor", Value = false, Callback = function(v) Settings.ESP.Survivor = v end })
-EspTab:Toggle({ Title = "Killer", Value = false, Callback = function(v) Settings.ESP.Killer = v end })
+EspTab:Toggle({ Title = "Survivor", Value = false, Callback = function(v) Settings.ESP.Survivor = v if not v then clearAllESP() end end })
+EspTab:Toggle({ Title = "Killer", Value = false, Callback = function(v) Settings.ESP.Killer = v if not v then clearAllESP() end end })
+
+EspTab:Section({ Title = "Hazard ESP", Icon = "sword" })
+EspTab:Toggle({ Title = "Trap", Value = false, Callback = function(v) Settings.ESP.Trap = v if not v then clearAllESP() end end })
 
 EspTab:Section({ Title = "Object ESP", Icon = "package" })
-EspTab:Toggle({ Title = "Generator", Value = false, Callback = function(v) Settings.ESP.Generator = v end })
-EspTab:Toggle({ Title = "FuseBox", Value = false, Callback = function(v) Settings.ESP.FuseBox = v end })
-EspTab:Toggle({ Title = "Batteries", Value = false, Callback = function(v) Settings.ESP.Batteries = v end })
+EspTab:Toggle({ Title = "Generator", Value = false, Callback = function(v) Settings.ESP.Generator = v if not v then clearAllESP() end end })
+EspTab:Toggle({ Title = "FuseBox", Value = false, Callback = function(v) Settings.ESP.FuseBox = v if not v then clearAllESP() end end })
+EspTab:Toggle({ Title = "Batteries", Value = false, Callback = function(v) Settings.ESP.Batteries = v if not v then clearAllESP() end end })
 
 EspTab:Section({ Title = "Setting ESP", Icon = "settings" })
 EspTab:Toggle({ Title = "Show Name", Value = true, Callback = function(v) Settings.Setting.Name = v end })
 EspTab:Toggle({ Title = "Show Class", Value = false, Callback = function(v) Settings.Setting.Class = v end })
-EspTab:Toggle({ Title = "Show Health", Value = false, Callback = function(v) Settings.Setting.Health = v end })
+EspTab:Toggle({ Title = "Show Health", Value = true, Callback = function(v) Settings.Setting.Health = v end })
 EspTab:Toggle({ Title = "Show Distance", Value = true, Callback = function(v) Settings.Setting.Distance = v end })
-EspTab:Toggle({ Title = "Show Highlights", Value = true, Callback = function(v) Settings.Setting.Highlight = v end })
+EspTab:Toggle({ Title = "Show Highlights", Value = true, Callback = function(v) Settings.Setting.Highlight = v if not v then clearAllESP() end end })
 
 -- Information Tab
-Info = InfoTab
-
 if not ui then ui = {} end
 if not ui.Creator then ui.Creator = {} end
 
--- Define the Request function that mimics ui.Creator.Request
 ui.Creator.Request = function(requestData)
     local HttpService = game:GetService("HttpService")
-    
-    -- Try different HTTP methods
     local success, result = pcall(function()
         if HttpService.RequestAsync then
-            -- Method 1: Use RequestAsync if available
             local response = HttpService:RequestAsync({
                 Url = requestData.Url,
                 Method = requestData.Method or "GET",
                 Headers = requestData.Headers or {}
             })
-            return {
-                Body = response.Body,
-                StatusCode = response.StatusCode,
-                Success = response.Success
-            }
+            return { Body = response.Body, StatusCode = response.StatusCode, Success = response.Success }
         else
-            -- Method 2: Fallback to GetAsync
             local body = HttpService:GetAsync(requestData.Url)
-            return {
-                Body = body,
-                StatusCode = 200,
-                Success = true
-            }
+            return { Body = body, StatusCode = 200, Success = true }
         end
     end)
-    
-    if success then
-        return result
-    else
-        error("HTTP Request failed: " .. tostring(result))
-    end
+    return success and result or error("HTTP Request failed")
 end
-
--- Remove this line completely: Info = InfoTab
--- The Info variable is already correctly set above
 
 local InviteCode = "jWNDPNMmyB"
 local DiscordAPI = "https://discord.com/api/v10/invites/" .. InviteCode .. "?with_counts=true&with_expiration=true"
@@ -353,15 +448,12 @@ local function LoadDiscordInfo()
         return game:GetService("HttpService"):JSONDecode(ui.Creator.Request({
             Url = DiscordAPI,
             Method = "GET",
-            Headers = {
-                ["User-Agent"] = "RobloxBot/1.0",
-                ["Accept"] = "application/json"
-            }
+            Headers = { ["User-Agent"] = "RobloxBot/1.0", ["Accept"] = "application/json" }
         }).Body)
     end)
 
     if success and result and result.guild then
-        local DiscordInfo = Info:Paragraph({
+        local DiscordInfo = InfoTab:Paragraph({
             Title = result.guild.name,
             Desc = ' <font color="#52525b">●</font> Member Count : ' .. tostring(result.approximate_member_count) ..
                 '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(result.approximate_presence_count),
@@ -369,119 +461,58 @@ local function LoadDiscordInfo()
             ImageSize = 42,
         })
 
-        Info:Button({
+        InfoTab:Button({
             Title = "Update Info",
             Callback = function()
                 local updated, updatedResult = pcall(function()
-                    return game:GetService("HttpService"):JSONDecode(ui.Creator.Request({
-                        Url = DiscordAPI,
-                        Method = "GET",
-                    }).Body)
+                    return game:GetService("HttpService"):JSONDecode(ui.Creator.Request({ Url = DiscordAPI, Method = "GET" }).Body)
                 end)
-
-                if updated and updatedResult and updatedResult.guild then
-                    DiscordInfo:SetDesc(
-                        ' <font color="#52525b">●</font> Member Count : ' .. tostring(updatedResult.approximate_member_count) ..
-                        '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(updatedResult.approximate_presence_count)
-                    )
-                    
-                    WindUI:Notify({
-                        Title = "Discord Info Updated",
-                        Content = "Successfully refreshed Discord statistics",
-                        Duration = 2,
-                        Icon = "refresh-cw",
-                    })
-                else
-                    WindUI:Notify({
-                        Title = "Update Failed",
-                        Content = "Could not refresh Discord info",
-                        Duration = 3,
-                        Icon = "alert-triangle",
-                    })
+                if updated and updatedResult.guild then
+                    DiscordInfo:SetDesc(' <font color="#52525b">●</font> Member Count : ' .. tostring(updatedResult.approximate_member_count) .. '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(updatedResult.approximate_presence_count))
                 end
             end
         })
 
-        Info:Button({
+        InfoTab:Button({
             Title = "Copy Discord Invite",
-            Callback = function()
-                setclipboard("https://discord.gg/" .. InviteCode)
-                WindUI:Notify({
-                    Title = "Copied!",
-                    Content = "Discord invite copied to clipboard",
-                    Duration = 2,
-                    Icon = "clipboard-check",
-                })
-            end
+            Callback = function() setclipboard("https://discord.gg/" .. InviteCode) end
         })
-    else
-        Info:Paragraph({
-            Title = "Error fetching Discord Info",
-            Desc = "Unable to load Discord information. Check your internet connection.",
-            Image = "triangle-alert",
-            ImageSize = 26,
-            Color = "Red",
-        })
-        print("Discord API Error:", result) -- Debug print
     end
 end
 
 LoadDiscordInfo()
 
-Info:Divider()
-Info:Section({ 
-    Title = "DYHUB Information",
-    TextXAlignment = "Center",
-    TextSize = 17,
-})
-Info:Divider()
+InfoTab:Divider()
+InfoTab:Section({ Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17 })
+InfoTab:Divider()
 
-local Owner = Info:Paragraph({
+InfoTab:Paragraph({
     Title = "Main Owner",
     Desc = "@dyumraisgoodguy#8888",
     Image = "rbxassetid://119789418015420",
     ImageSize = 30,
-    Thumbnail = "",
-    ThumbnailSize = 0,
-    Locked = false,
 })
 
-local Social = Info:Paragraph({
+InfoTab:Paragraph({
     Title = "Social",
     Desc = "Copy link social media for follow!",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
-    Thumbnail = "",
-    ThumbnailSize = 0,
-    Locked = false,
-    Buttons = {
-        {
-            Icon = "copy",
-            Title = "Copy Link",
-            Callback = function()
-                setclipboard("https://guns.lol/DYHUB")
-                print("Copied social media link to clipboard!")
-            end,
-        }
-    }
+    Buttons = {{
+        Icon = "copy",
+        Title = "Copy Link",
+        Callback = function() setclipboard("https://guns.lol/DYHUB") end,
+    }}
 })
 
-local Discord = Info:Paragraph({
+InfoTab:Paragraph({
     Title = "Discord",
     Desc = "Join our discord for more scripts!",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
-    Thumbnail = "",
-    ThumbnailSize = 0,
-    Locked = false,
-    Buttons = {
-        {
-            Icon = "copy",
-            Title = "Copy Link",
-            Callback = function()
-                setclipboard("https://discord.gg/jWNDPNMmyB")
-                print("Copied discord link to clipboard!")
-            end,
-        }
-    }
+    Buttons = {{
+        Icon = "copy",
+        Title = "Copy Link",
+        Callback = function() setclipboard("https://discord.gg/jWNDPNMmyB") end,
+    }}
 })
