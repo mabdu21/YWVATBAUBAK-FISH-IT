@@ -2,7 +2,7 @@
 -- Test V517 - Fixed & Enhanced
 -- ==========================================
 
-local version = "1.3.5"
+local version = "1.3.6"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -346,45 +346,7 @@ task.spawn(function()
 end)
 
 -- Main Tab
-Main:Section({ Title = "Auto Object", Icon = "zap" })
--- Toggle
-Main:Toggle({
-    Title = "Auto Barricade",
-    Description = "Automatically perfect Barricade",
-    Value = false,
-    Callback = function(v)
-        Settings.Auto.Barricade = v
-    end
-})
-
--- ================= AUTO BARRICADE (CENTER) =================
-task.spawn(function()
-    while true do
-        task.wait(0.1)
-
-        if Settings.Auto.Barricade then
-            pcall(function()
-                local player = game:GetService("Players").LocalPlayer
-                local gui = player:FindFirstChild("PlayerGui")
-
-                if gui then
-                    local dot = gui:FindFirstChild("Dot")
-
-                    if dot 
-                    and dot:FindFirstChild("Container") 
-                    and dot.Container:FindFirstChild("Frame") then
-                        
-                        local frame = dot.Container.Frame
-
-                        -- ตั้งให้อยู่กลางจอ
-                        frame.AnchorPoint = Vector2.new(0.5, 0.5)
-                        frame.Position = UDim2.new(0.5, 0, 0.5, 0)
-                    end
-                end
-            end)
-        end
-    end
-end)
+Main:Section({ Title = "Auto Fixing", Icon = "zap" })
 Main:Toggle({
     Title = "Auto Generator",
     Description = "Automatically fixing Generator",
@@ -397,6 +359,48 @@ Main:Slider({
     Value = {Min = 1, Max = 20, Default = 6},
     Callback = function(v) Settings.Setting.Delay = v end
 })
+Main:Section({ Title = "Auto Objective", Icon = "door-closed" })
+-- Toggle
+Main:Toggle({
+    Title = "Auto Barricade",
+    Description = "Automatically perfect Barricade",
+    Value = false,
+    Callback = function(v)
+        Settings.Auto.Barricade = v
+    end
+})
+
+-- ================= AUTO BARRICADE (FILTER ENABLED DOT) =================
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+
+        if Settings.Auto.Barricade then
+            pcall(function()
+                local player = game:GetService("Players").LocalPlayer
+                local gui = player:FindFirstChild("PlayerGui")
+
+                if gui then
+                    -- วนหา Dot ทุกตัว (กันมีหลายอัน)
+                    for _, dot in ipairs(gui:GetChildren()) do
+                        if dot.Name == "Dot" and dot:IsA("ScreenGui") and dot.Enabled then
+                            
+                            if dot:FindFirstChild("Container") 
+                            and dot.Container:FindFirstChild("Frame") then
+                                
+                                local frame = dot.Container.Frame
+
+                                -- ปรับตำแหน่งเฉพาะตัวที่เปิดอยู่
+                                frame.AnchorPoint = Vector2.new(0, 0)
+                                frame.Position = UDim2.new(0, 689, 0, 423)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
 
 -- ESP Tab
 EspTab:Section({ Title = "Player ESP", Icon = "user" })
