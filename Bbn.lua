@@ -2,7 +2,7 @@
 -- Test V517 - Fixed & Enhanced
 -- ==========================================
 
-local version = "1.3.4"
+local version = "1.3.5"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -308,7 +308,7 @@ Main:Section({ Title = "Anti Cheat", Icon = "cpu" })
 Main:Toggle({
     Title = "Bypass Anti Cheat",
     Description = "Automatically clean Anti Cheat",
-    Value = false,
+    Value = Settings.Auto.AC,
     Callback = function(v)
         Settings.Auto.AC = v
     end
