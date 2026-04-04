@@ -2,7 +2,7 @@
 -- Test V70
 -- ==========================================
 
-local version = "1.4.7"
+local version = "1.4.8"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -173,21 +173,56 @@ task.spawn(function()
 end)
 
 -- ====================== ESP CORE ======================
+--// SERVICES
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+
+--// STORAGE
 local highlights = {}
 local billboards = {}
-local connections = {}
 
+--// COLORS
+local COLORS = {
+    Survivor = Color3.fromRGB(0, 0, 255),
+    Killer = Color3.fromRGB(255, 0, 0),
+    Lobby = Color3.fromRGB(255, 255, 255),
+    Trap = Color3.fromRGB(255, 65, 65),
+    Generators = Color3.fromRGB(255, 255, 0),
+    FuseBoxes = Color3.fromRGB(0, 255, 255),
+    Batteries = Color3.fromRGB(0, 255, 0)
+}
+
+--// REMOVE ESP
 local function removeESP(obj)
-    if highlights[obj] then highlights[obj]:Destroy() highlights[obj] = nil end
-    if billboards[obj] then billboards[obj]:Destroy() billboards[obj] = nil end
-    if connections[obj] then connections[obj]:Disconnect() connections[obj] = nil end
+    if highlights[obj] then
+        highlights[obj]:Destroy()
+        highlights[obj] = nil
+    end
+    if billboards[obj] then
+        billboards[obj]:Destroy()
+        billboards[obj] = nil
+    end
 end
 
+--// GET BASE PART
+local function getPart(obj)
+    return obj:FindFirstChild("Head")
+        or obj:FindFirstChild("HumanoidRootPart")
+        or obj:FindFirstChildWhichIsA("BasePart", true)
+end
+
+--// ADD ESP
 local function addESP(obj, color, role)
     if not obj or obj == LocalPlayer.Character then return end
-    local part = obj:FindFirstChild("Head") or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart", true)
-    if not part or highlights[obj] then return end
+    if highlights[obj] then return end
 
+    local part = getPart(obj)
+    if not part then return end
+
+    -- Highlight
     if Settings.Setting.Highlight then
         local h = Instance.new("Highlight")
         h.FillTransparency = 1
@@ -197,158 +232,206 @@ local function addESP(obj, color, role)
         highlights[obj] = h
     end
 
+    -- Billboard
     local gui = Instance.new("BillboardGui")
-    gui.Size = UDim2.new(0, 100, 0, 40)
+    gui.Size = UDim2.new(0, 80, 0, 30)
     gui.StudsOffset = Vector3.new(0, 2.5, 0)
     gui.AlwaysOnTop = true
-    
+    gui.Enabled = true
+
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1,0,1,0)
     label.BackgroundTransparency = 1
     label.TextColor3 = Color3.new(1,1,1)
     label.TextStrokeTransparency = 0.25
-    label.TextSize = 13
+    label.TextSize = 12
     label.Font = Enum.Font.SourceSans
+    label.Text = role or "Object"
     label.Parent = gui
+
     gui.Parent = part
-    billboards[obj] = gui
+    billboards[obj] = {
+        gui = gui,
+        role = role,
+        color = color
+    }
+end
 
-    connections[obj] = RunService.Heartbeat:Connect(function()
-        if not obj or not obj.Parent then removeESP(obj) return end
-        
-        -- ตรวจสอบการปิด ESP กลางคัน
-        local roleCheck = role:gsub(" ", "")
-        if roleCheck == "Survivor" and not Settings.ESP.Survivor then removeESP(obj) return end
-        if roleCheck == "Killer" and not Settings.ESP.Killer then removeESP(obj) return end
-        if roleCheck == "Lobby" and not Settings.ESP.Lobby then removeESP(obj) return end
-        if roleCheck == "Generators" and not Settings.ESP.Generator then removeESP(obj) return end
-        if roleCheck == "FuseBoxes" and not Settings.ESP.FuseBox then removeESP(obj) return end
-        if roleCheck == "Batteries" and not Settings.ESP.Batteries then removeESP(obj) return end
-        if roleCheck == "Trap" and not Settings.ESP.Trap then removeESP(obj) return end
+--// CLEAR ALL
+local function clearAllESP()
+    for obj,_ in pairs(highlights) do
+        removeESP(obj)
+    end
+end
 
-        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if not root then return end
+--// UPDATE LOOP (HEARTBEAT เดียว)
+local updateDelay = 0
+RunService.Heartbeat:Connect(function(dt)
+    updateDelay += dt
+    if updateDelay < 0.1 then return end -- ลดการคำนวณ
+    updateDelay = 0
+
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    for obj, data in pairs(billboards) do
+        if not obj or not obj.Parent then
+            removeESP(obj)
+            continue
+        end
+
+        local part = getPart(obj)
+        if not part then continue end
+
         local dist = (root.Position - part.Position).Magnitude
 
-        if dist > MAX_DISTANCE then removeESP(obj) return end
+        -- distance culling
+        if dist > MAX_DISTANCE then
+            data.gui.Enabled = false
+            continue
+        else
+            data.gui.Enabled = true
+        end
+
+        -- SETTINGS CHECK (ปิดกลางคัน)
+        local role = data.role
+
+        if role == "Survivor" and not Settings.ESP.Survivor then removeESP(obj) continue end
+        if role == "Killer" and not Settings.ESP.Killer then removeESP(obj) continue end
+        if role == "Lobby" and not Settings.ESP.Lobby then removeESP(obj) continue end
+        if role == "Generators" and not Settings.ESP.Generator then removeESP(obj) continue end
+        if role == "FuseBoxes" and not Settings.ESP.FuseBox then removeESP(obj) continue end
+        if role == "Batteries" and not Settings.ESP.Batteries then removeESP(obj) continue end
+        if role == "Trap" and not Settings.ESP.Trap then removeESP(obj) continue end
+
+        local label = data.gui:FindFirstChildOfClass("TextLabel")
+        if not label then continue end
 
         local text = ""
+
         if obj:FindFirstChild("Humanoid") then
-            local charAttr = obj:GetAttribute("Character")
-            local class = charAttr and tostring(charAttr):gsub("^Survivor%-", "") or "Unknown"
-            
-            -- ตรรกะการแสดงผล Name และ Class
-            if Settings.Setting.Name and Settings.Setting.Class then
-                text = obj.Name .. " | " .. class
-            elseif Settings.Setting.Name then
+            local class = obj:GetAttribute("Character")
+            class = class and tostring(class):gsub("^Survivor%-", "") or "Unknown"
+
+            if Settings.Setting.Name then
                 text = obj.Name
-            elseif Settings.Setting.Class then
-                text = class
             end
 
-            -- แสดง Health
-            if Settings.Setting.Health then 
-                local healthText = "\n" .. math.floor(obj.Humanoid.Health) .. " HP"
-                text = text .. healthText
+            if Settings.Setting.Class then
+                text = (text ~= "" and text.." | " or "") .. class
+            end
+
+            if Settings.Setting.Health then
+                text = text .. "\n" .. math.floor(obj.Humanoid.Health) .. " HP"
             end
         else
-            text = role or "Object"
+            text = data.role
         end
 
-        -- แสดง Distance
-        if Settings.Setting.Distance then 
-            text = text .. "\n" .. math.floor(dist) .. " MM" 
+        if Settings.Setting.Distance then
+            text = text .. "\n" .. math.floor(dist) .. " MM"
         end
-        
+
         label.Text = text
+    end
+end)
+
+--// ===== EVENT SYSTEM (แทน SCAN) =====
+
+-- Players ESP
+local function setupPlayers()
+    local folder = workspace:FindFirstChild("PLAYERS")
+    if not folder then return end
+
+    for _,sub in pairs(folder:GetChildren()) do
+        for _,model in pairs(sub:GetChildren()) do
+            if model:IsA("Model") then
+                if sub.Name == "ALIVE" and Settings.ESP.Survivor then
+                    addESP(model, COLORS.Survivor, "Survivor")
+                elseif sub.Name == "KILLER" and Settings.ESP.Killer then
+                    addESP(model, COLORS.Killer, "Killer")
+                elseif sub.Name == "LOBBY" and Settings.ESP.Lobby then
+                    addESP(model, COLORS.Lobby, "Lobby")
+                end
+            end
+        end
+
+        -- detect spawn ใหม่
+        sub.ChildAdded:Connect(function(model)
+            if not model:IsA("Model") then return end
+
+            if sub.Name == "ALIVE" and Settings.ESP.Survivor then
+                addESP(model, COLORS.Survivor, "Survivor")
+            elseif sub.Name == "KILLER" and Settings.ESP.Killer then
+                addESP(model, COLORS.Killer, "Killer")
+            elseif sub.Name == "LOBBY" and Settings.ESP.Lobby then
+                addESP(model, COLORS.Lobby, "Lobby")
+            end
+        end)
+    end
+end
+
+-- Battery / Trap (IGNORE)
+local function setupIgnore()
+    local ignore = workspace:FindFirstChild("IGNORE")
+    if not ignore then return end
+
+    -- initial
+    for _,o in pairs(ignore:GetDescendants()) do
+        if o.Name == "Battery" and o:IsA("MeshPart") and Settings.ESP.Batteries then
+            addESP(o, COLORS.Batteries, "Batteries")
+        elseif o.Name == "Trap" and Settings.ESP.Trap then
+            addESP(o, COLORS.Trap, "Trap")
+        end
+    end
+
+    -- new spawn
+    ignore.DescendantAdded:Connect(function(o)
+        if o.Name == "Battery" and o:IsA("MeshPart") and Settings.ESP.Batteries then
+            addESP(o, COLORS.Batteries, "Batteries")
+        elseif o.Name == "Trap" and Settings.ESP.Trap then
+            addESP(o, COLORS.Trap, "Trap")
+        end
     end)
 end
 
-local COLORS = {
-    Survivor = Color3.fromRGB(0, 170, 255),
-    Killer = Color3.fromRGB(255, 0, 0),
-    Lobby = Color3.fromRGB(255, 255, 255),
-    Trap = Color3.fromRGB(255, 65, 65),
-    Generators = Color3.fromRGB(255, 255, 0),
-    FuseBoxes = Color3.fromRGB(0, 255, 255),
-    Batteries = Color3.fromRGB(0, 255, 0)
-}
-
-local function scan()
-    -- Scan Players
-    local playerFolder = workspace:FindFirstChild("PLAYERS")
-    if playerFolder then
-        for _,folder in pairs(playerFolder:GetChildren()) do
-            for _,model in pairs(folder:GetChildren()) do
-                if model:IsA("Model") and model ~= LocalPlayer.Character then
-                    if folder.Name == "ALIVE" and Settings.ESP.Survivor then addESP(model, COLORS.Survivor, "Survivor")
-                    elseif folder.Name == "KILLER" and Settings.ESP.Killer then addESP(model, COLORS.Killer, "Killer")
-                    elseif folder.Name == "LOBBY" and Settings.ESP.Lobby then addESP(model, COLORS.Lobby, "Lobby")
-                    end
-                end
-            end
-        end
-    end
-    -- Scan Objects
+-- MAP OBJECTS
+local function setupMaps()
     local maps = workspace:FindFirstChild("MAPS")
-    if maps then
-        for _,map in pairs(maps:GetChildren()) do
-            -- ฟังก์ชันตรวจจับ Object ปกติ
-            local function checkObj(fName, setVal)
-                local f = map:FindFirstChild(fName)
-                if f and setVal then
-                    for _,o in pairs(f:GetChildren()) do addESP(o, COLORS[fName] or Color3.new(1,1,1), fName) end
-                end
-            end
-            
-            checkObj("Generators", Settings.ESP.Generator)
-            checkObj("FuseBoxes", Settings.ESP.FuseBox)
-            --checkObj("Batteries", Settings.ESP.Batteries) not inside map
+    if not maps then return end
 
-            if Settings.ESP.Batteries then
-                local ignoreFolder2 = workspace:FindFirstChild("IGNORE")
-                if ignoreFolder2 then
-                    for _, o in pairs(ignoreFolder2:GetChildren()) do
-                    -- เช็คว่าชื่อคือ Battery (ไม่ว่าจะกี่อันก็ตาม)
-                        if o.Name == "Battery" then
-                            addESP(o, COLORS.Batteries, "Battery")
-                        end
-                    end
-                end
+    for _,map in pairs(maps:GetChildren()) do
+        local function handleFolder(name, setting)
+            local f = map:FindFirstChild(name)
+            if not f or not setting then return end
+
+            for _,o in pairs(f:GetChildren()) do
+                addESP(o, COLORS[name], name)
             end
 
-            -- ตรวจสอบ Trap ในโฟลเดอร์ IGNORE ตามที่ระบุ
-            if Settings.ESP.Trap then
-                local ignoreFolder = workspace:FindFirstChild("IGNORE")
-                if ignoreFolder then
-                    for _,o in pairs(ignoreFolder:GetChildren()) do
-                        if o.Name == "Trap" then
-                            addESP(o, COLORS.Trap, "Trap")
-                        end
-                    end
-                end
-                -- ตรวจสอบเผื่อมี Trap อยู่ข้างนอก IGNORE
-                local trapFolder = workspace:FindFirstChild("Trap")
-                if trapFolder then
-                    for _,o in pairs(trapFolder:GetChildren()) do
-                        addESP(o, COLORS.Trap, "Trap")
-                    end
-                end
-            end
+            f.ChildAdded:Connect(function(o)
+                addESP(o, COLORS[name], name)
+            end)
         end
+
+        handleFolder("Generators", Settings.ESP.Generator)
+        handleFolder("FuseBoxes", Settings.ESP.FuseBox)
     end
 end
 
--- ฟังก์ชันล้าง ESP ทั้งหมดเมื่อสั่งปิด
-local function clearAllESP()
-    for obj, _ in pairs(highlights) do removeESP(obj) end
-end
+--// INIT
+setupPlayers()
+setupIgnore()
+setupMaps()
 
-task.spawn(function()
-    while true do
-        task.wait(1)
-        scan()
-    end
+-- เผื่อเกมรี
+workspace.ChildAdded:Connect(function()
+    task.wait(1)
+    clearAllESP()
+    setupPlayers()
+    setupIgnore()
+    setupMaps()
 end)
 
 -- ====================== KILLER ======================
