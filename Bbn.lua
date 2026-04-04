@@ -656,6 +656,9 @@ InfoTab:Paragraph({
     ImageSize = 30,
 })
 
+InfoTab:Section({ Title = "Discord Server", TextXAlignment = "Center", TextSize = 17 })
+InfoTab:Divider()
+
 ui.Creator.Request = function(requestData)
     local HttpService = game:GetService("HttpService")
     local success, result = pcall(function()
