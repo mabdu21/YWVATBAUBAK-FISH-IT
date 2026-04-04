@@ -1,8 +1,8 @@
 -- ==========================================
--- Test V69
+-- Test V70
 -- ==========================================
 
-local version = "1.4.3"
+local version = "1.4.6"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -592,7 +592,7 @@ Auto:Toggle({
 -- ================= AUTO BARRICADE (FILTER ENABLED DOT) =================
 task.spawn(function()
     while true do
-        task.wait(0.2)
+        task.wait(0.1)
 
         if Settings.Auto.Barricade then
             pcall(function()
@@ -610,8 +610,8 @@ task.spawn(function()
                                 local frame = dot.Container.Frame
 
                                 -- ปรับตำแหน่งเฉพาะตัวที่เปิดอยู่
-                                frame.AnchorPoint = Vector2.new(0.5,0.5)
-                                frame.Position = UDim2.new(0.5,0,0.5,0)
+                                frame.AnchorPoint = Vector2.new(0,0)
+                                frame.Position = UDim2.new(0,675,0,419)
                             end
                         end
                     end
@@ -645,6 +645,16 @@ EspTab:Toggle({ Title = "Show Highlights", Value = true, Callback = function(v) 
 -- Information Tab
 if not ui then ui = {} end
 if not ui.Creator then ui.Creator = {} end
+
+InfoTab:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17 })
+InfoTab:Divider()
+
+InfoTab:Paragraph({
+    Title = "Update: 04/04/2026",
+    Desc = "- [ Fixed ] Barricade \n- [ Fixed ] ESP \n- [ Added ] Fullbright \n- [ Added ] No Fog \n- [ Added ] Kill All \n- [ Added ] Auto Escape",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+})
 
 ui.Creator.Request = function(requestData)
     local HttpService = game:GetService("HttpService")
