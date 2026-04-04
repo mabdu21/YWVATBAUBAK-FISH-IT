@@ -1,8 +1,8 @@
 -- ==========================================
--- Test V67
+-- Test V68
 -- ==========================================
 
-local version = "1.3.9"
+local version = "1.4.0"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -47,6 +47,7 @@ local MAX_DISTANCE = 677
 
 local Settings = {
     Auto = {
+        Escape = false,
         Barricade = false,
         Generator = false,
         AC = true
@@ -467,6 +468,67 @@ Auto:Toggle({
     end
 })
 
+Auto:Section({ Title = "Auto Win", Icon = "crown" })
+Auto:Toggle({
+    Title = "Auto Escape (Not Legit)",
+    Description = "Automatically teleport to Escape",
+    Value = false,
+    Callback = function(v) 
+        Settings.Auto.Escape = v
+        
+        if v then
+            task.spawn(function()
+                local player = game:GetService("Players").LocalPlayer
+                local teleported = false
+
+                while Settings.Auto.Escape do
+                    task.wait(1.25) -- เช็คทุกๆ 0.5 วินาทีก็พอ ไม่ต้องทุกเฟรม
+
+                    if teleported then continue end
+
+                    local char = player.Character
+                    local root = char and char:FindFirstChild("HumanoidRootPart")
+                    local hum = char and char:FindFirstChild("Humanoid")
+
+                    -- ตรวจสอบเงื่อนไขการหลบหนี
+                    local canEscape = workspace.GAME:FindFirstChild("CAN_ESCAPE")
+                    if not root or not (canEscape and canEscape.Value) then continue end
+                    if char.Parent ~= workspace.PLAYERS.ALIVE then continue end
+
+                    local map = workspace.MAPS:FindFirstChild("GAME MAP")
+                    local escapes = map and map:FindFirstChild("Escapes")
+
+                    if escapes then
+                        for _, part in pairs(escapes:GetChildren()) do
+                            local highlight = part:FindFirstChildOfClass("Highlight")
+                            
+                            -- เช็คว่าทางออกเปิดใช้งานหรือยัง
+                            if part:IsA("BasePart") and part:GetAttribute("Enabled") and (highlight and highlight.Enabled) then
+                                teleported = true
+
+                                -- เริ่มกระบวนการวาร์ป
+                                root.Anchored = true
+                                -- ยกตัวขึ้นเล็กน้อยเพื่อป้องกันการติดพื้น (+3 studs)
+                                char:SetPrimaryPartCFrame(part.CFrame * CFrame.new(0, 3, 0))
+
+                                task.wait(1) -- รอให้ Server รับข้อมูลตำแหน่งใหม่
+                                if root then root.Anchored = false end
+
+                                -- คูลดาวน์ 10 วินาทีป้องกันการวาร์ปซ้ำซ้อน
+                                task.delay(10, function()
+                                    teleported = false
+                                end)
+                                
+                                break 
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+})
+
 -- ================= AUTO BARRICADE (FILTER ENABLED DOT) =================
 task.spawn(function()
     while true do
@@ -503,6 +565,7 @@ end)
 EspTab:Section({ Title = "Player ESP", Icon = "user" })
 EspTab:Toggle({ Title = "Survivor", Value = false, Callback = function(v) Settings.ESP.Survivor = v if not v then clearAllESP() end end })
 EspTab:Toggle({ Title = "Killer", Value = false, Callback = function(v) Settings.ESP.Killer = v if not v then clearAllESP() end end })
+EspTab:Toggle({ Title = "Lobby", Value = false, Callback = function(v) Settings.ESP.Lobby = v if not v then clearAllESP() end end })
 
 EspTab:Section({ Title = "Hazard ESP", Icon = "sword" })
 EspTab:Toggle({ Title = "Trap", Value = false, Callback = function(v) Settings.ESP.Trap = v if not v then clearAllESP() end end })
