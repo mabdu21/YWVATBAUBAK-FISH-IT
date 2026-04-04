@@ -2,7 +2,7 @@
 -- Test V517 - Fixed & Enhanced
 -- ==========================================
 
-local version = "1.3.6"
+local version = "1.3.7"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -198,7 +198,7 @@ local function addESP(obj, color, role)
     connections[obj] = RunService.Heartbeat:Connect(function()
         if not obj or not obj.Parent then removeESP(obj) return end
         
-        -- ตรวจสอบว่าถ้าปิด ESP กลางคัน ให้ลบทิ้งทันที
+        -- ตรวจสอบการปิด ESP กลางคัน
         local roleCheck = role:gsub(" ", "")
         if roleCheck == "Survivor" and not Settings.ESP.Survivor then removeESP(obj) return end
         if roleCheck == "Killer" and not Settings.ESP.Killer then removeESP(obj) return end
@@ -215,16 +215,32 @@ local function addESP(obj, color, role)
 
         local text = ""
         if obj:FindFirstChild("Humanoid") then
-            if Settings.Setting.Name then 
-                local charAttr = obj:GetAttribute("Character")
-                local class = charAttr and tostring(charAttr):gsub("^Survivor%-", "") or ""
-                text = Settings.Setting.Class and (obj.Name .. " | " .. class) or obj.Name 
+            local charAttr = obj:GetAttribute("Character")
+            local class = charAttr and tostring(charAttr):gsub("^Survivor%-", "") or "Unknown"
+            
+            -- ตรรกะการแสดงผล Name และ Class
+            if Settings.Setting.Name and Settings.Setting.Class then
+                text = obj.Name .. " | " .. class
+            elseif Settings.Setting.Name then
+                text = obj.Name
+            elseif Settings.Setting.Class then
+                text = class
             end
-            if Settings.Setting.Health then text = text .. "\n" .. math.floor(obj.Humanoid.Health) .. " HP" end
+
+            -- แสดง Health
+            if Settings.Setting.Health then 
+                local healthText = "\n" .. math.floor(obj.Humanoid.Health) .. " HP"
+                text = text .. healthText
+            end
         else
             text = role or "Object"
         end
-        if Settings.Setting.Distance then text = text .. "\n" .. math.floor(dist) .. " MM" end
+
+        -- แสดง Distance
+        if Settings.Setting.Distance then 
+            text = text .. "\n" .. math.floor(dist) .. " MM" 
+        end
+        
         label.Text = text
     end)
 end
@@ -266,7 +282,19 @@ local function scan()
             
             checkObj("Generators", Settings.ESP.Generator)
             checkObj("FuseBoxes", Settings.ESP.FuseBox)
-            checkObj("Batteries", Settings.ESP.Batteries)
+            --checkObj("Batteries", Settings.ESP.Batteries) not inside map
+
+            if Settings.ESP.Batteries then
+                local ignoreFolder = workspace:FindFirstChild("IGNORE")
+                if ignoreFolder then
+                    for _, o in pairs(ignoreFolder:GetChildren()) do
+                    -- เช็คว่าชื่อคือ Battery (ไม่ว่าจะกี่อันก็ตาม)
+                        if o.Name == "Battery" then
+                            addESP(o, COLORS.Batteries, "Battery")
+                        end
+                    end
+                end
+            end
 
             -- ตรวจสอบ Trap ในโฟลเดอร์ IGNORE ตามที่ระบุ
             if Settings.ESP.Trap then
