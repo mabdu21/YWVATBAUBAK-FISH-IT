@@ -2,7 +2,7 @@
 -- Test V70
 -- ==========================================
 
-local version = "1.4.6"
+local version = "1.4.7"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -306,9 +306,9 @@ local function scan()
             --checkObj("Batteries", Settings.ESP.Batteries) not inside map
 
             if Settings.ESP.Batteries then
-                local ignoreFolder = workspace:FindFirstChild("IGNORE")
-                if ignoreFolder then
-                    for _, o in pairs(ignoreFolder:GetChildren()) do
+                local ignoreFolder2 = workspace:FindFirstChild("IGNORE")
+                if ignoreFolder2 then
+                    for _, o in pairs(ignoreFolder2:GetChildren()) do
                     -- เช็คว่าชื่อคือ Battery (ไม่ว่าจะกี่อันก็ตาม)
                         if o.Name == "Battery" then
                             addESP(o, COLORS.Batteries, "Battery")
