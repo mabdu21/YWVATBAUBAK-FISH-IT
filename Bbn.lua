@@ -2,7 +2,7 @@
 -- Test V68
 -- ==========================================
 
-local version = "1.4.0"
+local version = "1.4.2"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -550,8 +550,8 @@ task.spawn(function()
                                 local frame = dot.Container.Frame
 
                                 -- ปรับตำแหน่งเฉพาะตัวที่เปิดอยู่
-                                frame.AnchorPoint = Vector2.new(0, 0)
-                                frame.Position = UDim2.new(0, 689, 0, 423)
+                                frame.AnchorPoint = Vector2.new(0.5,0.5)
+                                frame.Position = UDim2.new(0.5,0,0.5,0)
                             end
                         end
                     end
