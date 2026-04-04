@@ -2,7 +2,7 @@
 -- Test V70
 -- ==========================================
 
-local version = "1.4.7"
+local version = "1.4.9"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -72,6 +72,7 @@ local Settings = {
         Generator = false,
         FuseBox = false,
         Trap = false,
+        Minion = false,
         Batteries = false
     }
 }
@@ -225,6 +226,7 @@ local function addESP(obj, color, role)
         if roleCheck == "FuseBoxes" and not Settings.ESP.FuseBox then removeESP(obj) return end
         if roleCheck == "Batteries" and not Settings.ESP.Batteries then removeESP(obj) return end
         if roleCheck == "Trap" and not Settings.ESP.Trap then removeESP(obj) return end
+        if roleCheck == "Minion" and not Settings.ESP.Minion then removeESP(obj) return end
 
         local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not root then return end
@@ -271,6 +273,7 @@ local COLORS = {
     Trap = Color3.fromRGB(255, 65, 65),
     Generators = Color3.fromRGB(255, 255, 0),
     FuseBoxes = Color3.fromRGB(0, 255, 255),
+    Minion = Color3.fromRGB(255, 0, 0),
     Batteries = Color3.fromRGB(0, 255, 0)
 }
 
@@ -312,6 +315,17 @@ local function scan()
                     -- เช็คว่าชื่อคือ Battery (ไม่ว่าจะกี่อันก็ตาม)
                         if o.Name == "Battery" then
                             addESP(o, COLORS.Batteries, "Battery")
+                        end
+                    end
+                end
+            end
+            if Settings.ESP.Minion then
+                local ignoreFolder3 = workspace:FindFirstChild("IGNORE")
+                if ignoreFolder3 then
+                    for _, o in pairs(ignoreFolder3:GetChildren()) do
+                    -- เช็คว่าชื่อคือ Battery (ไม่ว่าจะกี่อันก็ตาม)
+                        if o.Name == "Minion" then
+                            addESP(o, COLORS.Minion, "Minion")
                         end
                     end
                 end
@@ -628,7 +642,8 @@ EspTab:Toggle({ Title = "Killer", Value = false, Callback = function(v) Settings
 EspTab:Toggle({ Title = "Lobby", Value = false, Callback = function(v) Settings.ESP.Lobby = v if not v then clearAllESP() end end })
 
 EspTab:Section({ Title = "Hazard ESP", Icon = "sword" })
-EspTab:Toggle({ Title = "Trap", Value = false, Callback = function(v) Settings.ESP.Trap = v if not v then clearAllESP() end end })
+EspTab:Toggle({ Title = "Trap (Springtrap)", Value = false, Callback = function(v) Settings.ESP.Trap = v if not v then clearAllESP() end end })
+EspTab:Toggle({ Title = "Minion (Doppelganger)", Value = false, Callback = function(v) Settings.ESP.Minion = v if not v then clearAllESP() end end })
 
 EspTab:Section({ Title = "Object ESP", Icon = "package" })
 EspTab:Toggle({ Title = "Generator", Value = false, Callback = function(v) Settings.ESP.Generator = v if not v then clearAllESP() end end })
