@@ -1,29 +1,37 @@
 -- ==========================================
--- Test V517 - Fixed & Enhanced
+-- Test V67
 -- ==========================================
 
-local version = "1.3.8"
+local version = "1.3.9"
 
 repeat task.wait() until game:IsLoaded()
 
--- FPS Unlock
+local vu = game:GetService("VirtualUser")
+game:GetService("Players").LocalPlayer.Idled:Connect(function()
+    vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(67)
+    vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
 if setfpscap then
     setfpscap(1000000)
     game:GetService("StarterGui"):SetCore("SendNotification", {
         Title = "dsc.gg/dyhub",
-        Text = "FPS Unlocked!",
+        Text = "Anti AFK & FPS Unlocked!",
         Duration = 2,
         Button1 = "Okay"
     })
-    warn("FPS Unlocked!")
+    warn("Anti AFK Enabled & FPS Unlocked!")
 else
     game:GetService("StarterGui"):SetCore("SendNotification", {
         Title = "dsc.gg/dyhub",
-        Text = "Your exploit does not support setfpscap.",
+        Text = "Anti AFK Enabled (FPS Unlock Not Supported)",
         Duration = 2,
         Button1 = "Okay"
     })
+    warn("Anti AFK Enabled but setfpscap is missing.")
 end
+
 
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
@@ -35,7 +43,7 @@ local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
 -- ===================== SETTINGS =====================
-local MAX_DISTANCE = 500
+local MAX_DISTANCE = 677
 
 local Settings = {
     Auto = {
@@ -58,6 +66,7 @@ local Settings = {
     ESP = {
         Survivor = false,
         Killer = false,
+        Lobby = false,
         Generator = false,
         FuseBox = false,
         Trap = false,
@@ -193,8 +202,8 @@ local function addESP(obj, color, role)
     label.Size = UDim2.new(1,0,1,0)
     label.BackgroundTransparency = 1
     label.TextColor3 = Color3.new(1,1,1)
-    label.TextStrokeTransparency = 0.5
-    label.TextSize = 12
+    label.TextStrokeTransparency = 0.25
+    label.TextSize = 13
     label.Font = Enum.Font.SourceSans
     label.Parent = gui
     gui.Parent = part
@@ -207,6 +216,7 @@ local function addESP(obj, color, role)
         local roleCheck = role:gsub(" ", "")
         if roleCheck == "Survivor" and not Settings.ESP.Survivor then removeESP(obj) return end
         if roleCheck == "Killer" and not Settings.ESP.Killer then removeESP(obj) return end
+        if roleCheck == "Lobby" and not Settings.ESP.Lobby then removeESP(obj) return end
         if roleCheck == "Generators" and not Settings.ESP.Generator then removeESP(obj) return end
         if roleCheck == "FuseBoxes" and not Settings.ESP.FuseBox then removeESP(obj) return end
         if roleCheck == "Batteries" and not Settings.ESP.Batteries then removeESP(obj) return end
@@ -253,6 +263,7 @@ end
 local COLORS = {
     Survivor = Color3.fromRGB(0, 170, 255),
     Killer = Color3.fromRGB(255, 0, 0),
+    Lobby = Color3.fromRGB(255, 255, 255),
     Trap = Color3.fromRGB(255, 65, 65),
     Generators = Color3.fromRGB(255, 255, 0),
     FuseBoxes = Color3.fromRGB(0, 255, 255),
@@ -268,6 +279,7 @@ local function scan()
                 if model:IsA("Model") and model ~= LocalPlayer.Character then
                     if folder.Name == "ALIVE" and Settings.ESP.Survivor then addESP(model, COLORS.Survivor, "Survivor")
                     elseif folder.Name == "KILLER" and Settings.ESP.Killer then addESP(model, COLORS.Killer, "Killer")
+                    elseif folder.Name == "LOBBY" and Settings.ESP.Lobby then addESP(model, COLORS.Lobby, "Lobby")
                     end
                 end
             end
@@ -379,7 +391,7 @@ task.spawn(function()
 end)
 
 -- =================== FULL BRIGHTNESS =============
-Main:Section({ Title = "Miscellaneous", Icon = "cpu" })
+Main:Section({ Title = "Miscellaneous", Icon = "grid-2x2" })
 
 local lighting = game:GetService("Lighting")
 local oldLighting = {}
@@ -392,22 +404,39 @@ Main:Toggle({
         if v then
             oldLighting.Brightness = lighting.Brightness
             oldLighting.ClockTime = lighting.ClockTime
-            oldLighting.FogEnd = lighting.FogEnd
             oldLighting.GlobalShadows = lighting.GlobalShadows
             oldLighting.Ambient = lighting.Ambient
             
             lighting.Brightness = 5
             lighting.ClockTime = 14
-            lighting.FogEnd = 100000
             lighting.GlobalShadows = false
             lighting.Ambient = Color3.fromRGB(255, 255, 255)
         else
             if oldLighting.Brightness ~= nil then
                 lighting.Brightness = oldLighting.Brightness
                 lighting.ClockTime = oldLighting.ClockTime
-                lighting.FogEnd = oldLighting.FogEnd
                 lighting.GlobalShadows = oldLighting.GlobalShadows
                 lighting.Ambient = oldLighting.Ambient
+            end
+        end
+    end
+})
+
+Main:Toggle({
+    Title = "No Fog",
+    Value = Settings.Misc.NoFog,
+    Callback = function(v)
+        Settings.Misc.NoFog = v
+        if v then
+            oldLighting.FogStart = lighting.FogStart
+            oldLighting.FogEnd = lighting.FogEnd
+            
+            lighting.FogStart = 0
+            lighting.FogEnd = 9e9
+        else
+            if oldLighting.FogEnd ~= nil then
+                lighting.FogStart = oldLighting.FogStart
+                lighting.FogEnd = oldLighting.FogEnd
             end
         end
     end
