@@ -1,5 +1,5 @@
 -- ==========================================
--- Test V68
+-- Test V69
 -- ==========================================
 
 local version = "1.4.2"
@@ -50,6 +50,7 @@ local Settings = {
         Escape = false,
         Barricade = false,
         Generator = false,
+        KillAll = false,
         AC = true
     },
     Misc = {
@@ -127,9 +128,11 @@ pcall(function()
 end)
 
 local InfoTab = Window:Tab({ Title = "Information", Icon = "info" })
+local MainDivider1 = Window:Divider()
+local Auto = Window:Tab({ Title = "Survivor", Icon = "user-check" })
+local Killer = Window:Tab({ Title = "Killer", Icon = "swords" })
 local MainDivider = Window:Divider()
 local Main = Window:Tab({ Title = "Main", Icon = "rocket" })
-local Auto = Window:Tab({ Title = "Auto", Icon = "zap" })
 local EspTab = Window:Tab({ Title = "Esp", Icon = "eye" })
 Window:SelectTab(1)
 
@@ -347,6 +350,60 @@ task.spawn(function()
         scan()
     end
 end)
+
+-- ====================== KILLER ======================
+Killer:Section({ Title = "Combat", Icon = "swords" })
+-- Toggle
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local RunService = game:GetService("RunService")
+local Players = game.Players
+local LocalPlayer = Players.LocalPlayer
+
+Killer:Toggle({
+    Title = "Auto Kill All (Not Legit)",
+    Description = "Automatically teleport to kill survivor all",
+    Value = false,
+    Callback = function(v)
+        Settings.Auto.KillAll = v
+        
+        if tpConn then 
+            tpConn:Disconnect() 
+            tpConn = nil 
+        end
+
+        if Settings.Auto.KillAll then
+            tpConn = RunService.Heartbeat:Connect(function()
+                local char = LocalPlayer.Character
+                local root = char and char:FindFirstChild("HumanoidRootPart")
+                if not root then return end
+
+                local closestPlayer = nil
+                local shortestDistance = math.huge
+
+                for _, target in ipairs(workspace.PLAYERS.ALIVE:GetChildren()) do
+                    local tRoot = target:FindFirstChild("HumanoidRootPart")
+                    local tHum = target:FindFirstChild("Humanoid")
+                    
+                    if tRoot and tHum and tHum.Health > 0 and target ~= char then
+                        local distance = (root.Position - tRoot.Position).Magnitude
+                        if distance < shortestDistance then
+                            shortestDistance = distance
+                            closestPlayer = target
+                        end
+                    end
+                end
+
+                if closestPlayer then
+                    local tRoot = closestPlayer:FindFirstChild("HumanoidRootPart")
+                    root.CFrame = tRoot.CFrame * CFrame.new(0, 0, 3)
+
+                    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+                end
+            end)
+        end
+    end
+})
 
 -- ====================== GUI TABS ======================
 Main:Section({ Title = "Anti Cheat", Icon = "cpu" })
