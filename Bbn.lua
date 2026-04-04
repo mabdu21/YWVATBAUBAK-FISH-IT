@@ -2,7 +2,7 @@
 -- Test V69
 -- ==========================================
 
-local version = "1.4.2"
+local version = "1.4.3"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -486,13 +486,16 @@ Main:Toggle({
     Callback = function(v)
         Settings.Misc.NoFog = v
         if v then
+            oldLighting.Density = lighting.Atmosphere.Density
             oldLighting.FogStart = lighting.FogStart
             oldLighting.FogEnd = lighting.FogEnd
             
             lighting.FogStart = 0
             lighting.FogEnd = 9e9
+            lighting.Atmosphere.Density = 0
         else
             if oldLighting.FogEnd ~= nil then
+                lighting.Atmosphere.Density = oldLighting.Density
                 lighting.FogStart = oldLighting.FogStart
                 lighting.FogEnd = oldLighting.FogEnd
             end
@@ -589,7 +592,7 @@ Auto:Toggle({
 -- ================= AUTO BARRICADE (FILTER ENABLED DOT) =================
 task.spawn(function()
     while true do
-        task.wait(0.1)
+        task.wait(0.2)
 
         if Settings.Auto.Barricade then
             pcall(function()
