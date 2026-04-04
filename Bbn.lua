@@ -2,7 +2,7 @@
 -- Test V517 - Fixed & Enhanced
 -- ==========================================
 
-local version = "1.3.7"
+local version = "1.3.8"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -42,6 +42,10 @@ local Settings = {
         Barricade = false,
         Generator = false,
         AC = true
+    },
+    Misc = {
+        Fullbright = false,
+        NoFog = false
     },
     Setting = {
         Delay = 6,
@@ -115,7 +119,8 @@ end)
 local InfoTab = Window:Tab({ Title = "Information", Icon = "info" })
 local MainDivider = Window:Divider()
 local Main = Window:Tab({ Title = "Main", Icon = "rocket" })
-local EspTab = Window:Tab({ Title = "ESP", Icon = "eye" })
+local Auto = Window:Tab({ Title = "Auto", Icon = "zap" })
+local EspTab = Window:Tab({ Title = "Esp", Icon = "eye" })
 Window:SelectTab(1)
 
 -- ====================== AUTO GENERATOR ======================
@@ -373,23 +378,58 @@ task.spawn(function()
     setreadonly(mt, true)
 end)
 
--- Main Tab
-Main:Section({ Title = "Auto Fixing", Icon = "zap" })
+-- =================== FULL BRIGHTNESS =============
+Main:Section({ Title = "Miscellaneous", Icon = "cpu" })
+
+local lighting = game:GetService("Lighting")
+local oldLighting = {}
+
 Main:Toggle({
+    Title = "Fullbright",
+    Value = Settings.Misc.Fullbright,
+    Callback = function(v)
+        Settings.Misc.Fullbright = v
+        if v then
+            oldLighting.Brightness = lighting.Brightness
+            oldLighting.ClockTime = lighting.ClockTime
+            oldLighting.FogEnd = lighting.FogEnd
+            oldLighting.GlobalShadows = lighting.GlobalShadows
+            oldLighting.Ambient = lighting.Ambient
+            
+            lighting.Brightness = 5
+            lighting.ClockTime = 14
+            lighting.FogEnd = 100000
+            lighting.GlobalShadows = false
+            lighting.Ambient = Color3.fromRGB(255, 255, 255)
+        else
+            if oldLighting.Brightness ~= nil then
+                lighting.Brightness = oldLighting.Brightness
+                lighting.ClockTime = oldLighting.ClockTime
+                lighting.FogEnd = oldLighting.FogEnd
+                lighting.GlobalShadows = oldLighting.GlobalShadows
+                lighting.Ambient = oldLighting.Ambient
+            end
+        end
+    end
+})
+
+-- Main Tab
+Auto:Section({ Title = "Auto Fixing", Icon = "zap" })
+Auto:Toggle({
     Title = "Auto Generator",
     Description = "Automatically fixing Generator",
     Value = false,
     Callback = function(v) Settings.Auto.Generator = v end
 })
-Main:Slider({
+Auto:Slider({
     Title = "Auto Generator Delay",
     Description = "Delay between each fix",
     Value = {Min = 1, Max = 20, Default = 6},
     Callback = function(v) Settings.Setting.Delay = v end
 })
-Main:Section({ Title = "Auto Objective", Icon = "door-closed" })
+Auto:Section({ Title = "Auto Objective", Icon = "door-closed" })
 -- Toggle
-Main:Toggle({
+Auto:Toggle({
     Title = "Auto Barricade",
     Description = "Automatically perfect Barricade",
     Value = false,
