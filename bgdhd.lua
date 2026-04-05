@@ -101,7 +101,7 @@ local InfoTab = Window:Tab({ Title = "Information", Icon = "info" })
 local MainDivider1 = Window:Divider()
 local Main = Window:Tab({ Title = "Main", Icon = "rocket" })
 Window:SelectTab(1)
-
+Main:Section({ Title = "Dupe Currency", Icon = "crown" })
 -- ส่วนของ Infinite Coin
 Main:Toggle({
     Title = "Infinite Coin (Loop)",
@@ -143,6 +143,9 @@ Main:Toggle({
         end
     end
 })
+
+if not ui then ui = {} end
+if not ui.Creator then ui.Creator = {} end
 
 InfoTab:Section({ Title = "Discord Server", TextXAlignment = "Center", TextSize = 17 })
 InfoTab:Divider()
