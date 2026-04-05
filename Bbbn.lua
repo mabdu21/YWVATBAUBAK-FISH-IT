@@ -467,24 +467,59 @@ Main:Toggle({
 -- ================= BYPASS ANTI CHEAT =================
 task.spawn(function()
     local mt = getrawmetatable(game)
+    if not mt then return end
+
     setreadonly(mt, false)
 
     local oldNamecall = mt.__namecall
+    local oldKick
+
+    -- hook Kick (กัน Local Kick เท่านั้น)
+    oldKick = hookfunction(game.Players.LocalPlayer.Kick, function(...)
+        if Settings.Auto.AC then
+            warn("[AC] Blocked Kick attempt")
+            return
+        end
+        return oldKick(...)
+    end)
+
+    -- keywords ขั้นสูง
+    local blacklist = {"anti","cheat","kick","ban","detect","flag","log","report","ac","secure","check","verify","validation","validate","scan","monitor","watch","track","guard","shield","protection","protect","security","safety","integrity","auth","authentication","authorize","logger","logging","logdata","webhook","discordhook","httplog","remotelog","hook","hooklog","hookdata","hookevent","hookcheat","logcheat","cheatlog","reporter","reportlog","ticket","tickets","supportticket","mod","moderation","adminlog","stafflog","analytics","metrics","metriclog","tracker","tracking","tracklog","eventlog","datalog","datatrack","flagged","flaglog","detectlog","detectionlog","http","https","requestlog","postlog","apilog","api","endpoint","database","db","datastore","storelog","save","savelog","audit","auditlog","journal","history","historylog","monitorlog","watchlog","suspicious","exploit","tamper","abuse","violation","illegal","servercheck","clientcheck","sanity","heartbeat","pingcheck","sync","hidden","core","internal","system","service","handler","manager","controller","module","main","init","acb","anticheat","acsys","sec","prot","guarded"}
+
+    local function isSuspicious(remote, method, args)
+        local name = tostring(remote):lower()
+
+        -- เช็คชื่อ
+        for _, v in ipairs(blacklist) do
+            if name:find(v) then
+                return true
+            end
+        end
+
+        -- เช็ค argument (บางเกมส่ง string มาตรวจ)
+        for _, v in ipairs(args) do
+            if typeof(v) == "string" then
+                local l = v:lower()
+                for _, b in ipairs(blacklist) do
+                    if l:find(b) then
+                        return true
+                    end
+                end
+            end
+        end
+
+        return false
+    end
 
     mt.__namecall = newcclosure(function(self, ...)
         local method = getnamecallmethod()
         local args = {...}
 
         if Settings.Auto.AC then
-            if method == "FireServer" then
-                local name = tostring(self):lower()
-
-                if name:find("anti") 
-                or name:find("cheat") 
-                or name:find("kick") 
-                or name:find("ban") 
-                or name:find("detect") then
-                    return task.wait(math.huge)
+            if method == "FireServer" or method == "InvokeServer" then
+                if isSuspicious(self, method, args) then
+                    warn("[AC] Blocked Remote:", self)
+                    return nil
                 end
             end
         end
