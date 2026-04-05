@@ -2,7 +2,7 @@
 -- Test V75
 -- ==========================================
 
-local version = "1.5.1"
+local version = "1.5.2"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -566,12 +566,60 @@ Auto:Slider({
 })
 Auto:Section({ Title = "Auto Objective", Icon = "door-closed" })
 -- Toggle
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local dotConn = nil
+
 Auto:Toggle({
     Title = "Auto Barricade",
     Description = "Automatically perfect Barricade",
     Value = false,
     Callback = function(v)
         Settings.Auto.Barricade = v
+
+        local gui = LocalPlayer:WaitForChild("PlayerGui")
+
+        if v then
+            -- ป้องกันซ้อน
+            if dotConn then dotConn:Disconnect() end
+
+            dotConn = RunService.RenderStepped:Connect(function()
+                pcall(function()
+
+                    -- วนหา Dot ทุกตัว (กันมีหลายอัน)
+                    for _, dot in ipairs(gui:GetChildren()) do
+                        if dot.Name == "Dot" and dot:IsA("ScreenGui") then
+
+                            -- ❌ ถ้าไม่เปิด = ลบทิ้งทันที
+                            if not dot.Enabled then
+                                dot:Destroy()
+                                continue
+                            end
+
+                            local container = dot:FindFirstChild("Container")
+                            local frame = container and container:FindFirstChild("Frame")
+
+                            if frame and frame:IsA("GuiObject") then
+                                -- 🎯 ล็อคกลางจอ (Perfect)
+                                frame.AnchorPoint = Vector2.new(0.5, 0.5)
+                                frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+                            end
+                        end
+                    end
+
+                end)
+            end)
+
+        else
+            -- ปิดระบบ
+            if dotConn then
+                dotConn:Disconnect()
+                dotConn = nil
+            end
+        end
     end
 })
 
@@ -635,38 +683,6 @@ Auto:Toggle({
         end
     end
 })
-
--- ================= AUTO BARRICADE (FILTER ENABLED DOT) =================
-task.spawn(function()
-    while true do
-        task.wait(0.25)
-
-        if Settings.Auto.Barricade then
-            pcall(function()
-                local player = game:GetService("Players").LocalPlayer
-                local gui = player:FindFirstChild("PlayerGui")
-
-                if gui then
-                    -- วนหา Dot ทุกตัว (กันมีหลายอัน)
-                    for _, dot in ipairs(gui:GetChildren()) do
-                        if dot.Name == "Dot" and dot:IsA("ScreenGui") and dot.Enabled then
-                            
-                            if dot:FindFirstChild("Container") 
-                            and dot.Container:FindFirstChild("Frame") then
-                                
-                                local frame = dot.Container.Frame
-
-                                -- ปรับตำแหน่งเฉพาะตัวที่เปิดอยู่
-                                frame.AnchorPoint = Vector2.new(0,0)
-                                frame.Position = UDim2.new(0,675,0,419)
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-    end
-end)
 
 -- ESP Tab
 EspTab:Section({ Title = "Player ESP", Icon = "user" })
