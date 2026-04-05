@@ -125,7 +125,7 @@ end)
 
 --// GUI
 local gui = Instance.new("ScreenGui", game.CoreGui)
-gui.Name = "DYHUB_Collector"
+gui.Name = "DYHUB"
 
 local main = Instance.new("Frame", gui)
 main.Size = UDim2.new(0, 230, 0, 110)
@@ -139,7 +139,7 @@ Instance.new("UICorner", main).CornerRadius = UDim.new(0, 12)
 local title = Instance.new("TextLabel", main)
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundTransparency = 1
-title.Text = "Collector ⚡ Burst Mode"
+title.Text = "IF LAG JUST REJOIN"
 title.TextColor3 = Color3.fromRGB(200, 200, 200)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 14
@@ -159,13 +159,13 @@ toggle.MouseButton1Click:Connect(function()
     enabled = not enabled
 
     if enabled then
-        toggle.Text = "ON"
+        toggle.Text = "ON (script by ai)"
         toggle.BackgroundColor3 = Color3.fromRGB(0, 170, 100)
         table.clear(queue)
         table.clear(seen)
         startCollect()
     else
-        toggle.Text = "OFF"
+        toggle.Text = "OFF (credit .gg/dyhub)"
         toggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
         table.clear(queue)
         table.clear(seen)
