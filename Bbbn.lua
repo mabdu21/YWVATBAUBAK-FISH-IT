@@ -1,8 +1,8 @@
 -- ==========================================
--- Test V70
+-- Test V75
 -- ==========================================
 
-local version = "1.4.9"
+local version = "1.5.1"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -73,6 +73,7 @@ local Settings = {
         FuseBox = false,
         Trap = false,
         Minion = false,
+        Axe = false,
         Batteries = false
     }
 }
@@ -186,9 +187,30 @@ end
 
 local function addESP(obj, color, role)
     if not obj or obj == LocalPlayer.Character then return end
-    local part = obj:FindFirstChild("Head") or obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart", true)
-    if not part or highlights[obj] then return end
 
+    -- ✅ รองรับ MeshPart
+    local part
+    if obj:IsA("BasePart") then
+        part = obj
+    else
+        part = obj:FindFirstChild("Head") 
+            or obj:FindFirstChild("HumanoidRootPart") 
+            or obj:FindFirstChildWhichIsA("BasePart", true)
+    end
+
+    if not part then return end
+
+    -- 🔥 ลบ Highlight เก่าของ object นี้ก่อน (สำคัญมาก)
+    for _,v in pairs(obj:GetDescendants()) do
+        if v:IsA("Highlight") then
+            v:Destroy()
+        end
+    end
+
+    -- กันซ้ำเฉพาะ ESP เรา
+    if highlights[obj] then return end
+
+    -- ================= Highlight =================
     if Settings.Setting.Highlight then
         local h = Instance.new("Highlight")
         h.FillTransparency = 1
@@ -198,6 +220,7 @@ local function addESP(obj, color, role)
         highlights[obj] = h
     end
 
+    -- ================= Billboard =================
     local gui = Instance.new("BillboardGui")
     gui.Size = UDim2.new(0, 100, 0, 40)
     gui.StudsOffset = Vector3.new(0, 2.5, 0)
@@ -211,14 +234,15 @@ local function addESP(obj, color, role)
     label.TextSize = 13
     label.Font = Enum.Font.SourceSans
     label.Parent = gui
+
     gui.Parent = part
     billboards[obj] = gui
 
     connections[obj] = RunService.Heartbeat:Connect(function()
         if not obj or not obj.Parent then removeESP(obj) return end
         
-        -- ตรวจสอบการปิด ESP กลางคัน
         local roleCheck = role:gsub(" ", "")
+
         if roleCheck == "Survivor" and not Settings.ESP.Survivor then removeESP(obj) return end
         if roleCheck == "Killer" and not Settings.ESP.Killer then removeESP(obj) return end
         if roleCheck == "Lobby" and not Settings.ESP.Lobby then removeESP(obj) return end
@@ -227,19 +251,20 @@ local function addESP(obj, color, role)
         if roleCheck == "Batteries" and not Settings.ESP.Batteries then removeESP(obj) return end
         if roleCheck == "Trap" and not Settings.ESP.Trap then removeESP(obj) return end
         if roleCheck == "Minion" and not Settings.ESP.Minion then removeESP(obj) return end
+        if roleCheck == "Axe" and not Settings.ESP.Axe then removeESP(obj) return end
 
         local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not root then return end
-        local dist = (root.Position - part.Position).Magnitude
 
+        local dist = (root.Position - part.Position).Magnitude
         if dist > MAX_DISTANCE then removeESP(obj) return end
 
         local text = ""
+
         if obj:FindFirstChild("Humanoid") then
             local charAttr = obj:GetAttribute("Character")
             local class = charAttr and tostring(charAttr):gsub("^Survivor%-", "") or "Unknown"
             
-            -- ตรรกะการแสดงผล Name และ Class
             if Settings.Setting.Name and Settings.Setting.Class then
                 text = obj.Name .. " | " .. class
             elseif Settings.Setting.Name then
@@ -248,16 +273,13 @@ local function addESP(obj, color, role)
                 text = class
             end
 
-            -- แสดง Health
             if Settings.Setting.Health then 
-                local healthText = "\n" .. math.floor(obj.Humanoid.Health) .. " HP"
-                text = text .. healthText
+                text = text .. "\n" .. math.floor(obj.Humanoid.Health) .. " HP"
             end
         else
             text = role or "Object"
         end
 
-        -- แสดง Distance
         if Settings.Setting.Distance then 
             text = text .. "\n" .. math.floor(dist) .. " MM" 
         end
@@ -266,6 +288,7 @@ local function addESP(obj, color, role)
     end)
 end
 
+-- ================= COLORS =================
 local COLORS = {
     Survivor = Color3.fromRGB(0, 170, 255),
     Killer = Color3.fromRGB(255, 0, 0),
@@ -273,12 +296,12 @@ local COLORS = {
     Trap = Color3.fromRGB(255, 65, 65),
     Generators = Color3.fromRGB(255, 255, 0),
     FuseBoxes = Color3.fromRGB(0, 255, 255),
-    Minion = Color3.fromRGB(255, 0, 0),
+    Minion = Color3.fromRGB(120, 6, 6),
+    Axe = Color3.fromRGB(165, 42, 42),
     Batteries = Color3.fromRGB(0, 255, 0)
 }
 
 local function scan()
-    -- Scan Players
     local playerFolder = workspace:FindFirstChild("PLAYERS")
     if playerFolder then
         for _,folder in pairs(playerFolder:GetChildren()) do
@@ -292,38 +315,39 @@ local function scan()
             end
         end
     end
-    -- Scan Objects
+
     local maps = workspace:FindFirstChild("MAPS")
     if maps then
         for _,map in pairs(maps:GetChildren()) do
-            -- ฟังก์ชันตรวจจับ Object ปกติ
+
             local function checkObj(fName, setVal)
                 local f = map:FindFirstChild(fName)
                 if f and setVal then
-                    for _,o in pairs(f:GetChildren()) do addESP(o, COLORS[fName] or Color3.new(1,1,1), fName) end
+                    for _,o in pairs(f:GetChildren()) do
+                        addESP(o, COLORS[fName] or Color3.new(1,1,1), fName)
+                    end
                 end
             end
             
             checkObj("Generators", Settings.ESP.Generator)
             checkObj("FuseBoxes", Settings.ESP.FuseBox)
-            --checkObj("Batteries", Settings.ESP.Batteries) not inside map
 
+            -- 🔥 Battery FIX
             if Settings.ESP.Batteries then
-                local ignoreFolder2 = workspace:FindFirstChild("IGNORE")
-                if ignoreFolder2 then
-                    for _, o in pairs(ignoreFolder2:GetChildren()) do
-                    -- เช็คว่าชื่อคือ Battery (ไม่ว่าจะกี่อันก็ตาม)
+                local ignoreFolder = workspace:FindFirstChild("IGNORE")
+                if ignoreFolder then
+                    for _, o in pairs(ignoreFolder:GetChildren()) do
                         if o.Name == "Battery" then
-                            addESP(o, COLORS.Batteries, "Battery")
+                            addESP(o, COLORS.Batteries, "Batteries")
                         end
                     end
                 end
             end
+
             if Settings.ESP.Minion then
-                local ignoreFolder3 = workspace:FindFirstChild("IGNORE")
-                if ignoreFolder3 then
-                    for _, o in pairs(ignoreFolder3:GetChildren()) do
-                    -- เช็คว่าชื่อคือ Battery (ไม่ว่าจะกี่อันก็ตาม)
+                local ignoreFolder = workspace:FindFirstChild("IGNORE")
+                if ignoreFolder then
+                    for _, o in pairs(ignoreFolder:GetChildren()) do
                         if o.Name == "Minion" then
                             addESP(o, COLORS.Minion, "Minion")
                         end
@@ -331,7 +355,17 @@ local function scan()
                 end
             end
 
-            -- ตรวจสอบ Trap ในโฟลเดอร์ IGNORE ตามที่ระบุ
+            if Settings.ESP.Axe then
+                local ignoreFolder = workspace:FindFirstChild("IGNORE")
+                if ignoreFolder then
+                    for _, o in pairs(ignoreFolder:GetChildren()) do
+                        if o.Name == "Axe" then
+                            addESP(o, COLORS.Axe, "Axe")
+                        end
+                    end
+                end
+            end
+
             if Settings.ESP.Trap then
                 local ignoreFolder = workspace:FindFirstChild("IGNORE")
                 if ignoreFolder then
@@ -341,7 +375,7 @@ local function scan()
                         end
                     end
                 end
-                -- ตรวจสอบเผื่อมี Trap อยู่ข้างนอก IGNORE
+
                 local trapFolder = workspace:FindFirstChild("Trap")
                 if trapFolder then
                     for _,o in pairs(trapFolder:GetChildren()) do
@@ -353,7 +387,6 @@ local function scan()
     end
 end
 
--- ฟังก์ชันล้าง ESP ทั้งหมดเมื่อสั่งปิด
 local function clearAllESP()
     for obj, _ in pairs(highlights) do removeESP(obj) end
 end
@@ -606,7 +639,7 @@ Auto:Toggle({
 -- ================= AUTO BARRICADE (FILTER ENABLED DOT) =================
 task.spawn(function()
     while true do
-        task.wait(0.1)
+        task.wait(0.25)
 
         if Settings.Auto.Barricade then
             pcall(function()
@@ -642,6 +675,7 @@ EspTab:Toggle({ Title = "Killer", Value = false, Callback = function(v) Settings
 EspTab:Toggle({ Title = "Lobby", Value = false, Callback = function(v) Settings.ESP.Lobby = v if not v then clearAllESP() end end })
 
 EspTab:Section({ Title = "Hazard ESP", Icon = "sword" })
+EspTab:Toggle({ Title = "Axe (Springtrap)", Value = false, Callback = function(v) Settings.ESP.Axe = v if not v then clearAllESP() end end })
 EspTab:Toggle({ Title = "Trap (Springtrap)", Value = false, Callback = function(v) Settings.ESP.Trap = v if not v then clearAllESP() end end })
 EspTab:Toggle({ Title = "Minion (Doppelganger)", Value = false, Callback = function(v) Settings.ESP.Minion = v if not v then clearAllESP() end end })
 
@@ -665,8 +699,8 @@ InfoTab:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize =
 InfoTab:Divider()
 
 InfoTab:Paragraph({
-    Title = "Update: 04/04/2026",
-    Desc = "- [ Fixed ] Barricade \n- [ Fixed ] ESP \n- [ Added ] Fullbright \n- [ Added ] No Fog \n- [ Added ] Kill All \n- [ Added ] Auto Escape",
+    Title = "Update: 05/04/2026",
+    Desc = "- [ Fixed ] Auto Escape \n- [ Fixed ] Auto Barricade \n- [ Fixed ] Esp Battery \n- [ Added ] Esp Axe \n- [ Added ] Esp Minion",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
