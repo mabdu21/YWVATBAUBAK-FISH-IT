@@ -2,7 +2,7 @@
 -- Test V75
 -- ==========================================
 
-local version = "1.5.2"
+local version = "1.5.3"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -48,6 +48,7 @@ local MAX_DISTANCE = 677
 local Settings = {
     Auto = {
         Escape = false,
+        Shaking = false,
         Barricade = false,
         Generator = false,
         KillAll = false,
@@ -658,7 +659,68 @@ Auto:Toggle({
     end
 })
 
-Auto:Section({ Title = "Auto Win", Icon = "crown" })
+Auto:Section({ Title = "Auto Miscellaneous", Icon = "crown" })
+
+local shakingLoop
+local guiConnection
+
+Auto:Toggle({
+    Title = "Auto Shaking (Minion)",
+    Description = "Automatically Shaking to get the minion out of your face",
+    Value = false,
+    Callback = function(v)
+        Settings.Auto.Shaking = v
+        
+        local player = game:GetService("Players").LocalPlayer
+        local playerGui = player:WaitForChild("PlayerGui")
+
+        if v then
+            if shakingLoop then return end
+            
+            -- 🔥 ดัก GUI โผล่
+            guiConnection = playerGui.ChildAdded:Connect(function(child)
+                if child.Name == "WireyesUI" then
+                    local remote = child:WaitForChild("WireyesClient", 2)
+                    if remote and remote:FindFirstChild("WireyesEvent") then
+                        remote.WireyesEvent:FireServer(
+                            "TakeOff",
+                            1775926755.247102
+                        )
+                    end
+                end
+            end)
+
+            -- 🔁 Loop ปกติ (กันพลาด)
+            shakingLoop = task.spawn(function()
+                while Settings.Auto.Shake do
+                    local gui = playerGui:FindFirstChild("WireyesUI")
+                    
+                    if gui then
+                        local remote = gui:FindFirstChild("WireyesClient")
+                        if remote and remote:FindFirstChild("WireyesEvent") then
+                            remote.WireyesEvent:FireServer(
+                                "TakeOff",
+                                1775926755.247102
+                            )
+                        end
+                    end
+
+                    task.wait(0.3)
+                end
+                
+                shakingLoop = nil
+            end)
+
+        else
+            -- ❌ ปิดระบบ
+            if guiConnection then
+                guiConnection:Disconnect()
+                guiConnection = nil
+            end
+        end
+    end
+})
+
 Auto:Toggle({
     Title = "Auto Escape (Not Legit)",
     Description = "Automatically teleport to Escape",
