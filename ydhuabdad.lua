@@ -629,59 +629,87 @@ local function GetPriorityMob()
     return nil, nil
 end
 
--- ====================== ADAPTIVE HEIGHT SYSTEM ======================
--- เก็บ padding ที่ปรับแล้วต่อ mob (ใช้ชื่อ + position เป็น key)
-local MobAdaptivePadding = {}
--- เก็บ health snapshot ของ mob ก่อนหน้า เพื่อตรวจว่าเราดาเมจมันได้หรือเปล่า
-local MobHealthSnapshot = {}
+-- ====================== MOB HEIGHT OVERRIDE (v018 - ฆ่าตายแน่นอน) ======================
+-- เก็บ override padding แยกตาม mob (ใช้ reference เป็น key)
+local MobHeightOverride = {}  -- [mob] = paddingOverride (number) หรือ nil
 
-local ADAPTIVE_CHECK_INTERVAL = 3    -- วินาที รอดูว่า hp ลดหรือไม่
-local ADAPTIVE_STEP = 1              -- ลด padding ครั้งละกี่หน่วย
-local ADAPTIVE_MIN_PADDING = -2      -- ต่ำสุดที่ยอมให้ลด (ไม่ให้ลงต่ำเกินจน mob ตีกลับ)
+-- เก็บ health snapshot เพื่อเช็คว่าดาเมจโดนมั้ย
+local MobLastHealth = {}       -- [mob] = lastHP
 
-local function GetMobAdaptiveKey(mob)
-    -- ใช้ชื่อเป็น key เพื่อให้ mob ตัวเดิมจำ padding ได้
-    return mob.Name
-end
-
-local function GetAdaptivePadding(mob)
-    local key = GetMobAdaptiveKey(mob)
-    if MobAdaptivePadding[key] ~= nil then
-        return MobAdaptivePadding[key]
+local function GetEffectivePadding(mob)
+    if MobHeightOverride[mob] ~= nil then
+        return MobHeightOverride[mob]
     end
     return HeightValue
 end
 
-local function SetAdaptivePadding(mob, value)
-    local key = GetMobAdaptiveKey(mob)
-    MobAdaptivePadding[key] = value
-    -- save ไป config
-    Config:Set("AdaptivePadding_" .. key, value)
+-- เรียกทุกครั้งที่เรา lock อยู่กับ mob เพื่อเช็คว่า HP ลดมั้ย
+-- ถ้าไม่ลดเลยใน checkInterval วิ -> ลด padding ลง 1 (แต่ไม่ต่ำกว่า safeMin)
+-- safeMin คือ padding ขั้นต่ำที่ mob ตีเราไม่ถึง
+local PADDING_REDUCE_STEP = 1
+local PADDING_SAFE_MIN = 2       -- ห้ามลงต่ำกว่านี้
+local PADDING_CHECK_INTERVAL = 2 -- วิ
+
+local function StartDamageChecker(mob)
+    task.spawn(function()
+        -- snapshot health ตอนเริ่ม
+        local humanoid = mob and mob:FindFirstChild("Humanoid")
+        if not humanoid then return end
+
+        local lastHP = humanoid.Health
+        MobLastHealth[mob] = lastHP
+
+        local elapsed = 0
+        while mob and mob.Parent and not IsMobDead(mob) and AutoFarmEnabled do
+            task.wait(0.5)
+            elapsed = elapsed + 0.5
+
+            if not mob or not mob.Parent or IsMobDead(mob) then break end
+            humanoid = mob:FindFirstChild("Humanoid")
+            if not humanoid then break end
+
+            if elapsed >= PADDING_CHECK_INTERVAL then
+                elapsed = 0
+                local currentHP = humanoid.Health
+                local storedLastHP = MobLastHealth[mob] or currentHP
+
+                -- HP ไม่ลดเลย -> ลด padding
+                if currentHP >= storedLastHP then
+                    local currentPad = GetEffectivePadding(mob)
+                    local newPad = currentPad - PADDING_REDUCE_STEP
+                    if newPad < PADDING_SAFE_MIN then
+                        newPad = PADDING_SAFE_MIN
+                    end
+                    if newPad ~= currentPad then
+                        MobHeightOverride[mob] = newPad
+                        print("[DYHUB] DmgCheck: HP not reduced, lowering padding to " .. newPad .. " for " .. mob.Name)
+                    end
+                else
+                    -- ดาเมจโดนแล้ว -> lock padding ไว้ที่ค่านี้ (ไม่เปลี่ยนแปลง)
+                    -- ไม่ต้องทำอะไร เพราะ MobHeightOverride[mob] จะถูกใช้ต่อไป
+                    print("[DYHUB] DmgCheck: Damage detected! Locking padding at " .. GetEffectivePadding(mob) .. " for " .. mob.Name)
+                end
+
+                MobLastHealth[mob] = currentHP
+            end
+        end
+
+        -- mob ตายแล้ว -> เคลียร์ override (กลับค่าเดิมสำหรับ mob ตัวต่อไป)
+        MobHeightOverride[mob] = nil
+        MobLastHealth[mob] = nil
+        print("[DYHUB] DmgCheck: Mob dead, cleared override for " .. (mob and mob.Name or "?"))
+    end)
 end
 
-local function ResetAdaptivePadding(mob)
-    local key = GetMobAdaptiveKey(mob)
-    MobAdaptivePadding[key] = nil
-    Config:Set("AdaptivePadding_" .. key, nil)
-end
-
--- โหลด adaptive padding จาก config ตอนเริ่ม
--- (โหลดหลัง Config.new() แล้ว ดังนั้นทำที่นี่ได้)
-local function LoadAdaptivePaddingFromConfig()
-    local prefix = "AdaptivePadding_"
-    -- ไม่สามารถ iterate keys ของ Config ได้ตรงๆ แต่เราจะโหลด on-demand ใน GetAdaptivePadding
-    -- ตรงนี้เป็น placeholder สำหรับ future
-end
-LoadAdaptivePaddingFromConfig()
-
--- ====================== TARGET CFRAME (with adaptive height) ======================
-local function GetTargetCFrame(mob, position, overridePadding)
+-- ====================== TARGET CFRAME ======================
+local function GetTargetCFrame(mob, position)
     local mobRoot = mob:FindFirstChild("HumanoidRootPart")
     local mobHead = mob:FindFirstChild("Head")
     local mobHumanoid = mob:FindFirstChild("Humanoid")
     if not mobRoot then return nil end
     local mobHeight = GetMobSize(mob)
-    local padding = overridePadding ~= nil and overridePadding or GetAdaptivePadding(mob)
+    -- ใช้ effective padding (อาจถูก override โดย DamageChecker)
+    local padding = GetEffectivePadding(mob)
     if position == "Above" then
         local headPos = mobHead and mobHead.Position or mobRoot.Position
         local targetPos = headPos + Vector3.new(0, mobHeight + padding, 0)
@@ -695,59 +723,6 @@ local function GetTargetCFrame(mob, position, overridePadding)
         local lookCF = CFrame.new(targetPos, feetPos)
         return lookCF * CFrame.Angles(math.rad(10), 0, 0)
     end
-end
-
--- ====================== ADAPTIVE HEIGHT WATCHER ======================
--- เปิด task เพื่อตรวจ mob HP ว่าเราตีได้หรือเปล่า ถ้าไม่ได้ให้ลด padding
-local ActiveAdaptiveTasks = {}
-
-local function StartAdaptiveWatcher(mob)
-    local key = GetMobAdaptiveKey(mob)
-    if ActiveAdaptiveTasks[key] then return end -- มีแล้ว
-
-    ActiveAdaptiveTasks[key] = true
-    task.spawn(function()
-        -- รอก่อน 1 วิ ให้ระบบเริ่มตีก่อน
-        task.wait(1)
-
-        while AutoFarmEnabled and mob and mob.Parent and not IsMobDead(mob) do
-            local humanoid = mob:FindFirstChild("Humanoid")
-            if not humanoid then break end
-
-            local hpBefore = humanoid.Health
-            MobHealthSnapshot[key] = hpBefore
-
-            -- รอ ADAPTIVE_CHECK_INTERVAL วิ
-            task.wait(ADAPTIVE_CHECK_INTERVAL)
-
-            -- ตรวจอีกทีว่า mob ยังมีชีวิตอยู่
-            if IsMobDead(mob) then break end
-
-            local hpAfter = humanoid.Health
-            local currentPadding = GetAdaptivePadding(mob)
-
-            -- ถ้า hp ไม่ลดเลย และ padding ยัง > ADAPTIVE_MIN_PADDING
-            if hpAfter >= hpBefore and currentPadding > ADAPTIVE_MIN_PADDING then
-                local newPadding = math.max(ADAPTIVE_MIN_PADDING, currentPadding - ADAPTIVE_STEP)
-                SetAdaptivePadding(mob, newPadding)
-                print(string.format("[DYHUB] Adaptive: %s HP not dropping (%.0f), reducing padding: %.1f -> %.1f",
-                    mob.Name, hpAfter, currentPadding, newPadding))
-            elseif hpAfter < hpBefore then
-                -- ตีได้แล้ว ล็อค padding นี้ไว้ (ไม่ reset กลับ แต่หยุด watcher)
-                print(string.format("[DYHUB] Adaptive: %s HP dropping (%.0f -> %.0f), locking padding at %.1f",
-                    mob.Name, hpBefore, hpAfter, currentPadding))
-                break
-            end
-        end
-
-        -- mob ตายแล้ว -> reset padding กลับเป็น default เฉพาะถ้ามันตาย
-        if IsMobDead(mob) then
-            ResetAdaptivePadding(mob)
-            print("[DYHUB] Adaptive: " .. mob.Name .. " died, padding reset to default")
-        end
-
-        ActiveAdaptiveTasks[key] = nil
-    end)
 end
 
 local function TeleportToMob(mob)
@@ -765,8 +740,6 @@ local function TeleportToMob(mob)
     elseif FarmMode == "tp1" then
         tp1(cf)
     end
-    -- เริ่ม adaptive watcher ทันทีที่ teleport ไปหา mob
-    StartAdaptiveWatcher(mob)
 end
 
 local function LockToMob(mob)
@@ -801,10 +774,10 @@ local function StartAutoAttack()
     end)
 end
 
+-- [v018] Auto Skill เช็ค mob ก่อนยิง skill
 local function StartAutoSkill()
     task.spawn(function()
         while AutoSkillEnabled and AutoFarmEnabled do
-            -- [v018] ตรวจว่ามี mob ก่อนใช้ skill
             local mob = GetPriorityMob()
             if mob and not WaitingRespawn then
                 local keysToPress = {}
@@ -996,35 +969,31 @@ local function GetPlayerHealthPercent()
     return (humanoid.Health / humanoid.MaxHealth) * 100
 end
 
--- ====================== COLLECT SYSTEM ======================
-local CollectEnabled = Config:Get("CollectEnabled", false)
-local SelectedCollectItems = Config:Get("SelectedCollectItems", {})
-local CollectMode = Config:Get("CollectMode", "IDGF")
-local CollectRunning = false
+-- ============================================================
+-- ====================== COLLECT SYSTEM (v018) ================
+-- ============================================================
 
-local CollectItemList = {
+local CollectItems = {
     "Clock Spider", "Transmitter", "Flash Drive", "Astro Samples (Bugs)",
     "X-18", "The Present", "Lightning module", "Drive"
 }
 
--- ตาราง track ว่า item ไหนเจอแล้ว (เช็คใหม่/เก่า)
-local SeenCollectItems = {}
+local AutoCollectEnabled = Config:Get("AutoCollectEnabled", false)
+local SelectedCollectItems = Config:Get("SelectedCollectItems", {})
+local CollectMode = Config:Get("CollectMode", "IDGF") -- "IDGF" หรือ "Clean"
 
--- หา item object ใน workspace ทั้งหมด (ไม่สนว่าอยู่ใน folder ไหน)
+-- เก็บ reference ของ item ที่เคยเจอแล้ว (เพื่อแยกใหม่/เก่า)
+local KnownCollectItems = {}   -- [obj] = true
+local CollectRunning = false
+
+-- ====================== หา collect item ใน workspace ======================
 local function FindCollectItems()
     local found = {}
     for _, obj in ipairs(workspace:GetDescendants()) do
-        local isTarget = false
-        for _, name in ipairs(SelectedCollectItems) do
-            if obj.Name == name then
-                isTarget = true
-                break
-            end
-        end
-        if isTarget then
-            if obj:IsA("Model") or obj:IsA("MeshPart") or obj:IsA("Part") or obj:IsA("BasePart") then
-                -- เช็คว่าเป็น item ใหม่ (ยังไม่เคยเห็น)
-                if not SeenCollectItems[obj] then
+        if obj and obj.Parent then
+            local name = obj.Name
+            if table.find(SelectedCollectItems, name) then
+                if obj:IsA("Model") or obj:IsA("MeshPart") or obj:IsA("Part") or obj:IsA("BasePart") then
                     table.insert(found, obj)
                 end
             end
@@ -1033,7 +1002,25 @@ local function FindCollectItems()
     return found
 end
 
--- คืนค่า root part ของ item (สำหรับ tween ไปหา)
+-- หา item ที่ยังไม่เคยเก็บ (ใหม่)
+local function FindNewCollectItems()
+    local found = {}
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj and obj.Parent then
+            local name = obj.Name
+            if table.find(SelectedCollectItems, name) then
+                if obj:IsA("Model") or obj:IsA("MeshPart") or obj:IsA("Part") or obj:IsA("BasePart") then
+                    if not KnownCollectItems[obj] then
+                        table.insert(found, obj)
+                    end
+                end
+            end
+        end
+    end
+    return found
+end
+
+-- ====================== หา root part ของ item ======================
 local function GetItemRootPart(obj)
     if obj:IsA("Model") then
         return obj.PrimaryPart or obj:FindFirstChildOfClass("BasePart")
@@ -1043,198 +1030,223 @@ local function GetItemRootPart(obj)
     return nil
 end
 
--- คำนวณ CFrame สำหรับไปหา item (ลอยบน item เหมือน auto farm ลอยบน mob)
-local function GetItemTargetCFrame(obj)
-    local root = GetItemRootPart(obj)
-    if not root then return nil end
-    local itemPos = root.Position
-    local hoverHeight = 3 + HeightValue -- ลอยสูงกว่า item
-    local targetPos = itemPos + Vector3.new(0, hoverHeight, 0)
-    local lookCF = CFrame.new(targetPos, itemPos)
-    return lookCF * CFrame.Angles(math.rad(-10), 0, 0)
-end
-
--- tween ไปหา item
-local function TweenToItem(obj)
-    local cf = GetItemTargetCFrame(obj)
-    if not cf then return end
+-- ====================== Tween ไปหา item ======================
+local function TweenToItem(itemRoot)
+    if not itemRoot or not HumanoidRootPart then return end
+    local targetPos = itemRoot.Position + Vector3.new(0, 3, 0)
+    local targetCF = CFrame.new(targetPos, itemRoot.Position)
     local tweenInfo = TweenInfo.new(TweenSpeed, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-    local tween = TweenService:Create(HumanoidRootPart, tweenInfo, { CFrame = cf })
+    local tween = TweenService:Create(HumanoidRootPart, tweenInfo, { CFrame = targetCF })
     tween:Play()
     tween.Completed:Wait()
 end
 
--- ยิง ProximityPrompt บน item (ใช้ระบบเดียวกับ GiantST)
+-- ====================== กด ProximityPrompt ของ item ======================
 local function ActivateItemPrompts(obj)
     pcall(function()
-        local function tryPromptOn(target)
-            if not target then return end
-            local prompt = target:FindFirstChildOfClass("ProximityPrompt")
-            if prompt then
-                prompt.HoldDuration = 0
-                prompt.MaxActivationDistance = 50
-                if fireproximityprompt then
-                    fireproximityprompt(prompt)
-                else
-                    prompt:InputHoldBegin()
+        local function tryPrompt(target)
+            for _, child in ipairs(target:GetDescendants()) do
+                if child:IsA("ProximityPrompt") then
+                    child.HoldDuration = 0
+                    child.MaxActivationDistance = 50
+                    if fireproximityprompt then
+                        fireproximityprompt(child)
+                    end
+                    child:InputHoldBegin()
                     task.wait(0.05)
-                    prompt:InputHoldEnd()
+                    child:InputHoldEnd()
                 end
             end
-        end
-
-        if obj:IsA("Model") then
-            tryPromptOn(obj)
-            for _, child in ipairs(obj:GetDescendants()) do
-                if child:IsA("BasePart") or child:IsA("MeshPart") or child:IsA("Part") then
-                    tryPromptOn(child)
+            local directPrompt = target:FindFirstChildOfClass("ProximityPrompt")
+            if directPrompt then
+                directPrompt.HoldDuration = 0
+                directPrompt.MaxActivationDistance = 50
+                if fireproximityprompt then
+                    fireproximityprompt(directPrompt)
                 end
+                directPrompt:InputHoldBegin()
+                task.wait(0.05)
+                directPrompt:InputHoldEnd()
             end
-        else
-            tryPromptOn(obj)
-            tryPromptOn(obj.Parent)
         end
+        tryPrompt(obj)
     end)
 end
 
--- ตรวจว่า item ถูกเก็บแล้วหรือยัง (ออกจาก workspace แล้ว)
+-- ====================== เช็คว่า item ถูกเก็บแล้ว (หายจาก workspace) ======================
 local function IsItemGone(obj)
     return not obj or not obj.Parent
 end
 
--- เก็บ item ตัวเดียว
+-- ====================== เก็บ item ตัวเดียว ======================
 local function CollectSingleItem(obj)
     if IsItemGone(obj) then return end
-    SeenCollectItems[obj] = true -- mark ว่าเห็นแล้ว
+    local itemRoot = GetItemRootPart(obj)
+    if not itemRoot then return end
 
-    print("[DYHUB] Collect: Going to " .. obj.Name)
+    print("[DYHUB] Collect: Going to collect " .. obj.Name)
 
-    -- tween ไปหา item
-    TweenToItem(obj)
+    -- Tween ไปหา item (ลอยบน item เหมือน auto farm ลอยบน mob)
+    TweenToItem(itemRoot)
 
-    -- lock ตำแหน่งไว้บน item แล้ว spam ProximityPrompt
+    -- Lock position บน item
     local lockConn
     lockConn = RunService.RenderStepped:Connect(function()
-        if IsItemGone(obj) or not CollectEnabled then
+        if IsItemGone(obj) or not AutoCollectEnabled then
             lockConn:Disconnect()
             return
         end
-        local cf = GetItemTargetCFrame(obj)
-        if cf and Character and HumanoidRootPart then
-            Character:PivotTo(cf)
+        if not itemRoot or not itemRoot.Parent then
+            lockConn:Disconnect()
+            return
+        end
+        local targetPos = itemRoot.Position + Vector3.new(0, 3, 0)
+        local targetCF = CFrame.new(targetPos, itemRoot.Position)
+        if Character and HumanoidRootPart then
+            Character:PivotTo(targetCF)
             HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
             HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
         end
     end)
 
-    -- spam ProximityPrompt จนกว่า item จะหาย
+    -- กด ProximityPrompt ซ้ำๆ จนกว่า item จะหาย
     local timeout = 0
     repeat
         ActivateItemPrompts(obj)
-        task.wait(0.05)
-        timeout = timeout + 0.05
+        task.wait(0.1)
+        timeout = timeout + 0.1
         if timeout > 10 then
-            print("[DYHUB] Collect: Timeout on " .. obj.Name .. ", skipping...")
+            print("[DYHUB] Collect: Timeout collecting " .. obj.Name .. ", skipping...")
             break
         end
-    until IsItemGone(obj) or not CollectEnabled
+    until IsItemGone(obj) or not AutoCollectEnabled
 
     lockConn:Disconnect()
 
     if IsItemGone(obj) then
         print("[DYHUB] Collect: " .. obj.Name .. " collected!")
     end
+
+    -- mark ว่าเคยเจอแล้ว (ไม่ว่าจะเก็บได้หรือไม่)
+    KnownCollectItems[obj] = true
 end
 
--- เช็คว่า mob ทั้งหมดตายหมดแล้วหรือยัง (สำหรับ Clean mode)
-local function AreAllMobsDead()
+-- ====================== เช็คว่า mob ทุกตัวตายหมดแล้ว ======================
+local function AllMobsDead()
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return true end
-    for _, obj in ipairs(livingFolder:GetChildren()) do
-        if IsValidMob(obj) then return false end
+    for _, mob in ipairs(livingFolder:GetChildren()) do
+        if IsValidMob(mob) then return false end
     end
     return true
 end
 
--- ====================== COLLECT LOOP CORE ======================
-local CollectLoopRunning = false
-
-local function DoCollectRound()
-    -- หา item ที่ต้องเก็ก
-    local items = FindCollectItems()
-    if #items == 0 then return end
-
-    print("[DYHUB] Collect: Found " .. #items .. " items to collect")
-
-    -- ถ้า AutoSkipHeli เปิดอยู่ -> หยุดก่อน (ทำให้ wave ไม่ skip ระหว่างเก็บ)
-    local wasAutoSkipHeli = AutoSkipHeliEnabled
-    if wasAutoSkipHeli then
-        print("[DYHUB] Collect: Pausing Auto Skip Heli for collect...")
-        TriggerAutoSkipHeli(false)
-    end
-
-    -- เก็บ items ทีละตัว
-    for _, obj in ipairs(items) do
-        if not CollectEnabled then break end
-        if not IsItemGone(obj) then
-            CollectSingleItem(obj)
-            task.wait(0.2)
-        end
-    end
-
-    -- กลับ idle หลังเก็บ
-    TeleportToIdle()
-    WaitingRespawn = false
-
-    -- Auto Fill Up ถ้า HP ไม่เต็ม
-    if AutoFillUpEnabled and not IsPlayerHPFull() then
-        print("[DYHUB] Collect: HP not full after collect, doing fill up...")
-        DoFillUp()
-        task.wait(1)
-    end
-
-    -- คืน Auto Skip Heli
-    if wasAutoSkipHeli then
-        print("[DYHUB] Collect: Resuming Auto Skip Heli...")
-        TriggerAutoSkipHeli(true)
-    end
-end
-
-local function StartCollectLoop()
-    if CollectLoopRunning then return end
-    CollectLoopRunning = true
+-- ====================== Collect Loop หลัก ======================
+local function StartAutoCollectLoop()
+    if CollectRunning then return end
+    CollectRunning = true
 
     task.spawn(function()
-        while CollectEnabled do
+        while AutoCollectEnabled do
             if #SelectedCollectItems == 0 then
                 task.wait(1)
             else
-                local items = FindCollectItems()
+                local itemsToCollect = FindNewCollectItems()
 
-                if #items > 0 then
+                if #itemsToCollect > 0 then
                     if CollectMode == "IDGF" then
-                        -- ====================== IDGF MODE ======================
-                        -- ไม่สนใจ mob ที่เหลือ ไปเก็บของก่อนเลย
-                        print("[DYHUB] Collect (IDGF): Items found! Going to collect immediately...")
+                        -- ============ IDGF MODE ============
+                        -- ไม่สนใจ mob เลย: หยุด lock farm ชั่วคราว แล้วไปเก็บของทันที
+                        print("[DYHUB] Collect [IDGF]: Found " .. #itemsToCollect .. " item(s), collecting NOW!")
 
-                        -- pause auto farm lock ชั่วคราว
-                        local prevLock = LockActive
+                        -- หยุด lock auto farm ชั่วคราว
+                        local prevLockActive = LockActive
                         LockActive = false
-                        task.wait(0.05)
+                        task.wait(0.1)
 
-                        DoCollectRound()
+                        for _, obj in ipairs(itemsToCollect) do
+                            if not AutoCollectEnabled then break end
+                            if not IsItemGone(obj) then
+                                CollectSingleItem(obj)
+                            else
+                                KnownCollectItems[obj] = true
+                            end
+                        end
 
-                        -- คืน lock state
-                        LockActive = prevLock
+                        -- กลับมา idle รอ auto farm ต่อ (ถ้าเปิดอยู่)
+                        if AutoFarmEnabled then
+                            TeleportToIdle()
+                            WaitingRespawn = false
+                        end
 
                     elseif CollectMode == "Clean" then
-                        -- ====================== CLEAN MODE ======================
-                        -- รอให้ mob ตายหมดก่อน แล้วค่อยเก็บ
-                        if AreAllMobsDead() then
-                            print("[DYHUB] Collect (Clean): All mobs dead! Collecting items...")
-                            DoCollectRound()
-                        else
-                            print("[DYHUB] Collect (Clean): Items found but mobs still alive, waiting...")
+                        -- ============ CLEAN MODE ============
+                        -- รอให้ mob ตายหมดก่อน แล้วค่อยไปเก็บของ
+                        print("[DYHUB] Collect [Clean]: Found items, waiting for all mobs to die first...")
+
+                        -- รอ mob ตายหมด (timeout 120 วิ)
+                        local waitedClean = 0
+                        while not AllMobsDead() and AutoCollectEnabled do
+                            task.wait(0.5)
+                            waitedClean = waitedClean + 0.5
+                            if waitedClean >= 120 then
+                                print("[DYHUB] Collect [Clean]: Timeout waiting for mobs, proceeding anyway...")
+                                break
+                            end
+                        end
+
+                        if not AutoCollectEnabled then break end
+
+                        -- หยุด Auto Skip Heli ก่อนไปเก็บของ
+                        if AutoSkipHeliEnabled then
+                            print("[DYHUB] Collect [Clean]: Pausing Auto Skip Heli...")
+                            TriggerAutoSkipHeli(false)
+                        end
+
+                        -- หยุด lock
+                        LockActive = false
+                        task.wait(0.1)
+
+                        -- เก็บของให้หมด
+                        print("[DYHUB] Collect [Clean]: Collecting all items...")
+                        local currentItems = FindNewCollectItems()
+                        for _, obj in ipairs(currentItems) do
+                            if not AutoCollectEnabled then break end
+                            if not IsItemGone(obj) then
+                                CollectSingleItem(obj)
+                            else
+                                KnownCollectItems[obj] = true
+                            end
+                        end
+
+                        -- เปิด Auto Skip Heli คืน
+                        if AutoSkipHeliEnabled then
+                            print("[DYHUB] Collect [Clean]: Resuming Auto Skip Heli...")
+                            TriggerAutoSkipHeli(true)
+                        end
+
+                        -- ถ้า HP ไม่เต็ม -> fill up ก่อน
+                        if not IsPlayerHPFull() and AutoFillUpEnabled then
+                            print("[DYHUB] Collect [Clean]: HP not full, waiting for fill up...")
+                            local fillWait = 0
+                            while not IsPlayerHPFull() and AutoFillUpEnabled and AutoCollectEnabled do
+                                task.wait(0.5)
+                                fillWait = fillWait + 0.5
+                                if fillWait >= 60 then break end
+                            end
+                        end
+
+                        -- กลับมา idle
+                        if AutoFarmEnabled then
+                            TeleportToIdle()
+                            WaitingRespawn = false
+                        end
+                    end
+                else
+                    -- ไม่มี item ใหม่ -> เคลียร์ KnownCollectItems ของ item ที่หายไปแล้ว
+                    for obj, _ in pairs(KnownCollectItems) do
+                        if IsItemGone(obj) then
+                            KnownCollectItems[obj] = nil
                         end
                     end
                 end
@@ -1243,45 +1255,20 @@ local function StartCollectLoop()
             task.wait(0.5)
         end
 
-        CollectLoopRunning = false
+        CollectRunning = false
         print("[DYHUB] Collect: Loop stopped.")
     end)
 end
 
--- Watcher: ดัก item ที่เพิ่งปรากฏใน workspace (event-based สำหรับ item ใหม่)
-local CollectWatcherConnection = nil
+-- ====================== ตรวจ item ใหม่ที่ spawn เข้า workspace ======================
+workspace.DescendantAdded:Connect(function(obj)
+    if not AutoCollectEnabled or #SelectedCollectItems == 0 then return end
+    if not table.find(SelectedCollectItems, obj.Name) then return end
+    if not (obj:IsA("Model") or obj:IsA("MeshPart") or obj:IsA("Part") or obj:IsA("BasePart")) then return end
 
-local function StartCollectWatcher()
-    if CollectWatcherConnection then return end
-    CollectWatcherConnection = workspace.DescendantAdded:Connect(function(obj)
-        if not CollectEnabled or #SelectedCollectItems == 0 then return end
-        task.wait(0.1) -- รอให้ load เสร็จ
-        if not obj or not obj.Parent then return end
-
-        -- เช็คชื่อ
-        local isTarget = false
-        for _, name in ipairs(SelectedCollectItems) do
-            if obj.Name == name then
-                isTarget = true
-                break
-            end
-        end
-        if not isTarget then return end
-        if not (obj:IsA("Model") or obj:IsA("MeshPart") or obj:IsA("Part") or obj:IsA("BasePart")) then return end
-
-        -- เป็น item ใหม่ (ยังไม่เคยเห็น)
-        if SeenCollectItems[obj] then return end
-
-        print("[DYHUB] Collect Watcher: New item detected - " .. obj.Name)
-    end)
-end
-
-local function StopCollectWatcher()
-    if CollectWatcherConnection then
-        CollectWatcherConnection:Disconnect()
-        CollectWatcherConnection = nil
-    end
-end
+    -- item ใหม่ปรากฏ -> อย่า mark เป็น known ก่อน (จะถูก collect ใน loop ต่อไป)
+    print("[DYHUB] Collect: New item detected: " .. obj.Name)
+end)
 
 -- ====================== MAIN FARM LOOP ======================
 local function StartFarmLoop()
@@ -1311,17 +1298,6 @@ local function StartFarmLoop()
                 Client = LocalPlayer
             end
 
-            -- ถ้า IDGF mode และมี item -> ข้าม mob loop ไปทำ collect แทน
-            -- (collect loop จัดการเองอยู่แล้ว แต่ถ้า IDGF ให้หยุด mob targeting)
-            if CollectEnabled and CollectMode == "IDGF" and #SelectedCollectItems > 0 then
-                local itemsNow = FindCollectItems()
-                if #itemsNow > 0 then
-                    -- ให้ collect loop จัดการ เราแค่ idle ที่นี่
-                    task.wait(0.2)
-                    goto continue_farm
-                end
-            end
-
             local mob, mobType, extraData = GetPriorityMob()
 
             if mob then
@@ -1341,8 +1317,6 @@ local function StartFarmLoop()
                             tp1(cf)
                         end
                     end
-
-                    StartAdaptiveWatcher(mob)
 
                     local giantLockConn
                     giantLockConn = RunService.RenderStepped:Connect(function()
@@ -1383,6 +1357,8 @@ local function StartFarmLoop()
                         end
                         task.wait(0.5)
                     else
+                        -- [v018] เริ่ม DamageChecker สำหรับ mob นี้
+                        StartDamageChecker(mob)
                         TeleportToMob(mob)
                         LockToMob(mob)
                         repeat task.wait(0.1) until IsMobDead(mob) or not AutoFarmEnabled
@@ -1394,7 +1370,6 @@ local function StartFarmLoop()
                 WaitingRespawn = false
             end
 
-            ::continue_farm::
             task.wait(0.1)
         end
 
@@ -1484,11 +1459,6 @@ local AutoFarmToggle = Main:Toggle({
         if state then
             StartFarmLoop()
             HandleMiscOptions(MiscOptions)
-            -- ถ้า collect เปิดอยู่ด้วย ให้ start collect loop
-            if CollectEnabled then
-                StartCollectLoop()
-                StartCollectWatcher()
-            end
         else
             AutoAttackEnabled = false
             AutoSkillEnabled = false
@@ -1594,23 +1564,23 @@ Main:Section({ Title = "Flush Settings", Icon = "toilet" })
 local Flushaura = Config:Get("flushaura", false)
 local FlushAuraValue = Config:Get("FlushAuraValue", 5)
 
-Main:Slider({
-    Title    = "Flush Aura (stud)",
-    Value    = { Min = 1, Max = 15, Default = FlushAuraValue },
+Main:Slider({ 
+    Title    = "Flush Aura (stud)", 
+    Value    = { Min = 1, Max = 15, Default = FlushAuraValue }, 
     Step     = 1,
     Callback = function(value)
         FlushAuraValue = value
-        Config:Set("FlushAuraValue", value)
+        Config:Set("FlushAuraValue", value) 
         Config:Save()
     end
 })
 
-Main:Toggle({
-    Title    = "Flush Aura",
+Main:Toggle({ 
+    Title    = "Flush Aura", 
     Value    = Flushaura,
     Callback = function(enabled)
         Flushaura = enabled
-        Config:Set("flushaura", enabled)
+        Config:Set("flushaura", enabled) 
         Config:Save()
 
         if enabled then
@@ -1620,25 +1590,25 @@ Main:Toggle({
                         local player = game.Players.LocalPlayer
                         local char = player.Character
                         if not char then return end
-
+                        
                         local root = char:FindFirstChild("HumanoidRootPart")
                         if not root then return end
 
                         for _, prompt in pairs(workspace:GetDescendants()) do
                             if prompt:IsA("ProximityPrompt") then
-                                if prompt.ActionText == "Flush"
-                                or prompt.ActionText == "Dragon Flash"
-                                or prompt.ActionText == "flush"
+                                if prompt.ActionText == "Flush" 
+                                or prompt.ActionText == "Dragon Flash" 
+                                or prompt.ActionText == "flush" 
                                 or prompt.ActionText == "Flash" then
-
+                                    
                                     local part = prompt.Parent
                                     if part and part:IsA("BasePart") then
                                         local distance = (root.Position - part.Position).Magnitude
-
+                                        
                                         if distance <= FlushAuraValue then
                                             prompt.HoldDuration = 0
                                             prompt.MaxActivationDistance = FlushAuraValue
-
+                                            
                                             if fireproximityprompt then
                                                 fireproximityprompt(prompt)
                                             else
@@ -2383,24 +2353,24 @@ Main5:Button({
     end
 })
 
--- ====================== UI: COLLECT TAB ======================
+-- ============================================================
+-- ====================== UI: COLLECT TAB (v018) ==============
+-- ============================================================
+
 Main6:Section({ Title = "Collect Item", Icon = "package" })
 
 local AutoCollectToggle = Main6:Toggle({
     Title = "Auto Collect",
-    Value = CollectEnabled,
+    Value = AutoCollectEnabled,
     Callback = function(state)
-        CollectEnabled = state
-        Config:Set("CollectEnabled", state)
+        AutoCollectEnabled = state
+        Config:Set("AutoCollectEnabled", state)
         Config:Save()
         if state then
-            -- clear seen table เพื่อ re-detect item ที่มีอยู่แล้ว
-            SeenCollectItems = {}
-            StartCollectLoop()
-            StartCollectWatcher()
+            KnownCollectItems = {} -- reset known items เมื่อเปิดใหม่
+            StartAutoCollectLoop()
         else
-            CollectLoopRunning = false
-            StopCollectWatcher()
+            CollectRunning = false
         end
     end
 })
@@ -2409,16 +2379,13 @@ Main6:Section({ Title = "Setting Collect", Icon = "settings" })
 
 local CollectItemDropdown = Main6:Dropdown({
     Title = "Select Item (Collect)",
-    Values = CollectItemList,
+    Values = CollectItems,
     Multi = true,
     Value = SelectedCollectItems,
     Callback = function(values)
         SelectedCollectItems = values or {}
         Config:Set("SelectedCollectItems", values)
         Config:Save()
-        -- reset seen ใหม่เมื่อเปลี่ยน item list
-        SeenCollectItems = {}
-        print("[DYHUB] Collect: Item list updated, re-scanning...")
     end
 })
 
@@ -2431,7 +2398,6 @@ local CollectModeDropdown = Main6:Dropdown({
         CollectMode = value
         Config:Set("CollectMode", value)
         Config:Save()
-        print("[DYHUB] Collect mode set to: " .. value)
     end
 })
 
@@ -2522,11 +2488,9 @@ if AutoBuyMiscToggleEnabled then
     end)
 end
 
-if CollectEnabled then
+if AutoCollectEnabled then
     task.wait(2)
-    SeenCollectItems = {}
-    StartCollectLoop()
-    StartCollectWatcher()
+    StartAutoCollectLoop()
 end
 
 print("[DYHUB] Version " .. version .. " loaded successfully!")
