@@ -1,4 +1,4 @@
--- v016
+-- v017
 -- =========================
 local version = "Early Access"
 -- =========================
@@ -21,7 +21,7 @@ if setfpscap then
     setfpscap(1000000)
     game:GetService("StarterGui"):SetCore("SendNotification", {
         Title = "dsc.gg/dyhub",
-        Text = "FPS Unlocked! | v016",
+        Text = "FPS Unlocked! | v017",
         Duration = 2,
         Button1 = "Okay"
     })
@@ -1207,10 +1207,12 @@ local FarmHeightSlider = Main:Slider({
     end
 })
 
-local Flushaura = Config:Get("flushaura", true)
+Main:Section({ Title = "Flush Settings", Icon = "toilet" })
+
+local Flushaura = Config:Get("flushaura", false)
 local FlushAuraValue = Config:Get("FlushAuraValue", 5)
 
-Main3:Slider({ 
+Main:Slider({ 
     Title    = "Flush Aura (stud)", 
     Value    = { Min = 1, Max = 15, Default = FlushAuraValue }, 
     Step     = 1,
@@ -1221,7 +1223,7 @@ Main3:Slider({
     end
 })
 
-Main3:Toggle({ 
+Main:Toggle({ 
     Title    = "Flush Aura", 
     Value    = Flushaura,
     Callback = function(enabled)
