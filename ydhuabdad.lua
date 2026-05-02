@@ -1,4 +1,4 @@
--- v018
+-- v019
 -- =========================
 local version = "Early Access"
 -- =========================
@@ -21,7 +21,7 @@ if setfpscap then
     setfpscap(1000000)
     game:GetService("StarterGui"):SetCore("SendNotification", {
         Title = "dsc.gg/dyhub",
-        Text = "FPS Unlocked! | v018",
+        Text = "FPS Unlocked! | v019",
         Duration = 2,
         Button1 = "Okay"
     })
