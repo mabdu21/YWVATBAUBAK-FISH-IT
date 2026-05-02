@@ -1,6 +1,6 @@
-local v2 = "v020"
+-- v025
 -- =========================
-local version = "Early Access"
+local version = "Rework"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -8,7 +8,7 @@ repeat task.wait() until game:IsLoaded()
 -- ====================== FPS UNLOCK ======================
 local part = Instance.new("Part")
 part.Size = Vector3.new(10, 1, 10)
-part.Position = Vector3.new(-23.3435822, 62.5, 0.341766357)
+part.Position = Vector3.new(-23.3435822, 61, 0.341766357)
 part.Transparency = 1
 part.Anchored = true
 part.CanCollide = true
@@ -21,7 +21,7 @@ if setfpscap then
     setfpscap(1000000)
     game:GetService("StarterGui"):SetCore("SendNotification", {
         Title = "dsc.gg/dyhub",
-        Text = "FPS Unlocked! | v020",
+        Text = "FPS Unlocked!",
         Duration = 2,
         Button1 = "Okay"
     })
@@ -41,7 +41,7 @@ local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/rel
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
-local ConfigFolder = "DYHUB_ST33_CONFIG"
+local ConfigFolder = "DYHUB_STBB"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
@@ -111,13 +111,50 @@ end
 local Config = CustomConfig.new()
 Config:AutoSave(30)
 
+-- ====================== WINDOW 2 ======================
+
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+
+local FreeVersion = "Free Version"
+local PremiumVersion = "Premium Version"
+
+local function checkVersion(playerName)
+    local url = "https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/listpremium.lua"
+
+    local success, response = pcall(function()
+        return game:HttpGet(url)
+    end)
+
+    if not success then
+        return FreeVersion
+    end
+
+    local premiumData
+    local func, err = loadstring(response)
+    if func then
+        premiumData = func()
+    else
+        return FreeVersion
+    end
+
+    if premiumData[playerName] then
+        return PremiumVersion
+    else
+        return FreeVersion
+    end
+end
+
+local player = Players.LocalPlayer
+local userversion = checkVersion(player.Name)
+
 -- ====================== WINDOW ======================
 local Window = WindUI:CreateWindow({
     Title = "DYHUB",
     IconThemed = true,
     Icon = "rbxassetid://104487529937663",
-    Author = "STBB | Beta Version",
-    Folder = "DYHUB_STBB",
+    Author = "STBB | " .. userversion,
+    Folder = "DYHUB",
     Size = UDim2.fromOffset(550, 380),
     Transparent = true,
     Theme = "Dark",
@@ -128,7 +165,7 @@ local Window = WindUI:CreateWindow({
     User = { Enabled = true, Anonymous = false },
 })
 
-Window:Tag({ Title = version, Color = Color3.fromHex("#ffd700") })
+Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") })
 
 Window:EditOpenButton({
     Title = "DYHUB - Open",
@@ -155,6 +192,16 @@ Window:SelectTab(1)
 -- ======================== INFO ========================
 if not ui then ui = {} end
 if not ui.Creator then ui.Creator = {} end
+
+Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17 })
+Info:Divider()
+
+Info:Paragraph({
+    Title = "Update: 06/02/2026",
+    Desc = "- [ Fixed ] Auto Farm \n- [ Fixed ] Auto Collect \n- [ Fixed ] Esp Core \n- [ Added ] Auto Save Config",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+})
 
 ui.Creator.Request = function(requestData)
     local success, result = pcall(function()
@@ -2573,5 +2620,5 @@ if AutoCollectEnabled then
     StartAutoCollectLoop()
 end
 
-print("[DYHUB] Version " .. v2 .. " loaded successfully!")
+print("[DYHUB] Version " .. version .. " loaded successfully!")
 print("[DYHUB] Config system active | Auto saving every 30 seconds")
