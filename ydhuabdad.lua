@@ -1,4 +1,4 @@
--- v019
+local v2 = "v020"
 -- =========================
 local version = "Early Access"
 -- =========================
@@ -21,7 +21,7 @@ if setfpscap then
     setfpscap(1000000)
     game:GetService("StarterGui"):SetCore("SendNotification", {
         Title = "dsc.gg/dyhub",
-        Text = "FPS Unlocked! | v019",
+        Text = "FPS Unlocked! | v020",
         Duration = 2,
         Button1 = "Okay"
     })
@@ -629,12 +629,9 @@ local function GetPriorityMob()
     return nil, nil
 end
 
--- ====================== MOB HEIGHT OVERRIDE (v018 - ฆ่าตายแน่นอน) ======================
--- เก็บ override padding แยกตาม mob (ใช้ reference เป็น key)
-local MobHeightOverride = {}  -- [mob] = paddingOverride (number) หรือ nil
-
--- เก็บ health snapshot เพื่อเช็คว่าดาเมจโดนมั้ย
-local MobLastHealth = {}       -- [mob] = lastHP
+-- ====================== MOB HEIGHT OVERRIDE ======================
+local MobHeightOverride = {}
+local MobLastHealth = {}
 
 local function GetEffectivePadding(mob)
     if MobHeightOverride[mob] ~= nil then
@@ -643,16 +640,12 @@ local function GetEffectivePadding(mob)
     return HeightValue
 end
 
--- เรียกทุกครั้งที่เรา lock อยู่กับ mob เพื่อเช็คว่า HP ลดมั้ย
--- ถ้าไม่ลดเลยใน checkInterval วิ -> ลด padding ลง 1 (แต่ไม่ต่ำกว่า safeMin)
--- safeMin คือ padding ขั้นต่ำที่ mob ตีเราไม่ถึง
 local PADDING_REDUCE_STEP = 1
-local PADDING_SAFE_MIN = 2       -- ห้ามลงต่ำกว่านี้
-local PADDING_CHECK_INTERVAL = 2 -- วิ
+local PADDING_SAFE_MIN = 2
+local PADDING_CHECK_INTERVAL = 2
 
 local function StartDamageChecker(mob)
     task.spawn(function()
-        -- snapshot health ตอนเริ่ม
         local humanoid = mob and mob:FindFirstChild("Humanoid")
         if not humanoid then return end
 
@@ -673,7 +666,6 @@ local function StartDamageChecker(mob)
                 local currentHP = humanoid.Health
                 local storedLastHP = MobLastHealth[mob] or currentHP
 
-                -- HP ไม่ลดเลย -> ลด padding
                 if currentHP >= storedLastHP then
                     local currentPad = GetEffectivePadding(mob)
                     local newPad = currentPad - PADDING_REDUCE_STEP
@@ -685,8 +677,6 @@ local function StartDamageChecker(mob)
                         print("[DYHUB] DmgCheck: HP not reduced, lowering padding to " .. newPad .. " for " .. mob.Name)
                     end
                 else
-                    -- ดาเมจโดนแล้ว -> lock padding ไว้ที่ค่านี้ (ไม่เปลี่ยนแปลง)
-                    -- ไม่ต้องทำอะไร เพราะ MobHeightOverride[mob] จะถูกใช้ต่อไป
                     print("[DYHUB] DmgCheck: Damage detected! Locking padding at " .. GetEffectivePadding(mob) .. " for " .. mob.Name)
                 end
 
@@ -694,7 +684,6 @@ local function StartDamageChecker(mob)
             end
         end
 
-        -- mob ตายแล้ว -> เคลียร์ override (กลับค่าเดิมสำหรับ mob ตัวต่อไป)
         MobHeightOverride[mob] = nil
         MobLastHealth[mob] = nil
         print("[DYHUB] DmgCheck: Mob dead, cleared override for " .. (mob and mob.Name or "?"))
@@ -708,7 +697,6 @@ local function GetTargetCFrame(mob, position)
     local mobHumanoid = mob:FindFirstChild("Humanoid")
     if not mobRoot then return nil end
     local mobHeight = GetMobSize(mob)
-    -- ใช้ effective padding (อาจถูก override โดย DamageChecker)
     local padding = GetEffectivePadding(mob)
     if position == "Above" then
         local headPos = mobHead and mobHead.Position or mobRoot.Position
@@ -774,7 +762,6 @@ local function StartAutoAttack()
     end)
 end
 
--- [v018] Auto Skill เช็ค mob ก่อนยิง skill
 local function StartAutoSkill()
     task.spawn(function()
         while AutoSkillEnabled and AutoFarmEnabled do
@@ -970,29 +957,109 @@ local function GetPlayerHealthPercent()
 end
 
 -- ============================================================
--- ====================== COLLECT SYSTEM (v018) ================
+-- ====================== COLLECT SYSTEM (v019 - Prefix Match) =
 -- ============================================================
 
+-- รายการ dropdown ที่แสดงใน UI
+-- "Flash Drives" จะ match: Flash Drives #1, Flash Drives #2, Flash Drives #A ฯลฯ
+-- "Astro Samples" จะ match: Trooper Blast, Trooper Spinner ฯลฯ (ทุกอย่างใน group)
 local CollectItems = {
-    "Clock Spider", "Transmitter", "Flash Drive", "Astro Samples (Bugs)",
-    "X-18", "The Present", "Lightning module", "Drive"
+    "Clock Spider",
+    "X-18 Core",
+    "Green Energy Core",
+    "Weird Transmitter",
+    "Presents",
+    "Weird Prism",
+    "Key Card",
+    "Zombie Core",
+    "Flash Drives",
+    "Astro Samples",
+}
+
+-- รายการชื่อจริงที่ map ไปหา group (สำหรับ group ที่ชื่อ sub-item ไม่ตรงกับ prefix)
+-- "Astro Samples" ใน dropdown จะ match ชื่อเหล่านี้ทั้งหมด
+local CollectGroupMap = {
+    ["Astro Samples"] = {
+        "Trooper Blast",
+        "Trooper Spinner",
+        "Specialist Blaster",
+        "Specialist Spinner",
+        "Specialist Sword Arm",
+        "Strider Leg",
+        "Interceptor Wing",
+        "Interceptor Goggles",
+        "Interceptor Spinner",
+        "Impactor Cannon",
+        "Impactor Laser",
+        "High Impactor Cannon",
+        "High Impactor Laser",
+        "Destructor Laser",
+        "Destructor Blaster",
+        "Destructor Core",
+        "Obliterator Blaster",
+        "Obliterator Spinner",
+    },
 }
 
 local AutoCollectEnabled = Config:Get("AutoCollectEnabled", false)
 local SelectedCollectItems = Config:Get("SelectedCollectItems", {})
-local CollectMode = Config:Get("CollectMode", "IDGF") -- "IDGF" หรือ "Clean"
+local CollectMode = Config:Get("CollectMode", "Clean")
 
--- เก็บ reference ของ item ที่เคยเจอแล้ว (เพื่อแยกใหม่/เก่า)
-local KnownCollectItems = {}   -- [obj] = true
+local KnownCollectItems = {}
 local CollectRunning = false
+
+-- ====================== PREFIX/GROUP MATCH HELPER ======================
+-- คืน true ถ้า objectName match กับ pattern ใดๆ ใน SelectedCollectItems
+-- รองรับ 3 แบบ:
+--   1. Exact match (case-insensitive): "Key Card" == "Key Card"
+--   2. Prefix match (case-insensitive): "Flash Drives" matches "Flash Drives #1", "Flash Drives #A"
+--      (ตัวอักษรถัดจาก prefix ต้องเป็น space, #, _, - หรือจบสตริง)
+--   3. Group map: "Astro Samples" ใน selected จะ match ชื่อใน CollectGroupMap["Astro Samples"]
+
+local function MatchesPattern(objectName, pattern)
+    local objLower = objectName:lower()
+    local patLower = pattern:lower()
+
+    -- 1. Exact match
+    if objLower == patLower then return true end
+
+    -- 2. Prefix match
+    if #objLower > #patLower then
+        if objLower:sub(1, #patLower) == patLower then
+            local nextChar = objLower:sub(#patLower + 1, #patLower + 1)
+            if nextChar == " " or nextChar == "#" or nextChar == "_" or nextChar == "-" then
+                return true
+            end
+        end
+    end
+
+    -- 3. Group map match
+    if CollectGroupMap[pattern] then
+        for _, groupName in ipairs(CollectGroupMap[pattern]) do
+            if objLower == groupName:lower() then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function IsCollectTarget(objectName)
+    for _, pattern in ipairs(SelectedCollectItems) do
+        if MatchesPattern(objectName, pattern) then
+            return true
+        end
+    end
+    return false
+end
 
 -- ====================== หา collect item ใน workspace ======================
 local function FindCollectItems()
     local found = {}
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj and obj.Parent then
-            local name = obj.Name
-            if table.find(SelectedCollectItems, name) then
+            if IsCollectTarget(obj.Name) then
                 if obj:IsA("Model") or obj:IsA("MeshPart") or obj:IsA("Part") or obj:IsA("BasePart") then
                     table.insert(found, obj)
                 end
@@ -1002,13 +1069,11 @@ local function FindCollectItems()
     return found
 end
 
--- หา item ที่ยังไม่เคยเก็บ (ใหม่)
 local function FindNewCollectItems()
     local found = {}
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj and obj.Parent then
-            local name = obj.Name
-            if table.find(SelectedCollectItems, name) then
+            if IsCollectTarget(obj.Name) then
                 if obj:IsA("Model") or obj:IsA("MeshPart") or obj:IsA("Part") or obj:IsA("BasePart") then
                     if not KnownCollectItems[obj] then
                         table.insert(found, obj)
@@ -1073,7 +1138,7 @@ local function ActivateItemPrompts(obj)
     end)
 end
 
--- ====================== เช็คว่า item ถูกเก็บแล้ว (หายจาก workspace) ======================
+-- ====================== เช็คว่า item ถูกเก็บแล้ว ======================
 local function IsItemGone(obj)
     return not obj or not obj.Parent
 end
@@ -1086,10 +1151,8 @@ local function CollectSingleItem(obj)
 
     print("[DYHUB] Collect: Going to collect " .. obj.Name)
 
-    -- Tween ไปหา item (ลอยบน item เหมือน auto farm ลอยบน mob)
     TweenToItem(itemRoot)
 
-    -- Lock position บน item
     local lockConn
     lockConn = RunService.RenderStepped:Connect(function()
         if IsItemGone(obj) or not AutoCollectEnabled then
@@ -1109,7 +1172,6 @@ local function CollectSingleItem(obj)
         end
     end)
 
-    -- กด ProximityPrompt ซ้ำๆ จนกว่า item จะหาย
     local timeout = 0
     repeat
         ActivateItemPrompts(obj)
@@ -1127,7 +1189,6 @@ local function CollectSingleItem(obj)
         print("[DYHUB] Collect: " .. obj.Name .. " collected!")
     end
 
-    -- mark ว่าเคยเจอแล้ว (ไม่ว่าจะเก็บได้หรือไม่)
     KnownCollectItems[obj] = true
 end
 
@@ -1155,11 +1216,8 @@ local function StartAutoCollectLoop()
 
                 if #itemsToCollect > 0 then
                     if CollectMode == "IDGF" then
-                        -- ============ IDGF MODE ============
-                        -- ไม่สนใจ mob เลย: หยุด lock farm ชั่วคราว แล้วไปเก็บของทันที
                         print("[DYHUB] Collect [IDGF]: Found " .. #itemsToCollect .. " item(s), collecting NOW!")
 
-                        -- หยุด lock auto farm ชั่วคราว
                         local prevLockActive = LockActive
                         LockActive = false
                         task.wait(0.1)
@@ -1173,18 +1231,14 @@ local function StartAutoCollectLoop()
                             end
                         end
 
-                        -- กลับมา idle รอ auto farm ต่อ (ถ้าเปิดอยู่)
                         if AutoFarmEnabled then
                             TeleportToIdle()
                             WaitingRespawn = false
                         end
 
                     elseif CollectMode == "Clean" then
-                        -- ============ CLEAN MODE ============
-                        -- รอให้ mob ตายหมดก่อน แล้วค่อยไปเก็บของ
                         print("[DYHUB] Collect [Clean]: Found items, waiting for all mobs to die first...")
 
-                        -- รอ mob ตายหมด (timeout 120 วิ)
                         local waitedClean = 0
                         while not AllMobsDead() and AutoCollectEnabled do
                             task.wait(0.5)
@@ -1197,17 +1251,14 @@ local function StartAutoCollectLoop()
 
                         if not AutoCollectEnabled then break end
 
-                        -- หยุด Auto Skip Heli ก่อนไปเก็บของ
                         if AutoSkipHeliEnabled then
                             print("[DYHUB] Collect [Clean]: Pausing Auto Skip Heli...")
                             TriggerAutoSkipHeli(false)
                         end
 
-                        -- หยุด lock
                         LockActive = false
                         task.wait(0.1)
 
-                        -- เก็บของให้หมด
                         print("[DYHUB] Collect [Clean]: Collecting all items...")
                         local currentItems = FindNewCollectItems()
                         for _, obj in ipairs(currentItems) do
@@ -1219,13 +1270,11 @@ local function StartAutoCollectLoop()
                             end
                         end
 
-                        -- เปิด Auto Skip Heli คืน
                         if AutoSkipHeliEnabled then
                             print("[DYHUB] Collect [Clean]: Resuming Auto Skip Heli...")
                             TriggerAutoSkipHeli(true)
                         end
 
-                        -- ถ้า HP ไม่เต็ม -> fill up ก่อน
                         if not IsPlayerHPFull() and AutoFillUpEnabled then
                             print("[DYHUB] Collect [Clean]: HP not full, waiting for fill up...")
                             local fillWait = 0
@@ -1236,14 +1285,12 @@ local function StartAutoCollectLoop()
                             end
                         end
 
-                        -- กลับมา idle
                         if AutoFarmEnabled then
                             TeleportToIdle()
                             WaitingRespawn = false
                         end
                     end
                 else
-                    -- ไม่มี item ใหม่ -> เคลียร์ KnownCollectItems ของ item ที่หายไปแล้ว
                     for obj, _ in pairs(KnownCollectItems) do
                         if IsItemGone(obj) then
                             KnownCollectItems[obj] = nil
@@ -1263,17 +1310,15 @@ end
 -- ====================== ตรวจ item ใหม่ที่ spawn เข้า workspace ======================
 workspace.DescendantAdded:Connect(function(obj)
     if not AutoCollectEnabled or #SelectedCollectItems == 0 then return end
-    if not table.find(SelectedCollectItems, obj.Name) then return end
+    -- ใช้ IsCollectTarget แทน table.find
+    if not IsCollectTarget(obj.Name) then return end
     if not (obj:IsA("Model") or obj:IsA("MeshPart") or obj:IsA("Part") or obj:IsA("BasePart")) then return end
-
-    -- item ใหม่ปรากฏ -> อย่า mark เป็น known ก่อน (จะถูก collect ใน loop ต่อไป)
     print("[DYHUB] Collect: New item detected: " .. obj.Name)
 end)
 
 -- ====================== MAIN FARM LOOP ======================
 local function StartFarmLoop()
     task.spawn(function()
-        -- Sub-loop: ดัน idle position
         task.spawn(function()
             while AutoFarmEnabled do
                 if WaitingRespawn and not LockActive then
@@ -1357,7 +1402,6 @@ local function StartFarmLoop()
                         end
                         task.wait(0.5)
                     else
-                        -- [v018] เริ่ม DamageChecker สำหรับ mob นี้
                         StartDamageChecker(mob)
                         TeleportToMob(mob)
                         LockToMob(mob)
@@ -1564,23 +1608,23 @@ Main:Section({ Title = "Flush Settings", Icon = "toilet" })
 local Flushaura = Config:Get("flushaura", false)
 local FlushAuraValue = Config:Get("FlushAuraValue", 5)
 
-Main:Slider({ 
-    Title    = "Flush Aura (stud)", 
-    Value    = { Min = 1, Max = 15, Default = FlushAuraValue }, 
+Main:Slider({
+    Title    = "Flush Aura (stud)",
+    Value    = { Min = 1, Max = 15, Default = FlushAuraValue },
     Step     = 1,
     Callback = function(value)
         FlushAuraValue = value
-        Config:Set("FlushAuraValue", value) 
+        Config:Set("FlushAuraValue", value)
         Config:Save()
     end
 })
 
-Main:Toggle({ 
-    Title    = "Flush Aura", 
+Main:Toggle({
+    Title    = "Flush Aura",
     Value    = Flushaura,
     Callback = function(enabled)
         Flushaura = enabled
-        Config:Set("flushaura", enabled) 
+        Config:Set("flushaura", enabled)
         Config:Save()
 
         if enabled then
@@ -1590,25 +1634,25 @@ Main:Toggle({
                         local player = game.Players.LocalPlayer
                         local char = player.Character
                         if not char then return end
-                        
+
                         local root = char:FindFirstChild("HumanoidRootPart")
                         if not root then return end
 
                         for _, prompt in pairs(workspace:GetDescendants()) do
                             if prompt:IsA("ProximityPrompt") then
-                                if prompt.ActionText == "Flush" 
-                                or prompt.ActionText == "Dragon Flash" 
-                                or prompt.ActionText == "flush" 
+                                if prompt.ActionText == "Flush"
+                                or prompt.ActionText == "Dragon Flash"
+                                or prompt.ActionText == "flush"
                                 or prompt.ActionText == "Flash" then
-                                    
+
                                     local part = prompt.Parent
                                     if part and part:IsA("BasePart") then
                                         local distance = (root.Position - part.Position).Magnitude
-                                        
+
                                         if distance <= FlushAuraValue then
                                             prompt.HoldDuration = 0
                                             prompt.MaxActivationDistance = FlushAuraValue
-                                            
+
                                             if fireproximityprompt then
                                                 fireproximityprompt(prompt)
                                             else
@@ -1646,12 +1690,46 @@ local ESP = {
     _playerHighlights = {},
     _itemHighlights   = {},
     _connections = {},
+    -- ESP Item Dropdown ใช้ list เดียวกับ CollectItems
     ItemList = {
-        "Clock Spider", "Transmitter", "Flash Drive", "Astro Samples (Bugs)",
-        "X-18", "The Present", "Lightning module", "Drive"
+        "Clock Spider",
+        "X-18 Core",
+        "Green Energy Core",
+        "Weird Transmitter",
+        "Presents",
+        "Weird Prism",
+        "Key Card",
+        "Zombie Core",
+        "Flash Drives",
+        "Astro Samples",
     },
     MobList = {},
 }
+
+-- ====================== ESP MATCH HELPER ======================
+-- ใช้ logic เดียวกับ Collect (prefix + group map)
+local function IsESPItemTarget(objectName, selectedList)
+    for _, pattern in ipairs(selectedList) do
+        -- Exact
+        if objectName:lower() == pattern:lower() then return true end
+        -- Prefix
+        if #objectName > #pattern then
+            if objectName:lower():sub(1, #pattern) == pattern:lower() then
+                local nc = objectName:lower():sub(#pattern + 1, #pattern + 1)
+                if nc == " " or nc == "#" or nc == "_" or nc == "-" then
+                    return true
+                end
+            end
+        end
+        -- Group map
+        if CollectGroupMap[pattern] then
+            for _, gName in ipairs(CollectGroupMap[pattern]) do
+                if objectName:lower() == gName:lower() then return true end
+            end
+        end
+    end
+    return false
+end
 
 local function CreateESPLabel(parent, labelText, textColor)
     local existing = parent:FindFirstChild("DYHUB_ESP_LABEL")
@@ -1910,7 +1988,8 @@ local function ScanItems()
     local function CheckDescendants(container)
         for _, obj in ipairs(container:GetDescendants()) do
             if not ESP._itemHighlights[obj] then
-                if table.find(ESP.SelectedItems, obj.Name) then
+                -- ใช้ IsESPItemTarget แทน table.find
+                if IsESPItemTarget(obj.Name, ESP.SelectedItems) then
                     local root = GetItemRoot(obj)
                     if root and IsInRange(root) then
                         ApplyItemESP(obj)
@@ -1966,7 +2045,8 @@ workspace.DescendantAdded:Connect(function(obj)
     if not ESP.Enabled or not ESP.ItemEnabled then return end
     if #ESP.SelectedItems == 0 then return end
     task.wait(0.1)
-    if table.find(ESP.SelectedItems, obj.Name) then
+    -- ใช้ IsESPItemTarget แทน table.find
+    if IsESPItemTarget(obj.Name, ESP.SelectedItems) then
         if not ESP._itemHighlights[obj] then
             local root = GetItemRoot(obj)
             if root and IsInRange(root) then
@@ -2354,7 +2434,7 @@ Main5:Button({
 })
 
 -- ============================================================
--- ====================== UI: COLLECT TAB (v018) ==============
+-- ====================== UI: COLLECT TAB =====================
 -- ============================================================
 
 Main6:Section({ Title = "Collect Item", Icon = "package" })
@@ -2367,7 +2447,7 @@ local AutoCollectToggle = Main6:Toggle({
         Config:Set("AutoCollectEnabled", state)
         Config:Save()
         if state then
-            KnownCollectItems = {} -- reset known items เมื่อเปิดใหม่
+            KnownCollectItems = {}
             StartAutoCollectLoop()
         else
             CollectRunning = false
@@ -2391,7 +2471,7 @@ local CollectItemDropdown = Main6:Dropdown({
 
 local CollectModeDropdown = Main6:Dropdown({
     Title = "Mode Collect",
-    Values = { "IDGF", "Clean" },
+    Values = { "Clean", "IDGF" },
     Multi = false,
     Value = CollectMode,
     Callback = function(value)
@@ -2493,5 +2573,5 @@ if AutoCollectEnabled then
     StartAutoCollectLoop()
 end
 
-print("[DYHUB] Version " .. version .. " loaded successfully!")
+print("[DYHUB] Version " .. v2 .. " loaded successfully!")
 print("[DYHUB] Config system active | Auto saving every 30 seconds")
