@@ -1,4 +1,4 @@
--- v600
+-- v601
 -- =========================
 local version = "Early Access"
 -- =========================
@@ -1126,79 +1126,6 @@ Main:Slider({
         HeightValue = value
         Config:Set("HeightValue", value)
         Config:Save()
-    end
-})
-
-Main:Section({ Title = "Flush Settings", Icon = "toilet" })
-
-local Flushaura = Config:Get("flushaura", true)
-local FlushAuraValue = Config:Get("FlushAuraValue", 5)
-
-Main:Slider({ 
-    Title    = "Flush Aura (stud)", 
-    Value    = { Min = 1, Max = 15, Default = FlushAuraValue }, 
-    Step     = 1,
-    Callback = function(value)
-        FlushAuraValue = value
-        Config:Set("FlushAuraValue", value) 
-        Config:Save()
-    end
-})
-
-local FlushAuraToggle = Main:Toggle({ 
-    Title    = "Flush Aura", 
-    Value    = Flushaura,
-    Callback = function(enabled)
-        Flushaura = enabled
-        Config:Set("flushaura", enabled) 
-        Config:Save()
-
-        if enabled then
-            task.spawn(function()
-                while Flushaura do
-                    pcall(function()
-                        local player = game.Players.LocalPlayer
-                        local char = player.Character
-                        if not char then return end
-                        
-                        local root = char:FindFirstChild("HumanoidRootPart")
-                        if not root then return end
-
-                        for _, prompt in pairs(workspace:GetDescendants()) do
-                            if prompt:IsA("ProximityPrompt") then
-                                
-                                -- เช็ค ActionText
-                                if prompt.ActionText == "Flush" 
-                                or prompt.ActionText == "Dragon Flash" 
-                                or prompt.ActionText == "flush" 
-                                or prompt.ActionText == "Flash" then
-                                    
-                                    local part = prompt.Parent
-                                    if part and part:IsA("BasePart") then
-                                        local distance = (root.Position - part.Position).Magnitude
-                                        
-                                        if distance <= FlushAuraValue then
-                                            prompt.HoldDuration = 0
-                                            prompt.MaxActivationDistance = FlushAuraValue
-                                            
-                                            if fireproximityprompt then
-                                                fireproximityprompt(prompt)
-                                            else
-                                                prompt:InputHoldBegin()
-                                                task.wait()
-                                                prompt:InputHoldEnd()
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end)
-
-                    task.wait(0.1) -- ปรับความเร็ว aura
-                end
-            end)
-        end
     end
 })
 
@@ -3066,79 +2993,6 @@ Main:Slider({
         HeightValue = value
         Config:Set("HeightValue", value)
         Config:Save()
-    end
-})
-
-Main:Section({ Title = "Flush Settings", Icon = "toilet" })
-
-local Flushaura = Config:Get("flushaura", true)
-local FlushAuraValue = Config:Get("FlushAuraValue", 5)
-
-Main:Slider({ 
-    Title    = "Flush Aura (stud)", 
-    Value    = { Min = 1, Max = 15, Default = FlushAuraValue }, 
-    Step     = 1,
-    Callback = function(value)
-        FlushAuraValue = value
-        Config:Set("FlushAuraValue", value) 
-        Config:Save()
-    end
-})
-
-local FlushAuraToggle = Main:Toggle({ 
-    Title    = "Flush Aura", 
-    Value    = Flushaura,
-    Callback = function(enabled)
-        Flushaura = enabled
-        Config:Set("flushaura", enabled) 
-        Config:Save()
-
-        if enabled then
-            task.spawn(function()
-                while Flushaura do
-                    pcall(function()
-                        local player = game.Players.LocalPlayer
-                        local char = player.Character
-                        if not char then return end
-                        
-                        local root = char:FindFirstChild("HumanoidRootPart")
-                        if not root then return end
-
-                        for _, prompt in pairs(workspace:GetDescendants()) do
-                            if prompt:IsA("ProximityPrompt") then
-                                
-                                -- เช็ค ActionText
-                                if prompt.ActionText == "Flush" 
-                                or prompt.ActionText == "Dragon Flash" 
-                                or prompt.ActionText == "flush" 
-                                or prompt.ActionText == "Flash" then
-                                    
-                                    local part = prompt.Parent
-                                    if part and part:IsA("BasePart") then
-                                        local distance = (root.Position - part.Position).Magnitude
-                                        
-                                        if distance <= FlushAuraValue then
-                                            prompt.HoldDuration = 0
-                                            prompt.MaxActivationDistance = FlushAuraValue
-                                            
-                                            if fireproximityprompt then
-                                                fireproximityprompt(prompt)
-                                            else
-                                                prompt:InputHoldBegin()
-                                                task.wait()
-                                                prompt:InputHoldEnd()
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                    end)
-
-                    task.wait(0.1) -- ปรับความเร็ว aura
-                end
-            end)
-        end
     end
 })
 
