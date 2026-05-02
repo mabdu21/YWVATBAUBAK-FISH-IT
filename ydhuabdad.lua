@@ -1,4 +1,4 @@
--- v025
+-- v023
 -- =========================
 local version = "Rework"
 -- =========================
@@ -688,8 +688,8 @@ local function GetEffectivePadding(mob)
 end
 
 local PADDING_REDUCE_STEP = 1
-local PADDING_SAFE_MIN = 2
-local PADDING_CHECK_INTERVAL = 2
+local PADDING_SAFE_MIN = 15
+local PADDING_CHECK_INTERVAL = 15
 
 local function StartDamageChecker(mob)
     task.spawn(function()
