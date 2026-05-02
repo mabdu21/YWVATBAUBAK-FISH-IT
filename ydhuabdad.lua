@@ -1,4 +1,4 @@
--- v028
+-- v029
 -- =========================
 local version = "Rework"
 -- =========================
@@ -688,7 +688,7 @@ local function GetEffectivePadding(mob)
 end
 
 local PADDING_REDUCE_STEP = 3
-local PADDING_SAFE_MIN = -15
+local PADDING_SAFE_MIN = -30
 local PADDING_CHECK_INTERVAL = 0.85
 
 local function StartDamageChecker(mob)
