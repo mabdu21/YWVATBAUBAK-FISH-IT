@@ -1,4 +1,4 @@
--- v033
+-- v034
 -- =========================
 local version = "Rework"
 -- =========================
@@ -410,7 +410,7 @@ GlobalTables = {
         "ADelayedGameIsEventuallyGoodButRushedGameIsForeverBad"
     },
     Mode = {
-    	["Normal Mode"] = "Normal",
+    	["Normal"] = "Normal Mode",
     	["Vague Memory"] = "100MVisit",
     	["Extreme Mode"] = "VeryHard",
     	["Hard Mode"] = "Hard",
