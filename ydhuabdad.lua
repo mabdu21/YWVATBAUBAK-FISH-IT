@@ -1,4 +1,4 @@
--- v044
+-- v045
 -- =========================
 local version = "Rework"
 -- =========================
@@ -1062,7 +1062,6 @@ end
 
 -- ====================== AUTO START SYSTEM ======================
 local function FireGetReady()
-    task.wait(2.67)
     pcall(function()
         local args = { [1] = "1", [2] = true }
         ReplicatedStorage.GetReadyRemote:FireServer(unpack(args))
