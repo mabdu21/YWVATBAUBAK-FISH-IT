@@ -1,4 +1,4 @@
--- v038
+-- v039
 -- =========================
 local version = "Rework"
 -- =========================
@@ -18,12 +18,26 @@ local pg = p:WaitForChild("PlayerGui")
 local function waitLoadingGone()
     local gui = pg:FindFirstChild("LoadingGui")
     if gui then
+        WindUI:Notify({
+            Title = "Initialization",
+            Content = "Game is loading, Please wait.",
+            Duration = 3,
+            Icon = "download",
+        })
         gui.AncestryChanged:Wait()
     end
 end
 
 waitLoadingGone()
-task.wait(5)
+
+WindUI:Notify({
+    Title = "Initialization",
+    Content = "Load complete, Starting in 3s.",
+    Duration = 3,
+    Icon = "shield-check",
+})
+
+task.wait(3)
 
 -- ====================== FPS UNLOCK ======================
 local part = Instance.new("Part")
@@ -40,7 +54,7 @@ part.Parent = workspace
 if setfpscap then
     setfpscap(1000000)
     WindUI:Notify({
-        Title = "dsc.gg/dyhub",
+        Title = "Service",
         Content = "FPS Unlocked! | v019.8",
         Duration = 3,
         Icon = "cpu",
@@ -48,17 +62,17 @@ if setfpscap then
     warn("FPS Unlocked!")
 else
     WindUI:Notify({
-        Title = "dsc.gg/dyhub",
-        Content = "Your exploit does not support setfpscap | v019.8",
+        Title = "Not Working",
+        Content = "Your exploit does not support setfpscap.",
         Duration = 3,
-        Icon = "cpu",
+        Icon = "ban",
     })
     warn("Your exploit does not support setfpscap.")
 end
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
-local ConfigFolder = "DYHUB_STBB"
+local ConfigFolder = "DYHUB_REWORK_STBB"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
