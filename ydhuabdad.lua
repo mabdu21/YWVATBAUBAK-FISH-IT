@@ -1,4 +1,4 @@
--- v031
+-- v032
 -- =========================
 local version = "Rework"
 -- =========================
@@ -1621,7 +1621,7 @@ Main:Section({ Title = "Override Settings", Icon = "ruler" })
 local PaddingReduceInput = Main:Input({
     Title = "Set Padding Reduce",
     Default = tostring(PADDING_REDUCE_STEP),
-    Placeholder = "Padding Reduce (Ex: 2.5)",
+    Placeholder = "Default: 2.5",
     Callback = function(text)
         local num = tonumber(text)
         if num then
@@ -1637,7 +1637,7 @@ local PaddingReduceInput = Main:Input({
 local PaddingSafeInput = Main:Input({
     Title = "Set Padding Safe",
     Default = tostring(PADDING_SAFE_MIN),
-    Placeholder = "Padding Safe (Ex: -25)",
+    Placeholder = "Default: -25",
     Callback = function(text)
         local num = tonumber(text)
         if num then
@@ -1653,7 +1653,7 @@ local PaddingSafeInput = Main:Input({
 local PaddingCheckInput = Main:Input({
     Title = "Set Padding Check",
     Default = tostring(PADDING_CHECK_INTERVAL),
-    Placeholder = "Padding Check (Ex: 1.5)",
+    Placeholder = "Default: 1.5",
     Callback = function(text)
         local num = tonumber(text)
         if num then
