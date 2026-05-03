@@ -1,4 +1,4 @@
--- v039
+-- v041
 -- =========================
 local version = "Rework"
 -- =========================
@@ -787,7 +787,7 @@ local function StartDamageChecker(mob)
             end
 
             -- ⏱️ ครบ 2 วิหลังจาก "เคยตีเข้าแล้วแต่หยุดเข้า"
-            if noDamageTimer >= 2 and not triggered2sAfterHit then
+            if noDamageTimer >= 6 and not triggered2sAfterHit then
                 triggered2sAfterHit = true
 
                 local currentPad = GetEffectivePadding(mob)
@@ -800,7 +800,7 @@ local function StartDamageChecker(mob)
             end
 
             -- ⏱️ ทุก ๆ 5 วิถ้ายังไม่เข้าเลือด
-            if noDamageTimer >= 5 then
+            if noDamageTimer >= 10 then
                 lastDamageTime = tick() -- รีเซ็ตรอบ
 
                 local currentPad = GetEffectivePadding(mob)
@@ -2488,6 +2488,7 @@ Main7:Section({ Title = "Game Mode", Icon = "gamepad-2" })
 
 local AutoVoteValue = Config:Get("AutoVoteValue", "Normal Mode")
 local AutoVoteEnabled = Config:Get("AutoVoteEnabled", false)
+local AutoVoteinGameEnabled = Config:Get("AutoVoteinGameEnabled", false)
 
 local GameModeDropdown = Main7:Dropdown({
     Title = "Set Game Mode",
@@ -2503,7 +2504,7 @@ local GameModeDropdown = Main7:Dropdown({
 })
 
 local AutoVoteToggle = Main7:Toggle({
-    Title = "Auto Game Mode",
+    Title = "Auto Game Mode (Lobby)",
     Value = AutoVoteEnabled,
     Callback = function(enabled)
         AutoVoteEnabled = enabled
@@ -2524,6 +2525,35 @@ local AutoVoteToggle = Main7:Toggle({
                             }
                             
                             game:GetService("ReplicatedStorage").MainHandler:FireServer(unpack(args))
+                        end)
+                    end
+                    task.wait(5)
+                end
+            end)
+        end
+    end
+})
+
+local AutoVoteIGToggle = Main7:Toggle({
+    Title = "Auto Game Mode (In Game)",
+    Value = AutoVoteinGameEnabled,
+    Callback = function(enabled)
+        AutoVoteEnabled = enabled
+
+        Config:Set("AutoVoteinGameEnabled", enabled)
+        Config:Save()
+
+        if enabled then
+            task.spawn(function()
+                while AutoVoteinGameEnabled do
+                    if AutoVoteValue then
+                        pcall(function()
+                            local args = {
+                                    [1] = AutoVoteValue
+                            }
+
+                            game:GetService("ReplicatedStorage").Vote:FireServer(unpack(args))
+
                         end)
                     end
                     task.wait(5)
