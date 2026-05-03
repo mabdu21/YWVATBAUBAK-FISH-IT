@@ -1,4 +1,4 @@
--- v042
+-- v043
 -- =========================
 local version = "Rework"
 -- =========================
@@ -468,6 +468,22 @@ GlobalTables = {
     	"Holdout",
     	"Invasion"
     },
+    Vote = {
+    	"Normal Mode",
+    	"Vague Memory",
+    	"Extreme Mode",
+    	"Hard Mode",
+    	"Insane Mode",
+    	"Nightmare Mode",
+    	"Boss Rush",
+    	"Dark Dimension",
+    	"Hell",
+    	"Mist",
+    	"Christmas Act 1",
+    	"Zombie Act 1",
+    	"Holdout",
+    	"Invasion"
+    },
     Weapon = {
         "Stungun", "Flamethrower", "Harpoon Gun", "Shot Gun",
         "Pulse Rifle", "Shot Harpoon Gun", "EPD", "Small Laser Gun"
@@ -800,7 +816,7 @@ local function StartDamageChecker(mob)
             end
 
             -- ⏱️ ทุก ๆ 5 วิถ้ายังไม่เข้าเลือด
-            if noDamageTimer >= 10 then
+            if noDamageTimer >= 9 then
                 lastDamageTime = tick() -- รีเซ็ตรอบ
 
                 local currentPad = GetEffectivePadding(mob)
@@ -808,7 +824,7 @@ local function StartDamageChecker(mob)
 
                 if newPad ~= currentPad then
                     MobHeightOverride[mob] = newPad
-                    print("[DYHUB] still no damage → reduce padding to " .. newPad .. " for " .. mob.Name)
+                    print("[DYHUB] Still no damage → reduce padding to " .. newPad .. " for " .. mob.Name)
                 end
             end
 
@@ -2475,11 +2491,11 @@ Main2:Button({
     end,
 })
 
-Main7:Section({ Title = "Casual Information", TextXAlignment = "Center", TextSize = 17 })
+Main7:Section({ Title = "Casual: Mission Selection", TextXAlignment = "Center", TextSize = 17 })
 Main7:Divider()
 
 Main7:Paragraph({
-    Title = "Casual: Mission Selection",
+    Title = "Game Mode: Lobby",
     Desc = "- [ Step 1 ] Stay in the Lobby (not inside a game) \n- [ Step 2 ] Press Play and go to the Classic gamemode selection screen \n- [ Step 3 ] Select Casual and finish teleporting \n- [ Step 4 ] Run the script",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
@@ -2487,41 +2503,40 @@ Main7:Paragraph({
 Main7:Divider()
 Main7:Section({ Title = "Game Mode", Icon = "gamepad-2" })
 
-local AutoVoteValue = Config:Get("AutoVoteValue", "Normal Mode")
-local AutoVoteEnabled = Config:Get("AutoVoteEnabled", false)
-local AutoVoteinGameEnabled = Config:Get("AutoVoteinGameEnabled", false)
+local AutoGameValue = Config:Get("AutoGameValue", "Normal Mode")
+local AutoGameEnabled = Config:Get("AutoGameEnabled", false)
 
 local GameModeDropdown = Main7:Dropdown({
     Title = "Set Game Mode",
     Values = GlobalTables.Mode,
     Multi = false,
-    Value = AutoVoteValue,
+    Value = AutoGameValue,
     Callback = function(value)
-        AutoVoteValue = value
+        AutoGameValue = value
         ReplicatedStorage:WaitForChild("Vote"):FireServer(value)
-        Config:Set("AutoVoteValue", value)
+        Config:Set("AutoGameValue", value)
         Config:Save()
     end
 })
 
 local AutoVoteToggle = Main7:Toggle({
     Title = "Auto Game Mode (Lobby)",
-    Value = AutoVoteEnabled,
+    Value = AutoGameEnabled,
     Callback = function(enabled)
-        AutoVoteEnabled = enabled
+        AutoGameEnabled = enabled
 
-        Config:Set("AutoVoteEnabled", enabled)
+        Config:Set("AutoGameValue", enabled)
         Config:Save()
 
         if enabled then
             task.spawn(function()
-                while AutoVoteEnabled do
-                    if AutoVoteValue then
+                while AutoGameEnabled do
+                    if AutoGameValue then
                         pcall(function()
                             local args = {
                                 [1] = {
                                     [1] = "StartSolo",
-                                    [2] = AutoVoteValue
+                                    [2] = AutoGameEnabled
                                 }
                             }
                             
@@ -2535,31 +2550,74 @@ local AutoVoteToggle = Main7:Toggle({
     end
 })
 
+Main7:Section({ Title = "Vote Mode", Icon = "gamepad-2" })
+
+local AutoVoteValue = Config:Get("AutoVoteValue", "Normal Mode")
+local AutoVoteinGameEnabled = Config:Get("AutoVoteinGameEnabled", false)
+
+local GameModeDropdown = Main7:Dropdown({
+    Title = "Set Game Mode",
+    Values = GlobalTables.Vote,
+    Multi = false,
+    Value = AutoVoteValue,
+    Callback = function(value)
+        AutoVoteValue = value
+        ReplicatedStorage:WaitForChild("Vote"):FireServer(value)
+        Config:Set("AutoVoteValue", value)
+        Config:Save()
+    end
+})
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+
+local function FireVote()
+    if AutoVoteValue then
+        pcall(function()
+            ReplicatedStorage.Vote:FireServer(AutoVoteValue)
+        end)
+    end
+end
+
+local function StartVotePattern()
+    task.spawn(function()
+        while AutoVoteinGameEnabled do
+            local delays = {1, 10, 20, 30}
+
+            for _, t in ipairs(delays) do
+                if not AutoVoteinGameEnabled then return end
+
+                task.wait(t)
+                FireVote()
+            end
+        end
+    end)
+end
+
+local function SetupCharacterListener()
+    player.CharacterAdded:Connect(function()
+        if AutoVoteinGameEnabled then
+            task.wait(1.5) -- รอโหลดตัวละครนิดนึง
+            StartVotePattern()
+        end
+    end)
+end
+
 local AutoVoteIGToggle = Main7:Toggle({
-    Title = "Auto Game Mode (In Game)",
+    Title = "Auto Vote Mode (In-Game)",
     Value = AutoVoteinGameEnabled,
     Callback = function(enabled)
+        AutoVoteinGameEnabled = enabled
         AutoVoteEnabled = enabled
 
         Config:Set("AutoVoteinGameEnabled", enabled)
         Config:Save()
 
         if enabled then
-            task.spawn(function()
-                while AutoVoteinGameEnabled do
-                    if AutoVoteValue then
-                        pcall(function()
-                            local args = {
-                                    [1] = AutoVoteValue
-                            }
-
-                            game:GetService("ReplicatedStorage").Vote:FireServer(unpack(args))
-
-                        end)
-                    end
-                    task.wait(5)
-                end
-            end)
+            StartVotePattern()
+            SetupCharacterListener()
         end
     end
 })
