@@ -1,4 +1,4 @@
--- v036
+-- v036.5
 -- =========================
 local version = "Rework"
 -- =========================
@@ -691,7 +691,7 @@ local function GetPriorityMob()
 end
 
 -- ====================== MOB HEIGHT OVERRIDE ======================
-local PADDING_REDUCE_STEP = Config:Get("PaddingReduceStep", 3.5)
+local PADDING_REDUCE_STEP = Config:Get("PaddingReduceStep", 3)
 local PADDING_SAFE_MIN = Config:Get("PaddingSafeMin", -30)
 local PADDING_CHECK_INTERVAL = Config:Get("PaddingCheckInterval", 1)
 
@@ -1654,7 +1654,7 @@ Main:Section({ Title = "Override Settings", Icon = "ruler" })
 local PaddingReduceInput = Main:Input({
     Title = "Set Padding Reduce",
     Default = tostring(PADDING_REDUCE_STEP),
-    Placeholder = "Default: 3.5",
+    Placeholder = "Default: 3",
     Callback = function(text)
         local num = tonumber(text)
         if num then
