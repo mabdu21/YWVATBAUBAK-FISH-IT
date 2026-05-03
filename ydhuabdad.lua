@@ -1,4 +1,4 @@
--- v039
+-- v041
 -- =========================
 local version = "Rework"
 -- =========================
@@ -55,7 +55,7 @@ if setfpscap then
     setfpscap(1000000)
     WindUI:Notify({
         Title = "Service",
-        Content = "FPS Unlocked! | v019.8",
+        Content = "FPS Unlocked! | v019.9",
         Duration = 3,
         Icon = "cpu",
     })
@@ -803,7 +803,7 @@ local function StartDamageChecker(mob)
             end
 
             -- ⏱️ ครบ 2 วิหลังจาก "เคยตีเข้าแล้วแต่หยุดเข้า"
-            if noDamageTimer >= 2 and not triggered2sAfterHit then
+            if noDamageTimer >= 6 and not triggered2sAfterHit then
                 triggered2sAfterHit = true
 
                 local currentPad = GetEffectivePadding(mob)
@@ -816,7 +816,7 @@ local function StartDamageChecker(mob)
             end
 
             -- ⏱️ ทุก ๆ 5 วิถ้ายังไม่เข้าเลือด
-            if noDamageTimer >= 5 then
+            if noDamageTimer >= 9 then
                 lastDamageTime = tick() -- รีเซ็ตรอบ
 
                 local currentPad = GetEffectivePadding(mob)
