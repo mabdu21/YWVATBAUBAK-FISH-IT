@@ -1,4 +1,4 @@
--- v032
+-- v033
 -- =========================
 local version = "Rework"
 -- =========================
@@ -185,6 +185,7 @@ local Main2 = Window:Tab({ Title = "Player", Icon = "user" })
 local MainDivider1 = Window:Divider()
 local Main5 = Window:Tab({ Title = "Shop", Icon = "shopping-cart" })
 local Main6 = Window:Tab({ Title = "Collect", Icon = "hand" })
+local Main7 = Window:Tab({ Title = "Gamemode", Icon = "gamepad-2" })
 local MainDivider2 = Window:Divider()
 local Main3 = Window:Tab({ Title = "Misc", Icon = "settings" })
 Window:SelectTab(1)
@@ -2398,22 +2399,22 @@ Main2:Button({
     end,
 })
 
-Main2:Section({ Title = "Casual Information", TextXAlignment = "Center", TextSize = 17 })
-Main2:Divider()
+Main7:Section({ Title = "Casual Information", TextXAlignment = "Center", TextSize = 17 })
+Main7:Divider()
 
-Main2:Paragraph({
+Main7:Paragraph({
     Title = "Casual: Mission Selection",
     Desc = "- [ Step 1 ] Stay in the Lobby (not inside a game) \n- [ Step 2 ] Press Play and go to the Classic gamemode selection screen \n- [ Step 3 ] Select Casual and finish teleporting \n- [ Step 4 ] Run the script",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
-Main2:Divider()
-Main2:Section({ Title = "Game Mode", Icon = "gamepad-2" })
+Main7:Divider()
+Main7:Section({ Title = "Game Mode", Icon = "gamepad-2" })
 
 local AutoVoteValue = Config:Get("AutoVoteValue", "Normal Mode")
 local AutoVoteEnabled = Config:Get("AutoVoteEnabled", false)
 
-local GameModeDropdown = Main2:Dropdown({
+local GameModeDropdown = Main7:Dropdown({
     Title = "Set Game Mode",
     Values = GlobalTables.Mode,
     Multi = false,
@@ -2426,7 +2427,7 @@ local GameModeDropdown = Main2:Dropdown({
     end
 })
 
-local AutoVoteToggle = Main2:Toggle({
+local AutoVoteToggle = Main7:Toggle({
     Title = "Auto Game Mode",
     Value = AutoVoteEnabled,
     Callback = function(enabled)
@@ -2440,9 +2441,14 @@ local AutoVoteToggle = Main2:Toggle({
                 while AutoVoteEnabled do
                     if AutoVoteValue then
                         pcall(function()
-                            game:GetService("ReplicatedStorage")
-                                :WaitForChild("MainHandler")
-                                :FireServer("StartSolo", AutoVoteValue)
+                            local args = {
+                                [1] = {
+                                    [1] = "StartSolo",
+                                    [2] = AutoVoteValue
+                                }
+                            }
+                            
+                            game:GetService("ReplicatedStorage").MainHandler:FireServer(unpack(args))
                         end)
                     end
                     task.wait(5)
