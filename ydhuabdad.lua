@@ -1,4 +1,4 @@
--- v032
+-- v033
 -- =========================
 local version = "Rework"
 -- =========================
@@ -21,7 +21,7 @@ if setfpscap then
     setfpscap(1000000)
     game:GetService("StarterGui"):SetCore("SendNotification", {
         Title = "dsc.gg/dyhub",
-        Text = "FPS Unlocked! | v019.6",
+        Text = "FPS Unlocked! | v019.7",
         Duration = 2,
         Button1 = "Okay"
     })
@@ -691,7 +691,7 @@ local function GetPriorityMob()
 end
 
 -- ====================== MOB HEIGHT OVERRIDE ======================
-local PADDING_REDUCE_STEP = Config:Get("PaddingReduceStep", 3)
+local PADDING_REDUCE_STEP = Config:Get("PaddingReduceStep", 3.25)
 local PADDING_SAFE_MIN = Config:Get("PaddingSafeMin", -30)
 local PADDING_CHECK_INTERVAL = Config:Get("PaddingCheckInterval", 1)
 
