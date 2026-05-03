@@ -1,9 +1,29 @@
--- v037
+-- v038
 -- =========================
 local version = "Rework"
 -- =========================
 
+-- ====================== LOAD UI ======================
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+-- ====================== GameLoad ======================
+
 repeat task.wait() until game:IsLoaded()
+
+-- ====================== LoadingGui ======================
+
+local p = game:GetService("Players").LocalPlayer
+local pg = p:WaitForChild("PlayerGui")
+
+local function waitLoadingGone()
+    local gui = pg:FindFirstChild("LoadingGui")
+    if gui then
+        gui.AncestryChanged:Wait()
+    end
+end
+
+waitLoadingGone()
+task.wait(5)
 
 -- ====================== FPS UNLOCK ======================
 local part = Instance.new("Part")
@@ -19,25 +39,22 @@ part.Parent = workspace
 
 if setfpscap then
     setfpscap(1000000)
-    game:GetService("StarterGui"):SetCore("SendNotification", {
+    WindUI:Notify({
         Title = "dsc.gg/dyhub",
-        Text = "FPS Unlocked! | v019.8",
-        Duration = 2,
-        Button1 = "Okay"
+        Content = "FPS Unlocked! | v019.8",
+        Duration = 3,
+        Icon = "cpu",
     })
     warn("FPS Unlocked!")
 else
-    game:GetService("StarterGui"):SetCore("SendNotification", {
+    WindUI:Notify({
         Title = "dsc.gg/dyhub",
-        Text = "Your exploit does not support setfpscap.",
-        Duration = 2,
-        Button1 = "Okay"
+        Content = "Your exploit does not support setfpscap | v019.8",
+        Duration = 3,
+        Icon = "cpu",
     })
     warn("Your exploit does not support setfpscap.")
 end
-
--- ====================== LOAD UI ======================
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
