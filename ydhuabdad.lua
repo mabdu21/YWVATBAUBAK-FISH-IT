@@ -1,4 +1,4 @@
--- v034
+-- v036
 -- =========================
 local version = "Rework"
 -- =========================
@@ -711,50 +711,72 @@ local function StartDamageChecker(mob)
         if not humanoid then return end
 
         MobLastHealth[mob] = humanoid.Health
-        MobHeightOverride[mob] = nil  -- เริ่มต้นใช้ HeightValue ปกติ
+        MobHeightOverride[mob] = nil
 
-        local damageDetected = false  -- flag: เจอดาเมจแล้ว -> หยุดลด
         local elapsed = 0
+
+        -- ⏱️ ระบบใหม่
+        local lastDamageTime = tick()
+        local noDamageTimer = 0
+        local triggered2sAfterHit = false
 
         while mob and mob.Parent and not IsMobDead(mob) and AutoFarmEnabled do
             task.wait(0.5)
-            elapsed = elapsed + 0.5
+            elapsed += 0.5
 
             if not mob or not mob.Parent or IsMobDead(mob) then break end
             humanoid = mob:FindFirstChild("Humanoid")
             if not humanoid then break end
 
+            local currentHP = humanoid.Health
+            local lastHP = MobLastHealth[mob] or currentHP
+
+            -- ✅ ถ้า HP ลด = มีดาเมจ
+            if currentHP < lastHP then
+                lastDamageTime = tick()
+                noDamageTimer = 0
+                triggered2sAfterHit = false
+
+                print("[DYHUB] Damage detected at padding " .. GetEffectivePadding(mob) .. " for " .. mob.Name)
+            else
+                -- ❌ ไม่มีดาเมจ
+                noDamageTimer = tick() - lastDamageTime
+            end
+
+            -- ⏱️ ครบ 2 วิหลังจาก "เคยตีเข้าแล้วแต่หยุดเข้า"
+            if noDamageTimer >= 2 and not triggered2sAfterHit then
+                triggered2sAfterHit = true
+
+                local currentPad = GetEffectivePadding(mob)
+                local newPad = math.max(currentPad - PADDING_REDUCE_STEP, PADDING_SAFE_MIN)
+
+                if newPad ~= currentPad then
+                    MobHeightOverride[mob] = newPad
+                    print("[DYHUB] no damage after hit → reduce padding to " .. newPad .. " for " .. mob.Name)
+                end
+            end
+
+            -- ⏱️ ทุก ๆ 5 วิถ้ายังไม่เข้าเลือด
+            if noDamageTimer >= 5 then
+                lastDamageTime = tick() -- รีเซ็ตรอบ
+
+                local currentPad = GetEffectivePadding(mob)
+                local newPad = math.max(currentPad - PADDING_REDUCE_STEP, PADDING_SAFE_MIN)
+
+                if newPad ~= currentPad then
+                    MobHeightOverride[mob] = newPad
+                    print("[DYHUB] still no damage → reduce padding to " .. newPad .. " for " .. mob.Name)
+                end
+            end
+
+            -- interval เดิม
             if elapsed >= PADDING_CHECK_INTERVAL then
                 elapsed = 0
-                local currentHP = humanoid.Health
-                local storedLastHP = MobLastHealth[mob] or currentHP
-
-                if not damageDetected then
-                    -- ยังไม่เจอดาเมจ: เช็คว่า HP ลดหรือไม่
-                    if currentHP < storedLastHP then
-                        -- ✅ ทำดาเมจได้แล้ว! ล็อค padding ณ จุดนี้ หยุดลดทันที
-                        damageDetected = true
-                        print("[DYHUB] DmgCheck: Damage detected! Locking padding at " .. GetEffectivePadding(mob) .. " for " .. mob.Name)
-                    else
-                        -- ❌ ยังตีไม่โดน ลด padding ลงอีก
-                        local currentPad = GetEffectivePadding(mob)
-                        local newPad = currentPad - PADDING_REDUCE_STEP
-                        if newPad < PADDING_SAFE_MIN then
-                            newPad = PADDING_SAFE_MIN
-                        end
-                        if newPad ~= currentPad then
-                            MobHeightOverride[mob] = newPad
-                            print("[DYHUB] DmgCheck: No damage, lowering padding to " .. newPad .. " for " .. mob.Name)
-                        end
-                    end
-                end
-                -- ถ้า damageDetected == true แล้ว: ไม่ทำอะไรเพิ่ม แค่รอ mob ตาย
-
                 MobLastHealth[mob] = currentHP
             end
         end
 
-        -- mob ตายหรือหายไป: reset กลับค่าเดิม
+        -- reset
         MobHeightOverride[mob] = nil
         MobLastHealth[mob] = nil
         print("[DYHUB] DmgCheck: Mob dead/gone, reset override for " .. (mob and mob.Name or "?"))
