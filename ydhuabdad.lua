@@ -21,7 +21,7 @@ if setfpscap then
     setfpscap(1000000)
     game:GetService("StarterGui"):SetCore("SendNotification", {
         Title = "dsc.gg/dyhub",
-        Text = "FPS Unlocked! | v019.2",
+        Text = "FPS Unlocked! | v019.5",
         Duration = 2,
         Button1 = "Okay"
     })
@@ -187,7 +187,7 @@ local Main5 = Window:Tab({ Title = "Shop", Icon = "shopping-cart" })
 local Main6 = Window:Tab({ Title = "Collect", Icon = "hand" })
 local Main7 = Window:Tab({ Title = "Gamemode", Icon = "gamepad-2" })
 local MainDivider2 = Window:Divider()
-local Main3 = Window:Tab({ Title = "Misc", Icon = "settings" })
+local Main3 = Window:Tab({ Title = "Setting", Icon = "settings" })
 Window:SelectTab(1)
 
 -- ======================== INFO ========================
@@ -2622,9 +2622,6 @@ local CollectModeDropdown = Main6:Dropdown({
 })
 
 -- ====================== UI: MISC TAB ======================
--- ====================== UI: MISC TAB ======================
-Main3:Section({ Title = "Miscellaneous", Icon = "settings" })
-
 -- เพิ่ม Section Save Config
 Main3:Section({ Title = "Save Config", Icon = "save" })
 
