@@ -1,4 +1,4 @@
--- v029
+-- v031
 -- =========================
 local version = "Rework"
 -- =========================
@@ -21,7 +21,7 @@ if setfpscap then
     setfpscap(1000000)
     game:GetService("StarterGui"):SetCore("SendNotification", {
         Title = "dsc.gg/dyhub",
-        Text = "FPS Unlocked!",
+        Text = "FPS Unlocked! | v019.2",
         Duration = 2,
         Button1 = "Okay"
     })
@@ -197,12 +197,14 @@ Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 
 Info:Paragraph({
-    Title = "Update: 06/02/2026",
-    Desc = "- [ Fixed ] Auto Farm \n- [ Fixed ] Auto Collect \n- [ Fixed ] Esp Core \n- [ Added ] Auto Save Config",
+    Title = "Update: 06/03/2026",
+    Desc = "- [ Fixed ] Auto Collect \n- [ Fixed ] Auto Game Mode \n- [ Added ] Mob Height Override \n- [ Improved ] Mob Height Override",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
-
+Info:Divider()
+Info:Section({ Title = "Discord Information", TextXAlignment = "Center", TextSize = 17 })
+Info:Divider()
 ui.Creator.Request = function(requestData)
     local success, result = pcall(function()
         if HttpService.RequestAsync then
@@ -407,9 +409,20 @@ GlobalTables = {
         "ADelayedGameIsEventuallyGoodButRushedGameIsForeverBad"
     },
     Mode = {
-        "Normal", "Hard", "VeryHard", "Insane", "Nightmare", "BossRush",
-        "ThunderStorm", "Zombie", "Christmas", "Hell", "DarkDimension", "Astro",
-        "AstroV2", "100MVisit"
+    	["Normal Mode"] = "Normal",
+    	["Vague Memory"] = "100MVisit",
+    	["Extreme Mode"] = "VeryHard",
+    	["Hard Mode"] = "Hard",
+    	["Insane Mode"] = "Insane",
+    	["Nightmare Mode"] = "Nightmare",
+    	["Boss Rush"] = "BossRush",
+    	["Dark Dimension"] = "DarkDimension",
+    	["Hell"] = "Hell",
+    	["Mist"] = "ThunderStorm",
+    	["Christmas Act 1"] = "Christmas",
+    	["Zombie Act 1"] = "Zombie",
+    	["Holdout"] = "AstroV2",
+    	["Invasion"] = "Astro"
     },
     Weapon = {
         "Stungun", "Flamethrower", "Harpoon Gun", "Shot Gun",
@@ -687,9 +700,9 @@ local function GetEffectivePadding(mob)
     return HeightValue
 end
 
-local PADDING_REDUCE_STEP = 3
-local PADDING_SAFE_MIN = -30
-local PADDING_CHECK_INTERVAL = 0.85
+local PADDING_REDUCE_STEP = Config:Get("PaddingReduceStep", 2.5)
+local PADDING_SAFE_MIN = Config:Get("PaddingSafeMin", -30)
+local PADDING_CHECK_INTERVAL = Config:Get("PaddingCheckInterval", 1.5)
 
 local function StartDamageChecker(mob)
     task.spawn(function()
@@ -1603,6 +1616,56 @@ local MiscDropdown = Main:Dropdown({
     end
 })
 
+Main:Section({ Title = "Override Settings", Icon = "ruler" })
+
+local PaddingReduceInput = Main:Input({
+    Title = "Set Padding Reduce",
+    Default = tostring(PADDING_REDUCE_STEP),
+    Placeholder = "Padding Reduce (Ex: 2.5)",
+    Callback = function(text)
+        local num = tonumber(text)
+        if num then
+            PADDING_REDUCE_STEP = num
+            Config:Set("PaddingReduceStep", num)
+            Config:Save()
+        else
+            warn("Entered an incorrect number!")
+        end
+    end
+})
+
+local PaddingSafeInput = Main:Input({
+    Title = "Set Padding Safe",
+    Default = tostring(PADDING_SAFE_MIN),
+    Placeholder = "Padding Safe (Ex: -25)",
+    Callback = function(text)
+        local num = tonumber(text)
+        if num then
+            PADDING_SAFE_MIN = num
+            Config:Set("PaddingSafeMin", num)
+            Config:Save()
+        else
+            warn("Entered an incorrect number!")
+        end
+    end
+})
+
+local PaddingCheckInput = Main:Input({
+    Title = "Set Padding Check",
+    Default = tostring(PADDING_CHECK_INTERVAL),
+    Placeholder = "Padding Check (Ex: 1.5)",
+    Callback = function(text)
+        local num = tonumber(text)
+        if num then
+            PADDING_CHECK_INTERVAL = num
+            Config:Set("PaddingCheckInterval", num)
+            Config:Save()
+        else
+            warn("Entered an incorrect number!")
+        end
+    end
+})
+
 Main:Section({ Title = "General Settings", Icon = "zap" })
 
 local SkillDropdown = Main:Dropdown({
@@ -2335,9 +2398,19 @@ Main2:Button({
     end,
 })
 
+Main2:Section({ Title = "Casual Information", TextXAlignment = "Center", TextSize = 17 })
+Main2:Divider()
+
+Main2:Paragraph({
+    Title = "Casual: Mission Selection",
+    Desc = "- [ Step 1 ] Stay in the Lobby (not inside a game) \n- [ Step 2 ] Press Play and go to the Classic gamemode selection screen \n- [ Step 3 ] Select Casual and finish teleporting \n- [ Step 4 ] Run the script",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+})
+Main2:Divider()
 Main2:Section({ Title = "Game Mode", Icon = "gamepad-2" })
 
-local AutoVoteValue = Config:Get("AutoVoteValue", "Normal")
+local AutoVoteValue = Config:Get("AutoVoteValue", "Normal Mode")
 local AutoVoteEnabled = Config:Get("AutoVoteEnabled", false)
 
 local GameModeDropdown = Main2:Dropdown({
@@ -2358,17 +2431,21 @@ local AutoVoteToggle = Main2:Toggle({
     Value = AutoVoteEnabled,
     Callback = function(enabled)
         AutoVoteEnabled = enabled
+
         Config:Set("AutoVoteEnabled", enabled)
         Config:Save()
+
         if enabled then
             task.spawn(function()
                 while AutoVoteEnabled do
                     if AutoVoteValue then
                         pcall(function()
-                            ReplicatedStorage:WaitForChild("Vote"):FireServer(AutoVoteValue)
+                            game:GetService("ReplicatedStorage")
+                                :WaitForChild("MainHandler")
+                                :FireServer("StartSolo", AutoVoteValue)
                         end)
                     end
-                    task.wait(10)
+                    task.wait(5)
                 end
             end)
         end
