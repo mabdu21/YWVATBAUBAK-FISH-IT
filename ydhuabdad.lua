@@ -1,4 +1,4 @@
--- v043
+-- v044
 -- =========================
 local version = "Rework"
 -- =========================
@@ -2556,7 +2556,7 @@ local AutoVoteValue = Config:Get("AutoVoteValue", "Normal Mode")
 local AutoVoteinGameEnabled = Config:Get("AutoVoteinGameEnabled", false)
 
 local GameModeDropdown = Main7:Dropdown({
-    Title = "Set Game Mode",
+    Title = "Set Vote Mode",
     Values = GlobalTables.Vote,
     Multi = false,
     Value = AutoVoteValue,
@@ -2568,56 +2568,26 @@ local GameModeDropdown = Main7:Dropdown({
     end
 })
 
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local player = Players.LocalPlayer
-
-local function FireVote()
-    if AutoVoteValue then
-        pcall(function()
-            ReplicatedStorage.Vote:FireServer(AutoVoteValue)
-        end)
-    end
-end
-
-local function StartVotePattern()
-    task.spawn(function()
-        while AutoVoteinGameEnabled do
-            local delays = {1, 10, 20, 30}
-
-            for _, t in ipairs(delays) do
-                if not AutoVoteinGameEnabled then return end
-
-                task.wait(t)
-                FireVote()
-            end
-        end
-    end)
-end
-
-local function SetupCharacterListener()
-    player.CharacterAdded:Connect(function()
-        if AutoVoteinGameEnabled then
-            task.wait(1.5) -- รอโหลดตัวละครนิดนึง
-            StartVotePattern()
-        end
-    end)
-end
-
 local AutoVoteIGToggle = Main7:Toggle({
     Title = "Auto Vote Mode (In-Game)",
     Value = AutoVoteinGameEnabled,
     Callback = function(enabled)
         AutoVoteinGameEnabled = enabled
-        AutoVoteEnabled = enabled
 
         Config:Set("AutoVoteinGameEnabled", enabled)
         Config:Save()
 
         if enabled then
-            StartVotePattern()
-            SetupCharacterListener()
+            task.spawn(function()
+                while AutoVoteinGameEnabled do
+                    if AutoVoteValue then
+                        pcall(function()
+                            ReplicatedStorage.Vote:FireServer(AutoVoteValue)
+                        end)
+                    end
+                    task.wait(2)
+                end
+            end)
         end
     end
 })
