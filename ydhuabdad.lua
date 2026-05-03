@@ -1,4 +1,4 @@
--- v035
+-- v036
 -- =========================
 local version = "Rework"
 -- =========================
@@ -2682,30 +2682,6 @@ local antiafk = Main3:Toggle({
 })
 
 Main3:Section({ Title = "Server Status", Icon = "server" })
-
-local ServerTimeLabel = Main3:Label({
-    Title = "Server Time: --",
-    Callback = function() end
-})
-
-local PlayerOnlineLabel = Main3:Label({
-    Title = "Player Online: --",
-    Callback = function() end
-})
-
-task.spawn(function()
-    while true do
-        pcall(function()
-            local serverTime = math.floor(workspace:GetServerTimeNow())
-            local minutes = math.floor(serverTime / 60) % 60
-            local seconds = serverTime % 60
-            local playerCount = #game:GetService("Players"):GetPlayers()
-            ServerTimeLabel:SetTitle("Server Time: " .. string.format("%02d:%02d", minutes, seconds))
-            PlayerOnlineLabel:SetTitle("Player Online: " .. playerCount .. "/" .. game:GetService("Players").MaxPlayers)
-        end)
-        task.wait(1)
-    end
-end)
 
 Main3:Button({
     Title = "Serverhop",
