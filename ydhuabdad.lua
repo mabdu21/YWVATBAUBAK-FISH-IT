@@ -1,4 +1,4 @@
--- v036
+-- v031
 -- =========================
 local version = "Rework"
 -- =========================
@@ -21,7 +21,7 @@ if setfpscap then
     setfpscap(1000000)
     game:GetService("StarterGui"):SetCore("SendNotification", {
         Title = "dsc.gg/dyhub",
-        Text = "FPS Unlocked! | v019.3",
+        Text = "FPS Unlocked! | v019.2",
         Duration = 2,
         Button1 = "Okay"
     })
@@ -50,7 +50,6 @@ function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
     self.ConfigPath = ConfigFolder .. "/config.json"
-    self._autoSaveThread = nil
     if not isfolder(ConfigFolder) then
         makefolder(ConfigFolder)
     end
@@ -101,28 +100,16 @@ function CustomConfig:Load()
 end
 
 function CustomConfig:AutoSave(interval)
-    -- ยกเลิก thread เก่าก่อนเริ่มใหม่
-    if self._autoSaveThread then
-        task.cancel(self._autoSaveThread)
-        self._autoSaveThread = nil
-    end
-    self._autoSaveThread = task.spawn(function()
+    task.spawn(function()
         while true do
             task.wait(interval or 15)
-            if AutoSaveEnabled then
-                self:Save()
-            end
+            self:Save()
         end
     end)
 end
 
 local Config = CustomConfig.new()
-
--- ====================== AUTO SAVE CONFIG (ต้องประกาศก่อน AutoSave) ======================
-local AutoSaveDelay = Config:Get("AutoSaveDelay", 15)
-local AutoSaveEnabled = Config:Get("AutoSaveEnabled", true)
-
-Config:AutoSave(AutoSaveDelay)
+Config:AutoSave(15)
 
 -- ====================== WINDOW 2 ======================
 
@@ -200,7 +187,7 @@ local Main5 = Window:Tab({ Title = "Shop", Icon = "shopping-cart" })
 local Main6 = Window:Tab({ Title = "Collect", Icon = "hand" })
 local Main7 = Window:Tab({ Title = "Gamemode", Icon = "gamepad-2" })
 local MainDivider2 = Window:Divider()
-local Main3 = Window:Tab({ Title = "Setting", Icon = "settings" })
+local Main3 = Window:Tab({ Title = "Misc", Icon = "settings" })
 Window:SelectTab(1)
 
 -- ======================== INFO ========================
@@ -423,20 +410,20 @@ GlobalTables = {
         "ADelayedGameIsEventuallyGoodButRushedGameIsForeverBad"
     },
     Mode = {
-        "Normal Mode",
-        "Vague Memory",
-        "Extreme Mode",
-        "Hard Mode",
-        "Insane Mode",
-        "Nightmare Mode",
-        "Boss Rush",
-        "Dark Dimension",
-        "Hell",
-        "Mist",
-        "Christmas Act 1",
-        "Zombie Act 1",
-        "Holdout",
-        "Invasion"
+    	"Normal Mode",
+    	"Vague Memory",
+    	"Extreme Mode",
+    	"Hard Mode",
+    	"Insane Mode",
+    	"Nightmare Mode",
+    	"Boss Rush",
+    	"Dark Dimension",
+    	"Hell",
+    	"Mist",
+    	"Christmas Act 1",
+    	"Zombie Act 1",
+    	"Holdout",
+    	"Invasion"
     },
     Weapon = {
         "Stungun", "Flamethrower", "Harpoon Gun", "Shot Gun",
@@ -743,6 +730,7 @@ local function StartDamageChecker(mob)
                 local storedLastHP = MobLastHealth[mob] or currentHP
 
                 if not damageDetected then
+                    -- ยังไม่เจอดาเมจ: เช็คว่า HP ลดหรือไม่
                     if currentHP < storedLastHP then
                         -- ✅ ทำดาเมจได้แล้ว! ล็อค padding ณ จุดนี้ หยุดลดทันที
                         damageDetected = true
@@ -760,7 +748,7 @@ local function StartDamageChecker(mob)
                         end
                     end
                 end
-                -- ถ้า damageDetected == true: ไม่ทำอะไรเพิ่ม แค่รอ mob ตาย
+                -- ถ้า damageDetected == true แล้ว: ไม่ทำอะไรเพิ่ม แค่รอ mob ตาย
 
                 MobLastHealth[mob] = currentHP
             end
@@ -1040,9 +1028,12 @@ local function GetPlayerHealthPercent()
 end
 
 -- ============================================================
--- ====================== COLLECT SYSTEM ======================
+-- ====================== COLLECT SYSTEM (v019 - Prefix Match) =
 -- ============================================================
 
+-- รายการ dropdown ที่แสดงใน UI
+-- "Flash Drives" จะ match: Flash Drives #1, Flash Drives #2, Flash Drives #A ฯลฯ
+-- "Astro Samples" จะ match: Trooper Blast, Trooper Spinner ฯลฯ (ทุกอย่างใน group)
 local CollectItems = {
     "Clock Spider",
     "X-18 Core",
@@ -1056,6 +1047,8 @@ local CollectItems = {
     "Astro Samples",
 }
 
+-- รายการชื่อจริงที่ map ไปหา group (สำหรับ group ที่ชื่อ sub-item ไม่ตรงกับ prefix)
+-- "Astro Samples" ใน dropdown จะ match ชื่อเหล่านี้ทั้งหมด
 local CollectGroupMap = {
     ["Astro Samples"] = {
         "Trooper Blast",
@@ -1086,12 +1079,22 @@ local CollectMode = Config:Get("CollectMode", "Clean")
 local KnownCollectItems = {}
 local CollectRunning = false
 
+-- ====================== PREFIX/GROUP MATCH HELPER ======================
+-- คืน true ถ้า objectName match กับ pattern ใดๆ ใน SelectedCollectItems
+-- รองรับ 3 แบบ:
+--   1. Exact match (case-insensitive): "Key Card" == "Key Card"
+--   2. Prefix match (case-insensitive): "Flash Drives" matches "Flash Drives #1", "Flash Drives #A"
+--      (ตัวอักษรถัดจาก prefix ต้องเป็น space, #, _, - หรือจบสตริง)
+--   3. Group map: "Astro Samples" ใน selected จะ match ชื่อใน CollectGroupMap["Astro Samples"]
+
 local function MatchesPattern(objectName, pattern)
     local objLower = objectName:lower()
     local patLower = pattern:lower()
 
+    -- 1. Exact match
     if objLower == patLower then return true end
 
+    -- 2. Prefix match
     if #objLower > #patLower then
         if objLower:sub(1, #patLower) == patLower then
             local nextChar = objLower:sub(#patLower + 1, #patLower + 1)
@@ -1101,6 +1104,7 @@ local function MatchesPattern(objectName, pattern)
         end
     end
 
+    -- 3. Group map match
     if CollectGroupMap[pattern] then
         for _, groupName in ipairs(CollectGroupMap[pattern]) do
             if objLower == groupName:lower() then
@@ -1121,6 +1125,7 @@ local function IsCollectTarget(objectName)
     return false
 end
 
+-- ====================== หา collect item ใน workspace ======================
 local function FindCollectItems()
     local found = {}
     for _, obj in ipairs(workspace:GetDescendants()) do
@@ -1151,6 +1156,7 @@ local function FindNewCollectItems()
     return found
 end
 
+-- ====================== หา root part ของ item ======================
 local function GetItemRootPart(obj)
     if obj:IsA("Model") then
         return obj.PrimaryPart or obj:FindFirstChildOfClass("BasePart")
@@ -1160,6 +1166,7 @@ local function GetItemRootPart(obj)
     return nil
 end
 
+-- ====================== Tween ไปหา item ======================
 local function TweenToItem(itemRoot)
     if not itemRoot or not HumanoidRootPart then return end
     local targetPos = itemRoot.Position + Vector3.new(0, 3, 0)
@@ -1170,6 +1177,7 @@ local function TweenToItem(itemRoot)
     tween.Completed:Wait()
 end
 
+-- ====================== กด ProximityPrompt ของ item ======================
 local function ActivateItemPrompts(obj)
     pcall(function()
         local function tryPrompt(target)
@@ -1201,10 +1209,12 @@ local function ActivateItemPrompts(obj)
     end)
 end
 
+-- ====================== เช็คว่า item ถูกเก็บแล้ว ======================
 local function IsItemGone(obj)
     return not obj or not obj.Parent
 end
 
+-- ====================== เก็บ item ตัวเดียว ======================
 local function CollectSingleItem(obj)
     if IsItemGone(obj) then return end
     local itemRoot = GetItemRootPart(obj)
@@ -1253,6 +1263,7 @@ local function CollectSingleItem(obj)
     KnownCollectItems[obj] = true
 end
 
+-- ====================== เช็คว่า mob ทุกตัวตายหมดแล้ว ======================
 local function AllMobsDead()
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return true end
@@ -1262,6 +1273,7 @@ local function AllMobsDead()
     return true
 end
 
+-- ====================== Collect Loop หลัก ======================
 local function StartAutoCollectLoop()
     if CollectRunning then return end
     CollectRunning = true
@@ -1366,8 +1378,10 @@ local function StartAutoCollectLoop()
     end)
 end
 
+-- ====================== ตรวจ item ใหม่ที่ spawn เข้า workspace ======================
 workspace.DescendantAdded:Connect(function(obj)
     if not AutoCollectEnabled or #SelectedCollectItems == 0 then return end
+    -- ใช้ IsCollectTarget แทน table.find
     if not IsCollectTarget(obj.Name) then return end
     if not (obj:IsA("Model") or obj:IsA("MeshPart") or obj:IsA("Part") or obj:IsA("BasePart")) then return end
     print("[DYHUB] Collect: New item detected: " .. obj.Name)
@@ -1634,7 +1648,7 @@ local PaddingReduceInput = Main:Input({
 local PaddingSafeInput = Main:Input({
     Title = "Set Padding Safe",
     Default = tostring(PADDING_SAFE_MIN),
-    Placeholder = "Default: -30",
+    Placeholder = "Default: -25",
     Callback = function(text)
         local num = tonumber(text)
         if num then
@@ -1717,7 +1731,7 @@ local FlushAuraValue = Config:Get("FlushAuraValue", 5)
 
 Main:Slider({
     Title    = "Flush Aura (stud)",
-    Value    = { Min = 1, Max = 30, Default = FlushAuraValue },
+    Value    = { Min = 1, Max = 15, Default = FlushAuraValue },
     Step     = 1,
     Callback = function(value)
         FlushAuraValue = value
@@ -1797,6 +1811,7 @@ local ESP = {
     _playerHighlights = {},
     _itemHighlights   = {},
     _connections = {},
+    -- ESP Item Dropdown ใช้ list เดียวกับ CollectItems
     ItemList = {
         "Clock Spider",
         "X-18 Core",
@@ -1812,9 +1827,13 @@ local ESP = {
     MobList = {},
 }
 
+-- ====================== ESP MATCH HELPER ======================
+-- ใช้ logic เดียวกับ Collect (prefix + group map)
 local function IsESPItemTarget(objectName, selectedList)
     for _, pattern in ipairs(selectedList) do
+        -- Exact
         if objectName:lower() == pattern:lower() then return true end
+        -- Prefix
         if #objectName > #pattern then
             if objectName:lower():sub(1, #pattern) == pattern:lower() then
                 local nc = objectName:lower():sub(#pattern + 1, #pattern + 1)
@@ -1823,6 +1842,7 @@ local function IsESPItemTarget(objectName, selectedList)
                 end
             end
         end
+        -- Group map
         if CollectGroupMap[pattern] then
             for _, gName in ipairs(CollectGroupMap[pattern]) do
                 if objectName:lower() == gName:lower() then return true end
@@ -2089,6 +2109,7 @@ local function ScanItems()
     local function CheckDescendants(container)
         for _, obj in ipairs(container:GetDescendants()) do
             if not ESP._itemHighlights[obj] then
+                -- ใช้ IsESPItemTarget แทน table.find
                 if IsESPItemTarget(obj.Name, ESP.SelectedItems) then
                     local root = GetItemRoot(obj)
                     if root and IsInRange(root) then
@@ -2145,6 +2166,7 @@ workspace.DescendantAdded:Connect(function(obj)
     if not ESP.Enabled or not ESP.ItemEnabled then return end
     if #ESP.SelectedItems == 0 then return end
     task.wait(0.1)
+    -- ใช้ IsESPItemTarget แทน table.find
     if IsESPItemTarget(obj.Name, ESP.SelectedItems) then
         if not ESP._itemHighlights[obj] then
             local root = GetItemRoot(obj)
@@ -2387,7 +2409,6 @@ Main2:Button({
     end,
 })
 
--- ====================== UI: GAMEMODE TAB ======================
 Main7:Section({ Title = "Casual Information", TextXAlignment = "Center", TextSize = 17 })
 Main7:Divider()
 
@@ -2421,6 +2442,7 @@ local AutoVoteToggle = Main7:Toggle({
     Value = AutoVoteEnabled,
     Callback = function(enabled)
         AutoVoteEnabled = enabled
+
         Config:Set("AutoVoteEnabled", enabled)
         Config:Save()
 
@@ -2435,6 +2457,7 @@ local AutoVoteToggle = Main7:Toggle({
                                     [2] = AutoVoteValue
                                 }
                             }
+                            
                             game:GetService("ReplicatedStorage").MainHandler:FireServer(unpack(args))
                         end)
                     end
@@ -2445,7 +2468,7 @@ local AutoVoteToggle = Main7:Toggle({
     end
 })
 
--- ====================== UI: SHOP TAB ======================
+-- ====================== UI: AUTO BUY ======================
 Main5:Section({ Title = "Shop Weapon", Icon = "helicopter" })
 
 local AutoBuyWeaponValue = Config:Get("AutoBuyWeaponValue", "Stungun")
@@ -2550,7 +2573,10 @@ Main5:Button({
     end
 })
 
--- ====================== UI: COLLECT TAB ======================
+-- ============================================================
+-- ====================== UI: COLLECT TAB =====================
+-- ============================================================
+
 Main6:Section({ Title = "Collect Item", Icon = "package" })
 
 local AutoCollectToggle = Main6:Toggle({
@@ -2596,6 +2622,10 @@ local CollectModeDropdown = Main6:Dropdown({
 })
 
 -- ====================== UI: MISC TAB ======================
+-- ====================== UI: MISC TAB ======================
+Main3:Section({ Title = "Miscellaneous", Icon = "settings" })
+
+-- เพิ่ม Section Save Config
 Main3:Section({ Title = "Save Config", Icon = "save" })
 
 Main3:Button({
@@ -2611,6 +2641,26 @@ Main3:Button({
     end
 })
 
+local AutoSaveEnabled = Config:Get("AutoSaveEnabled", true)
+local AutoSaveDelay = Config:Get("AutoSaveDelay", 15)
+local AutoSaveThread = nil
+
+local function RestartAutoSave()
+    if AutoSaveThread then
+        task.cancel(AutoSaveThread)
+        AutoSaveThread = nil
+    end
+    if AutoSaveEnabled then
+        AutoSaveThread = task.spawn(function()
+            while AutoSaveEnabled do
+                task.wait(AutoSaveDelay)
+                Config:Save()
+                print("[DYHUB] Auto saved config every " .. AutoSaveDelay .. "s")
+            end
+        end)
+    end
+end
+
 Main3:Toggle({
     Title = "Auto Save Config",
     Value = AutoSaveEnabled,
@@ -2618,24 +2668,79 @@ Main3:Toggle({
         AutoSaveEnabled = state
         Config:Set("AutoSaveEnabled", state)
         Config:Save()
-        Config:AutoSave(AutoSaveDelay)
+        RestartAutoSave()
     end
 })
 
 Main3:Input({
     Title = "Delay Save Config",
     Default = tostring(AutoSaveDelay),
-    Placeholder = "Delay (Ex: 15)",
+    Placeholder = "Default: 15",
     Callback = function(text)
         local num = tonumber(text)
-        if num and num > 0 then
+        if num and num >= 1 then
             AutoSaveDelay = num
             Config:Set("AutoSaveDelay", num)
             Config:Save()
-            Config:AutoSave(AutoSaveDelay)
+            RestartAutoSave()
         else
             warn("[DYHUB] Invalid delay value!")
         end
+    end
+})
+
+Main3:Section({ Title = "Server Status", Icon = "server" })
+
+Main3:Button({
+    Title = "Serverhop",
+    Callback = function()
+        local TeleportService = game:GetService("TeleportService")
+        local servers = {}
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(
+                game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100")
+            )
+        end)
+        if success and result and result.data then
+            for _, server in ipairs(result.data) do
+                if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                    table.insert(servers, server.id)
+                end
+            end
+        end
+        if #servers > 0 then
+            local randomServer = servers[math.random(1, #servers)]
+            WindUI:Notify({
+                Title = "Serverhop",
+                Content = "Teleporting to another server...",
+                Duration = 2,
+                Icon = "server",
+            })
+            task.wait(1)
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, LocalPlayer)
+        else
+            WindUI:Notify({
+                Title = "Serverhop Failed",
+                Content = "No available servers found.",
+                Duration = 3,
+                Icon = "alert-triangle",
+            })
+        end
+    end
+})
+
+Main3:Button({
+    Title = "Rejoin",
+    Callback = function()
+        WindUI:Notify({
+            Title = "Rejoin",
+            Content = "Rejoining server...",
+            Duration = 2,
+            Icon = "refresh-cw",
+        })
+        task.wait(1)
+        local TeleportService = game:GetService("TeleportService")
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
     end
 })
 
@@ -2678,28 +2783,6 @@ local antiafk = Main3:Toggle({
                 end
             end)
         end
-    end
-})
-
-Main3:Section({ Title = "Server Status", Icon = "server" })
-
-Main3:Button({
-    Title = "Serverhop",
-    Callback = function()
-        pcall(function()
-            local TeleportService = game:GetService("TeleportService")
-            TeleportService:Teleport(game.PlaceId, game.Players.LocalPlayer)
-        end)
-    end
-})
-
-Main3:Button({
-    Title = "Rejoin",
-    Callback = function()
-        pcall(function()
-            local TeleportService = game:GetService("TeleportService")
-            TeleportService:Teleport(game.PlaceId, game.Players.LocalPlayer)
-        end)
     end
 })
 
@@ -2753,4 +2836,4 @@ if AutoCollectEnabled then
 end
 
 print("[DYHUB] Version " .. version .. " loaded successfully!")
-print("[DYHUB] Config system active | Auto saving every " .. AutoSaveDelay .. " seconds")
+print("[DYHUB] Config system active | Auto saving every 15 seconds")
