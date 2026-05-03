@@ -1,4 +1,4 @@
--- v036.5
+-- v037
 -- =========================
 local version = "Rework"
 -- =========================
@@ -118,31 +118,43 @@ local HttpService = game:GetService("HttpService")
 
 local FreeVersion = "Free Version"
 local PremiumVersion = "Premium Version"
+local ExtraVersion = "Extra Version"
 
-local function checkVersion(playerName)
-    local url = "https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/listpremium.lua"
-
+local function getData(url)
     local success, response = pcall(function()
         return game:HttpGet(url)
     end)
 
     if not success then
-        return FreeVersion
+        return nil
     end
 
-    local premiumData
-    local func, err = loadstring(response)
+    local func = loadstring(response)
     if func then
-        premiumData = func()
-    else
-        return FreeVersion
+        return func()
     end
 
-    if premiumData[playerName] then
-        return PremiumVersion
-    else
-        return FreeVersion
+    return nil
+end
+
+local function checkVersion(playerName)
+    -- Extra check (priority สูงสุด)
+    local extraUrl = "https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/STBBList.lua"
+    local extraData = getData(extraUrl)
+
+    if extraData and extraData[playerName] then
+        return ExtraVersion
     end
+
+    -- Premium check
+    local premiumUrl = "https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/listpremium.lua"
+    local premiumData = getData(premiumUrl)
+
+    if premiumData and premiumData[playerName] then
+        return PremiumVersion
+    end
+
+    return FreeVersion
 end
 
 local player = Players.LocalPlayer
