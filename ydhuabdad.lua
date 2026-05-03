@@ -1,4 +1,4 @@
--- v031
+-- v032
 -- =========================
 local version = "Rework"
 -- =========================
@@ -21,7 +21,7 @@ if setfpscap then
     setfpscap(1000000)
     game:GetService("StarterGui"):SetCore("SendNotification", {
         Title = "dsc.gg/dyhub",
-        Text = "FPS Unlocked! | v019.5",
+        Text = "FPS Unlocked! | v019.6",
         Duration = 2,
         Button1 = "Okay"
     })
@@ -691,9 +691,9 @@ local function GetPriorityMob()
 end
 
 -- ====================== MOB HEIGHT OVERRIDE ======================
-local PADDING_REDUCE_STEP = Config:Get("PaddingReduceStep", 2.5)
+local PADDING_REDUCE_STEP = Config:Get("PaddingReduceStep", 3)
 local PADDING_SAFE_MIN = Config:Get("PaddingSafeMin", -30)
-local PADDING_CHECK_INTERVAL = Config:Get("PaddingCheckInterval", 1.5)
+local PADDING_CHECK_INTERVAL = Config:Get("PaddingCheckInterval", 1)
 
 local MobHeightOverride = {}
 local MobLastHealth = {}
@@ -1632,7 +1632,7 @@ Main:Section({ Title = "Override Settings", Icon = "ruler" })
 local PaddingReduceInput = Main:Input({
     Title = "Set Padding Reduce",
     Default = tostring(PADDING_REDUCE_STEP),
-    Placeholder = "Default: 2.5",
+    Placeholder = "Default: 3",
     Callback = function(text)
         local num = tonumber(text)
         if num then
@@ -1648,7 +1648,7 @@ local PaddingReduceInput = Main:Input({
 local PaddingSafeInput = Main:Input({
     Title = "Set Padding Safe",
     Default = tostring(PADDING_SAFE_MIN),
-    Placeholder = "Default: -25",
+    Placeholder = "Default: -30",
     Callback = function(text)
         local num = tonumber(text)
         if num then
@@ -1664,7 +1664,7 @@ local PaddingSafeInput = Main:Input({
 local PaddingCheckInput = Main:Input({
     Title = "Set Padding Check",
     Default = tostring(PADDING_CHECK_INTERVAL),
-    Placeholder = "Default: 1.5",
+    Placeholder = "Default: 1",
     Callback = function(text)
         local num = tonumber(text)
         if num then
