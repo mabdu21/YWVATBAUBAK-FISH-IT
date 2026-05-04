@@ -1,7 +1,7 @@
 -- v043
 -- =========================
 local version = "Rework"
-local ver = "v020.5"
+local ver = "v020.7"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -182,8 +182,8 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: v021",
-    Desc = "- [ Rework ] MOB HEIGHT OVERRIDE — Smart hit-confirm system + position memory\n- [ Fixed ] TARGET CFRAME — Ignore invisible hitbox blocks\n- [ Fixed ] Farm Height sync with Override\n- [ Rework ] Auto Vote Mode — Fire once on open + fire on respawn",
+    Title = "Update: 06/04/2026",
+    Desc = "- [ Fixed ] Target Cframe \n- [ Fixed ] Farm Height & Override\n- [ Rework ] Mob Height Override \n- [ Rework ] Auto Vote Mode",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
