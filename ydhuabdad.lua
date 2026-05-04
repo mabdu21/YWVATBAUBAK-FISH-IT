@@ -1,7 +1,7 @@
 -- v043
 -- =========================
 local version = "Rework"
-local ver = "v020.8"
+local ver = "v021.2"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -49,7 +49,7 @@ end
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
-local ConfigFolder = "DYHUB_REWORK_STBB"
+local ConfigFolder = "DYHUB_REWORK_V2_STBB"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
@@ -183,7 +183,7 @@ Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 06/04/2026",
-    Desc = "- [ Fixed ] Target Cframe \n- [ Fixed ] Farm Height & Override\n- [ Rework ] Mob Height Override \n- [ Rework ] Auto Vote Mode",
+    Desc = "- [ Fixed ] Mob Height Override \n- [ New ] Damage Threshold System \n- [ Improved ] Smart padding \n- [ UI ] Slider Damage Threshold",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
@@ -324,7 +324,7 @@ local IdlePosition           = CFrame.new(-23.3435822, 67, 0.341766357) * CFrame
 local SkillDelay             = Config:Get("SkillDelay", 1)
 local LoopDelay              = 0.5
 local TweenSpeed             = 1
-local HeightValue            = Config:Get("HeightValue", 4)
+local HeightValue            = Config:Get("HeightValue", 3)
 local NeedNoClip             = false
 local LockActive             = false
 local AutoStartConnection    = nil
@@ -536,168 +536,11 @@ local function GetPriorityMob()
 end
 
 -- ============================================================
--- ====================== MOB HEIGHT OVERRIDE v2 ==============
--- Smart hit-confirm system + confirmed position memory
+-- ====================== MOB VISUAL BOUNDS ===================
+-- ใช้ทั้งใน Height Override และ Target CFrame
 -- ============================================================
-
-local PADDING_REDUCE_STEP    = Config:Get("PaddingReduceStep", 2)
-local PADDING_SAFE_MIN       = Config:Get("PaddingSafeMin", -30)
-local PADDING_CHECK_INTERVAL = Config:Get("PaddingCheckInterval", 1)
-
--- ลำดับความสำคัญ:
---   1. ถ้ามี confirmedPadding → ใช้เลย (เคย hit 100% แล้ว)
---   2. ถ้ามี override → ใช้ override
---   3. fallback → HeightValue
-
-local MobHeightOverride   = {}   -- { [mob] = number }  override ชั่วคราว
-local MobConfirmedPadding = {}   -- { [mob] = number }  confirmed (hit ≥ 2 ครั้งติดกัน)
-local MobLastHealth       = {}   -- { [mob] = number }
-
-local function GetEffectivePadding(mob)
-    -- [FIX #3] ถ้ามี confirmed → ส่งคืนเลย (เป็นอิสระจาก HeightValue slider)
-    if MobConfirmedPadding[mob] ~= nil then
-        return MobConfirmedPadding[mob]
-    end
-    if MobHeightOverride[mob] ~= nil then
-        return MobHeightOverride[mob]
-    end
-    return HeightValue
-end
-
---[[
-    Smart Damage Checker v2
-    ─────────────────────────────────────────────────────────────
-    แนวคิด:
-    • ติดตาม HP ของ mob ทุก 0.3s
-    • เมื่อ HP ลด → นับ "hit streak"
-    • hit streak ≥ 2 ติดกัน → "confirmed" position → บันทึกไว้ถาวรสำหรับ mob นั้น
-    • ถ้าเลิก hit นาน > 2s → ลด padding ครั้งเดียว แล้วรอดูผล
-    • ถ้าเลิก hit นาน > 5s → ลดอีก (loop ปกติ)
-    • padding จะไม่ต่ำกว่า PADDING_SAFE_MIN
-    ─────────────────────────────────────────────────────────────
-]]
-
-local function StartDamageChecker(mob)
-    task.spawn(function()
-        local humanoid = mob and mob:FindFirstChild("Humanoid")
-        if not humanoid then return end
-
-        -- ถ้า mob นี้มี confirmed position อยู่แล้ว → ไม่ต้องรัน checker ใหม่
-        if MobConfirmedPadding[mob] ~= nil then
-            print("[DYHUB] DmgCheck: Using confirmed padding " .. MobConfirmedPadding[mob] .. " for " .. mob.Name)
-            return
-        end
-
-        MobLastHealth[mob]     = humanoid.Health
-        MobHeightOverride[mob] = MobHeightOverride[mob] or HeightValue  -- ใช้ HeightValue เป็นจุดเริ่ม
-
-        local lastDamageTime   = tick()
-        local noDamageTimer    = 0
-        local hitStreak        = 0          -- จำนวนครั้ง HP ลดติดต่อกัน
-        local lastWasHit       = false
-        local reducedOnce      = false      -- ป้องกันลดซ้ำใน window เดียว
-
-        print("[DYHUB] DmgCheck: Start for " .. mob.Name .. " | init padding=" .. GetEffectivePadding(mob))
-
-        while mob and mob.Parent and not IsMobDead(mob) and AutoFarmEnabled do
-            task.wait(0.3)
-
-            if not mob or not mob.Parent or IsMobDead(mob) then break end
-            humanoid = mob:FindFirstChild("Humanoid")
-            if not humanoid then break end
-
-            local currentHP = humanoid.Health
-            local lastHP    = MobLastHealth[mob] or currentHP
-            local gotHit    = currentHP < lastHP
-
-            if gotHit then
-                -- ── HP ลด = ตีโดน ──
-                lastDamageTime = tick()
-                noDamageTimer  = 0
-                reducedOnce    = false
-
-                if lastWasHit then
-                    hitStreak = hitStreak + 1
-                else
-                    hitStreak = 1
-                end
-                lastWasHit = true
-
-                local curPad = GetEffectivePadding(mob)
-                print("[DYHUB] HIT! streak=" .. hitStreak .. " pad=" .. curPad .. " mob=" .. mob.Name)
-
-                -- ── Confirmed: ตีโดน ≥ 2 ครั้งติดกัน = lock position ──
-                if hitStreak >= 2 and MobConfirmedPadding[mob] == nil then
-                    MobConfirmedPadding[mob] = curPad
-                    MobHeightOverride[mob]   = curPad
-                    print("[DYHUB] ✅ CONFIRMED padding=" .. curPad .. " for " .. mob.Name)
-                    break  -- หยุด checker — ใช้ confirmed ต่อจากนี้
-                end
-
-            else
-                -- ── HP ไม่ลด ──
-                lastWasHit    = false
-                hitStreak     = 0
-                noDamageTimer = tick() - lastDamageTime
-            end
-
-            -- ── ลด padding ครั้งแรกหลัง 2s ไม่โดน ──
-            if noDamageTimer >= 2.0 and not reducedOnce then
-                reducedOnce = true
-                local curPad = GetEffectivePadding(mob)
-                local newPad = math.max(curPad - PADDING_REDUCE_STEP, PADDING_SAFE_MIN)
-                if newPad ~= curPad then
-                    MobHeightOverride[mob] = newPad
-                    print("[DYHUB] ↓ no-hit 2s → pad " .. curPad .. " → " .. newPad .. " (" .. mob.Name .. ")")
-                end
-            end
-
-            -- ── ลด padding อีกครั้งทุก 5s ที่ยังไม่โดน ──
-            if noDamageTimer >= 5.5 then
-                lastDamageTime = tick()   -- reset รอบ
-                reducedOnce    = false
-                local curPad = GetEffectivePadding(mob)
-                local newPad = math.max(curPad - PADDING_REDUCE_STEP, PADDING_SAFE_MIN)
-                if newPad ~= curPad then
-                    MobHeightOverride[mob] = newPad
-                    print("[DYHUB] ↓↓ no-hit 5s → pad " .. curPad .. " → " .. newPad .. " (" .. mob.Name .. ")")
-                end
-            end
-
-            -- อัพเดท HP เทียบรอบ
-            MobLastHealth[mob] = currentHP
-        end
-
-        -- reset เมื่อ mob ตาย/หาย (แต่เก็บ confirmed ไว้ถ้ามี)
-        MobHeightOverride[mob] = nil
-        MobLastHealth[mob]     = nil
-        print("[DYHUB] DmgCheck: Done for " .. (mob and mob.Name or "?"))
-    end)
-end
-
--- เคลียร์ข้อมูลทั้งหมดของ mob (ใช้เมื่อ mob ถูก destroy หรือ respawn)
-local function ResetMobOverride(mob)
-    MobHeightOverride[mob]   = nil
-    MobConfirmedPadding[mob] = nil
-    MobLastHealth[mob]       = nil
-end
-
--- ============================================================
--- ====================== TARGET CFRAME (Fixed v2) ============
--- ============================================================
---[[
-    [FIX #2] ปัญหา: mob มีบล็อกล่องหนอยู่บน/ล่างตัว
-             ทำให้ GetBoundingBox() คืน size ที่ใหญ่เกินจริง
-    แนวทาง: ใช้เฉพาะ BasePart ที่ Transparency < 0.9 เพื่อหา
-             ความสูงจริงของ mob แทนการใช้ GetBoundingBox() ทั้งก้อน
-    
-    [FIX #3] HeightValue sync: padding ที่ส่งเข้า GetTargetCFrame
-             มาจาก GetEffectivePadding() เสมอ ซึ่ง respect
-             MobConfirmedPadding > MobHeightOverride > HeightValue
-]]
 
 local function GetMobVisualBounds(mob)
-    -- หา bounding box จาก part ที่ "มองเห็น" เท่านั้น (Transparency < 0.9)
     local minY, maxY = math.huge, -math.huge
     local centerX, centerZ, count = 0, 0, 0
 
@@ -714,10 +557,9 @@ local function GetMobVisualBounds(mob)
     end
 
     if count == 0 then
-        -- fallback → HumanoidRootPart
         local hrp = mob:FindFirstChild("HumanoidRootPart")
         if hrp then
-            return hrp.Position, hrp.Position.Y, hrp.Position.Y + 4
+            return hrp.Position, hrp.Position.Y - 2, hrp.Position.Y + 2
         end
         return Vector3.new(0, 0, 0), 0, 4
     end
@@ -728,26 +570,240 @@ local function GetMobVisualBounds(mob)
     return Vector3.new(cx, cy, cz), minY, maxY
 end
 
+-- ============================================================
+-- ====================== MOB HEIGHT OVERRIDE v3 ==============
+--
+-- ใหม่ใน v020.9:
+--   1. Anti-clip floor — padding ไม่ลดลงต่ำกว่า
+--      (minY_mob - playerHalfHeight + ANTI_CLIP_MARGIN) เพื่อไม่ให้ทะลุตัว mob
+--   2. Damage Threshold System — ถ้าตีโดนครั้งแรกแล้ว damage ≥ DmgThreshold
+--      ให้ confirmed ทันที (ไม่ต้องรอ streak 2)
+--   3. Streak confirm — ถ้า damage < threshold แต่โดน ≥ 2 ครั้งติดกัน ก็ confirmed
+-- ============================================================
+
+local PADDING_REDUCE_STEP    = Config:Get("PaddingReduceStep", 2)
+local PADDING_SAFE_MIN       = Config:Get("PaddingSafeMin", -30)
+local PADDING_CHECK_INTERVAL = Config:Get("PaddingCheckInterval", 1)
+
+-- [NEW v020.9] Damage Threshold — ตีเกินค่านี้ใน 1 tick = confirmed ทันที
+local DMG_THRESHOLD          = Config:Get("DmgThreshold", 100)
+
+-- [NEW v020.9] Anti-clip margin — ระยะกันชนจากก้นของ mob (studs)
+--   ผู้เล่น HRP อยู่สูงจากพื้น ~3 studs → margin ≥ 3 = ไม่ทะลุ
+--   ปรับได้ใน UI
+local ANTI_CLIP_MARGIN       = Config:Get("AntiClipMargin", 3)
+
+-- ครึ่งความสูง HRP ของผู้เล่น (ประมาณ)
+local PLAYER_HALF_HEIGHT     = 3
+
+local MobHeightOverride   = {}
+local MobConfirmedPadding = {}
+local MobLastHealth       = {}
+
+-- ============================================================
+-- GetAntiClipFloor — คำนวณ padding ต่ำสุดที่ไม่ทะลุตัว mob
+-- ถ้า position == "Above": floor ต้องอยู่เหนือ maxY (บน mob)
+--   → padding ≥ ANTI_CLIP_MARGIN (ออกมาด้านบน)
+-- ถ้า position == "Under": floor ต้องอยู่ต่ำกว่า minY (ใต้ mob)
+--   → padding ≥ ANTI_CLIP_MARGIN (ออกมาด้านล่าง)
+-- แต่เราไม่ต้องการให้ "ลงไปเกิน" ดังนั้น:
+--   Above: padding ≥ +ANTI_CLIP_MARGIN (บวก = อยู่บน)
+--   Under: padding ≥ +ANTI_CLIP_MARGIN (บวก = ออกห่างลงล่าง)
+-- ============================================================
+local function GetAntiClipFloor(mob, position)
+    local _, minY, maxY = GetMobVisualBounds(mob)
+    if position == "Above" then
+        -- เราอยู่เหนือ mob — padding ต่ำสุดคือ ANTI_CLIP_MARGIN เท่านั้น
+        -- (padding < 0 คืออยู่ต่ำลงมาจาก maxY, ถ้าต่ำเกินก็ทะลุ)
+        -- ถ้า mob สูง N studs → ห้ามลงต่ำกว่า -(visualHeight/2 - PLAYER_HALF_HEIGHT)
+        local visualHeight = maxY - minY
+        -- จุดกึ่งกลาง mob = center, maxY = หัว mob
+        -- เราวาง Y = maxY + padding, ห้าม Y < minY + PLAYER_HALF_HEIGHT + ANTI_CLIP_MARGIN
+        -- → maxY + padding ≥ minY + PLAYER_HALF_HEIGHT + ANTI_CLIP_MARGIN
+        -- → padding ≥ -(visualHeight) + PLAYER_HALF_HEIGHT + ANTI_CLIP_MARGIN
+        local floor = -(visualHeight) + PLAYER_HALF_HEIGHT + ANTI_CLIP_MARGIN
+        return floor
+    elseif position == "Under" then
+        -- เราอยู่ใต้ mob — วาง Y = minY - padding
+        -- ห้าม Y > maxY - PLAYER_HALF_HEIGHT - ANTI_CLIP_MARGIN (ไม่ให้ทะลุขึ้นไปข้างบน)
+        -- → minY - padding ≤ maxY - PLAYER_HALF_HEIGHT - ANTI_CLIP_MARGIN
+        -- → padding ≥ minY - (maxY - PLAYER_HALF_HEIGHT - ANTI_CLIP_MARGIN)
+        -- → padding ≥ -(visualHeight) + PLAYER_HALF_HEIGHT + ANTI_CLIP_MARGIN
+        local visualHeight = maxY - minY
+        local floor = -(visualHeight) + PLAYER_HALF_HEIGHT + ANTI_CLIP_MARGIN
+        return floor
+    end
+    return ANTI_CLIP_MARGIN
+end
+
+local function GetEffectivePadding(mob)
+    if MobConfirmedPadding[mob] ~= nil then
+        return MobConfirmedPadding[mob]
+    end
+    if MobHeightOverride[mob] ~= nil then
+        return MobHeightOverride[mob]
+    end
+    return HeightValue
+end
+
+-- ============================================================
+-- ClampPaddingToAntiClip — ป้องกันทะลุ mob
+-- เรียกก่อน set MobHeightOverride ทุกครั้ง
+-- ============================================================
+local function ClampPaddingToAntiClip(mob, padding)
+    local antiFloor = GetAntiClipFloor(mob, FarmPosition)
+    -- ห้าม padding ต่ำกว่า antiFloor
+    local clamped = math.max(padding, antiFloor)
+    -- ห้าม padding ต่ำกว่า PADDING_SAFE_MIN (global)
+    clamped = math.max(clamped, PADDING_SAFE_MIN)
+    return clamped
+end
+
+-- ============================================================
+-- Smart Damage Checker v3
+-- ─────────────────────────────────────────────────────────────
+-- ใหม่:
+--   • วัด damage จริงต่อ tick (HP drop magnitude)
+--   • ถ้า damage ≥ DMG_THRESHOLD → confirmed ทันที (no streak needed)
+--   • ถ้า damage < threshold แต่โดน ≥ 2 ครั้งติดกัน → confirmed
+--   • ลด padding ผ่าน ClampPaddingToAntiClip เสมอ (ป้องกันทะลุ)
+-- ─────────────────────────────────────────────────────────────
+
+local function StartDamageChecker(mob)
+    task.spawn(function()
+        local humanoid = mob and mob:FindFirstChild("Humanoid")
+        if not humanoid then return end
+
+        if MobConfirmedPadding[mob] ~= nil then
+            print("[DYHUB] DmgCheck: Using confirmed padding " .. MobConfirmedPadding[mob] .. " for " .. mob.Name)
+            return
+        end
+
+        MobLastHealth[mob]     = humanoid.Health
+        MobHeightOverride[mob] = ClampPaddingToAntiClip(mob, MobHeightOverride[mob] or HeightValue)
+
+        local lastDamageTime   = tick()
+        local noDamageTimer    = 0
+        local hitStreak        = 0
+        local lastWasHit       = false
+        local reducedOnce      = false
+
+        print("[DYHUB] DmgCheck v3: Start for " .. mob.Name .. " | init padding=" .. GetEffectivePadding(mob))
+
+        while mob and mob.Parent and not IsMobDead(mob) and AutoFarmEnabled do
+            task.wait(0.3)
+
+            if not mob or not mob.Parent or IsMobDead(mob) then break end
+            humanoid = mob:FindFirstChild("Humanoid")
+            if not humanoid then break end
+
+            local currentHP = humanoid.Health
+            local lastHP    = MobLastHealth[mob] or currentHP
+            local dmgDealt  = lastHP - currentHP   -- damage จริงใน tick นี้
+            local gotHit    = dmgDealt > 0
+
+            if gotHit then
+                lastDamageTime = tick()
+                noDamageTimer  = 0
+                reducedOnce    = false
+
+                if lastWasHit then
+                    hitStreak = hitStreak + 1
+                else
+                    hitStreak = 1
+                end
+                lastWasHit = true
+
+                local curPad = GetEffectivePadding(mob)
+                print("[DYHUB] HIT! dmg=" .. math.floor(dmgDealt) .. " streak=" .. hitStreak .. " pad=" .. curPad .. " mob=" .. mob.Name)
+
+                -- ── [NEW] Damage Threshold Confirm — ตีโดนดาเมจสูงครั้งแรกเลย ──
+                if dmgDealt >= DMG_THRESHOLD and MobConfirmedPadding[mob] == nil then
+                    MobConfirmedPadding[mob] = curPad
+                    MobHeightOverride[mob]   = curPad
+                    print("[DYHUB] ✅ CONFIRMED (threshold dmg=" .. math.floor(dmgDealt) .. "≥" .. DMG_THRESHOLD .. ") pad=" .. curPad .. " for " .. mob.Name)
+                    break
+                end
+
+                -- ── Streak Confirm — ตีโดน ≥ 2 ครั้งติดกัน (ไม่ต้องถึง threshold) ──
+                if hitStreak >= 2 and MobConfirmedPadding[mob] == nil then
+                    MobConfirmedPadding[mob] = curPad
+                    MobHeightOverride[mob]   = curPad
+                    print("[DYHUB] ✅ CONFIRMED (streak=" .. hitStreak .. ") pad=" .. curPad .. " for " .. mob.Name)
+                    break
+                end
+
+            else
+                lastWasHit    = false
+                hitStreak     = 0
+                noDamageTimer = tick() - lastDamageTime
+            end
+
+            -- ── ลด padding ครั้งแรกหลัง 2s ไม่โดน (ผ่าน anti-clip clamp) ──
+            if noDamageTimer >= 3 and not reducedOnce then
+                reducedOnce = true
+                local curPad = GetEffectivePadding(mob)
+                local rawNew = curPad - PADDING_REDUCE_STEP
+                local newPad = ClampPaddingToAntiClip(mob, rawNew)
+                if newPad ~= curPad then
+                    MobHeightOverride[mob] = newPad
+                    print("[DYHUB] ↓ no-hit 2s → pad " .. curPad .. " → " .. newPad .. " (" .. mob.Name .. ")")
+                else
+                    print("[DYHUB] ⛔ anti-clip floor hit at pad=" .. curPad .. " - stop reduce (" .. mob.Name .. ")")
+                end
+            end
+
+            -- ── ลด padding ต่อทุก 5s ที่ยังไม่โดน (ผ่าน anti-clip clamp) ──
+            if noDamageTimer >= 6 then
+                lastDamageTime = tick()
+                reducedOnce    = false
+                local curPad = GetEffectivePadding(mob)
+                local rawNew = curPad - PADDING_REDUCE_STEP
+                local newPad = ClampPaddingToAntiClip(mob, rawNew)
+                if newPad ~= curPad then
+                    MobHeightOverride[mob] = newPad
+                    print("[DYHUB] ↓↓ no-hit → pad " .. curPad .. " → " .. newPad .. " (" .. mob.Name .. ")")
+                else
+                    print("[DYHUB] ⛔ anti-clip floor - padding to floor then, stop (" .. mob.Name .. ")")
+                end
+            end
+
+            MobLastHealth[mob] = currentHP
+        end
+
+        MobHeightOverride[mob] = nil
+        MobLastHealth[mob]     = nil
+        print("[DYHUB] DmgCheck: Done for " .. (mob and mob.Name or "?"))
+    end)
+end
+
+local function ResetMobOverride(mob)
+    MobHeightOverride[mob]   = nil
+    MobConfirmedPadding[mob] = nil
+    MobLastHealth[mob]       = nil
+end
+
+-- ============================================================
+-- ====================== TARGET CFRAME =======================
+-- ============================================================
+
 local function GetTargetCFrame(mob, position)
-    local mobRoot     = mob:FindFirstChild("HumanoidRootPart")
+    local mobRoot = mob:FindFirstChild("HumanoidRootPart")
     if not mobRoot then return nil end
 
     local padding     = GetEffectivePadding(mob)
     local center, minY, maxY = GetMobVisualBounds(mob)
-    local visualHeight = maxY - minY  -- ความสูงจริงของ visual body
 
     if position == "Above" then
-        -- วางตำแหน่งเหนือหัวจริง (maxY) + padding
-        local targetPos  = Vector3.new(center.X, maxY + padding, center.Z)
-        local lookAt     = Vector3.new(center.X, maxY, center.Z)
-        local lookCF     = CFrame.new(targetPos, lookAt)
+        local targetPos = Vector3.new(center.X, maxY + padding, center.Z)
+        local lookAt    = Vector3.new(center.X, maxY, center.Z)
+        local lookCF    = CFrame.new(targetPos, lookAt)
         return lookCF * CFrame.Angles(math.rad(-10), 0, 0)
 
     elseif position == "Under" then
-        -- วางใต้เท้าจริง (minY) - padding
-        local targetPos  = Vector3.new(center.X, minY - padding, center.Z)
-        local lookAt     = Vector3.new(center.X, minY, center.Z)
-        local lookCF     = CFrame.new(targetPos, lookAt)
+        local targetPos = Vector3.new(center.X, minY - padding, center.Z)
+        local lookAt    = Vector3.new(center.X, minY, center.Z)
+        local lookCF    = CFrame.new(targetPos, lookAt)
         return lookCF * CFrame.Angles(math.rad(10), 0, 0)
     end
 end
@@ -923,8 +979,6 @@ end
 
 -- ============================================================
 -- ====================== AUTO VOTE MODE v2 ===================
--- ยิงครั้งแรกตอนเปิด → ยิงอีกครั้งตอน respawn → loop ไปเรื่อยๆ
--- ไม่มี task.wait(2) ในลูป — fire เดี่ยว ไม่วนซ้ำ
 -- ============================================================
 
 local AutoVoteEnabled       = Config:Get("AutoVoteEnabled", false)
@@ -932,8 +986,8 @@ local AutoVoteValue         = Config:Get("AutoVoteValue", "Normal Mode")
 local AutoVoteinGameEnabled = Config:Get("AutoVoteinGameEnabled", false)
 local AutoVoteValue2        = Config:Get("AutoVoteValue2", "Normal Mode")
 
-local _voteRespawnConn    = nil  -- connection สำหรับ Vote Mode (solo)
-local _voteIGRespawnConn  = nil  -- connection สำหรับ Vote Mode (in-game)
+local _voteRespawnConn    = nil
+local _voteIGRespawnConn  = nil
 
 local function FireVote_Solo()
     if not AutoVoteValue then return end
@@ -952,22 +1006,15 @@ local function FireVote_InGame()
 end
 
 local function SetupAutoVote_Solo(enabled)
-    -- ตัด connection เดิม
     if _voteRespawnConn then
         _voteRespawnConn:Disconnect()
         _voteRespawnConn = nil
     end
     if not enabled then return end
-
-    -- ยิงครั้งแรก
     FireVote_Solo()
-
-    -- ยิงอีกครั้งทุกครั้งที่ respawn
     _voteRespawnConn = LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(1.5)  -- รอ character โหลดเสร็จ
-        if AutoVoteEnabled then
-            FireVote_Solo()
-        end
+        task.wait(1.5)
+        if AutoVoteEnabled then FireVote_Solo() end
     end)
 end
 
@@ -977,16 +1024,10 @@ local function SetupAutoVote_InGame(enabled)
         _voteIGRespawnConn = nil
     end
     if not enabled then return end
-
-    -- ยิงครั้งแรก
     FireVote_InGame()
-
-    -- ยิงอีกครั้งทุกครั้งที่ respawn
     _voteIGRespawnConn = LocalPlayer.CharacterAdded:Connect(function()
         task.wait(1.5)
-        if AutoVoteinGameEnabled then
-            FireVote_InGame()
-        end
+        if AutoVoteinGameEnabled then FireVote_InGame() end
     end)
 end
 
@@ -1215,7 +1256,6 @@ end)
 -- ====================== MAIN FARM LOOP ======================
 local function StartFarmLoop()
     task.spawn(function()
-        -- idle hold loop
         task.spawn(function()
             while AutoFarmEnabled do
                 if WaitingRespawn and not LockActive then
@@ -1286,7 +1326,7 @@ local function StartFarmLoop()
                         TeleportToMob(mob)
                         LockToMob(mob)
                         repeat task.wait(0.1) until IsMobDead(mob) or not AutoFarmEnabled
-                        ResetMobOverride(mob)  -- เคลียร์ข้อมูลเมื่อ mob ตาย
+                        ResetMobOverride(mob)
                     end
                 end
             else
@@ -1340,7 +1380,6 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     Character       = char
     HumanoidRootPart = char:WaitForChild("HumanoidRootPart")
     Client          = LocalPlayer
-    -- reset override ทั้งหมดเมื่อ respawn (mob ก็ reset แล้ว)
     MobHeightOverride   = {}
     MobConfirmedPadding = {}
     MobLastHealth       = {}
@@ -1397,6 +1436,9 @@ MiscDropdown = Main:Dropdown({
     Callback = function(values) MiscOptions = values; HandleMiscOptions(values) end
 })
 
+-- ============================================================
+-- ====================== UI: OVERRIDE SETTINGS ===============
+-- ============================================================
 Main:Section({ Title = "Override Settings", Icon = "ruler" })
 
 PaddingReduceInput = Main:Input({
@@ -1411,13 +1453,39 @@ PaddingReduceInput = Main:Input({
 })
 
 PaddingSafeInput = Main:Input({
-    Title = "Set Padding Safe Min",
+    Title = "Set Padding Safe Min (Global Floor)",
     Default = tostring(PADDING_SAFE_MIN),
     Placeholder = "Default: -30",
     Callback = function(text)
         local num = tonumber(text)
         if num then PADDING_SAFE_MIN = num; Config:Set("PaddingSafeMin", num); Config:Save()
         else warn("Entered an incorrect number!") end
+    end
+})
+
+-- [NEW v020.9] Anti-Clip Margin Slider
+Main:Slider({
+    Title = "Anti-Clip Margin (studs)",
+    Value = { Min = 0, Max = 10, Default = ANTI_CLIP_MARGIN },
+    Step = 1,
+    Callback = function(value)
+        ANTI_CLIP_MARGIN = value
+        Config:Set("AntiClipMargin", value)
+        Config:Save()
+        print("[DYHUB] Anti-Clip Margin set to " .. value)
+    end
+})
+
+-- [NEW v020.9] Damage Threshold Slider
+Main:Slider({
+    Title = "Damage Threshold (confirm lock)",
+    Value = { Min = 1, Max = 500, Default = DMG_THRESHOLD },
+    Step = 1,
+    Callback = function(value)
+        DMG_THRESHOLD = value
+        Config:Set("DmgThreshold", value)
+        Config:Save()
+        print("[DYHUB] Damage Threshold set to " .. value)
     end
 })
 
@@ -1454,8 +1522,6 @@ SafeModeSlider = Main:Slider({
     Callback = function(value) SafeValue = value; Config:Set("SafeValue", value); Config:Save() end
 })
 
--- [FIX #3] Farm Height slider → update HeightValue เท่านั้น
--- Override/Confirmed จะไม่ถูก slider override ทับ
 FarmHeightSlider = Main:Slider({
     Title = "Farm Height (+Y)",
     Value = { Min = -30, Max = 30, Default = HeightValue },
@@ -1464,7 +1530,6 @@ FarmHeightSlider = Main:Slider({
         HeightValue = value
         Config:Set("HeightValue", value)
         Config:Save()
-        -- ล้าง override ที่ยังไม่ confirmed เพื่อ re-calibrate ด้วย base ใหม่
         for mob, _ in pairs(MobHeightOverride) do
             if MobConfirmedPadding[mob] == nil then
                 MobHeightOverride[mob] = nil
@@ -1965,7 +2030,6 @@ GameModeDropdown = Main7:Dropdown({
     end
 })
 
--- [FIX #4] Auto Vote Solo — fire once on open + fire on respawn
 AutoVoteToggle = Main7:Toggle({
     Title = "Auto Game Mode",
     Value = AutoVoteEnabled,
@@ -1988,7 +2052,6 @@ GameModeDropdown2 = Main7:Dropdown({
     end
 })
 
--- [FIX #4] Auto Vote In-Game — fire once on open + fire on respawn
 AutoVoteIGToggle = Main7:Toggle({
     Title = "Auto Vote Mode (In-Game)",
     Value = AutoVoteinGameEnabled,
@@ -2240,7 +2303,6 @@ if AutoCollectEnabled then
     StartAutoCollectLoop()
 end
 
--- [FIX #4] restore vote connections on load if they were enabled
 if AutoVoteEnabled then SetupAutoVote_Solo(true) end
 if AutoVoteinGameEnabled then SetupAutoVote_InGame(true) end
 
