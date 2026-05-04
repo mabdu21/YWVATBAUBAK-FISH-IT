@@ -1,7 +1,7 @@
 -- v043
 -- =========================
 local version = "Rework"
-local ver = "v020.7"
+local ver = "v020.8"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -324,7 +324,7 @@ local IdlePosition           = CFrame.new(-23.3435822, 67, 0.341766357) * CFrame
 local SkillDelay             = Config:Get("SkillDelay", 1)
 local LoopDelay              = 0.5
 local TweenSpeed             = 1
-local HeightValue            = Config:Get("HeightValue", 2)
+local HeightValue            = Config:Get("HeightValue", 4)
 local NeedNoClip             = false
 local LockActive             = false
 local AutoStartConnection    = nil
@@ -1457,7 +1457,7 @@ SafeModeSlider = Main:Slider({
 -- [FIX #3] Farm Height slider → update HeightValue เท่านั้น
 -- Override/Confirmed จะไม่ถูก slider override ทับ
 FarmHeightSlider = Main:Slider({
-    Title = "Farm Height (+Y)  [Base padding]",
+    Title = "Farm Height (+Y)",
     Value = { Min = -30, Max = 30, Default = HeightValue },
     Step = 1,
     Callback = function(value)
