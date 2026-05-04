@@ -1,4 +1,4 @@
--- v041
+-- v042
 -- =========================
 local version = "Rework"
 -- =========================
@@ -495,8 +495,8 @@ GlobalTables = {
 }
 
 -- ====================== CONFIG VARIABLES ======================
-local skillList = { "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B" }
-local skillDropdownValues = { "All", "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B" }
+local skillList = { "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B", "U" }
+local skillDropdownValues = { "All", "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B", "U" }
 
 -- ====================== STATE VARIABLES ======================
 local AutoFarmEnabled = Config:Get("AutoFarmEnabled", false)
