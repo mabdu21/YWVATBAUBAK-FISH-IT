@@ -1,6 +1,7 @@
 -- v043
 -- =========================
 local version = "Rework"
+local ver = "v020.1"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -55,7 +56,7 @@ if setfpscap then
     setfpscap(1000000)
     WindUI:Notify({
         Title = "Service",
-        Content = "FPS Unlocked! | v020",
+        Content = "FPS Unlocked! | " .. ver,
         Duration = 3,
         Icon = "cpu",
     })
@@ -750,7 +751,7 @@ local function GetPriorityMob()
 end
 
 -- ====================== MOB HEIGHT OVERRIDE ======================
-local PADDING_REDUCE_STEP = Config:Get("PaddingReduceStep", 3)
+local PADDING_REDUCE_STEP = Config:Get("PaddingReduceStep", 2)
 local PADDING_SAFE_MIN = Config:Get("PaddingSafeMin", -30)
 local PADDING_CHECK_INTERVAL = Config:Get("PaddingCheckInterval", 1)
 
@@ -803,7 +804,7 @@ local function StartDamageChecker(mob)
             end
 
             -- ⏱️ ครบ 2 วิหลังจาก "เคยตีเข้าแล้วแต่หยุดเข้า"
-            if noDamageTimer >= 2.67 and not triggered2sAfterHit then
+            if noDamageTimer >= 2.5 and not triggered2sAfterHit then
                 triggered2sAfterHit = true
 
                 local currentPad = GetEffectivePadding(mob)
@@ -816,7 +817,7 @@ local function StartDamageChecker(mob)
             end
 
             -- ⏱️ ทุก ๆ 5 วิถ้ายังไม่เข้าเลือด
-            if noDamageTimer >= 4.67 then
+            if noDamageTimer >= 5.5 then
                 lastDamageTime = tick() -- รีเซ็ตรอบ
 
                 local currentPad = GetEffectivePadding(mob)
@@ -1714,7 +1715,7 @@ Main:Section({ Title = "Override Settings", Icon = "ruler" })
 PaddingReduceInput = Main:Input({
     Title = "Set Padding Reduce",
     Default = tostring(PADDING_REDUCE_STEP),
-    Placeholder = "Default: 3",
+    Placeholder = "Default: 2",
     Callback = function(text)
         local num = tonumber(text)
         if num then
