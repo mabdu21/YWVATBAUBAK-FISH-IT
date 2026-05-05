@@ -1,7 +1,7 @@
 -- v043
 -- =========================
 local version = "Rework"
-local ver = "v021.4"
+local ver = "v021.5"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -182,8 +182,8 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 05/05/2026",
-    Desc = "- [ Fixed ] Dropdown ไม่ยิง FireServer อีกต่อไป (เลือกค่าเฉยๆ)\n- [ Fixed ] Auto Vote + Auto Start Sync\n- [ Improved ] Auto Vote + Auto Start loop on respawn\n- [ UI ] Slider Damage Threshold",
+    Title = "Update: 06/05/2026",
+    Desc = "- [ Fixed ] Auto Vote, Auto Start Sync\n- [ Improved ] Auto Vote, Auto Start loop on respawn",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
