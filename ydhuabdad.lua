@@ -1,7 +1,7 @@
--- v043
+-- v045
 -- =========================
 local version = "Rework"
-local ver = "v021.6"
+local ver = "v021.7"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -298,7 +298,6 @@ GlobalTables = {
     Mode  = { "Normal Mode", "Vague Memory", "Extreme Mode", "Hard Mode", "Insane Mode", "Nightmare Mode", "Boss Rush", "Dark Dimension", "Hell", "Mist", "Christmas Act 1", "Zombie Act 1", "Holdout", "Invasion" },
     Votes = {
         "Normal",
-        "100MVisit",
         "VeryHard",
         "Hard",
         "Insane",
@@ -310,7 +309,8 @@ GlobalTables = {
         "Christmas",
         "Zombie",
         "AstroV2",
-        "Astro"
+        "Astro",
+        "100MVisit"
     },
     Weapon = { "Stungun", "Flamethrower", "Harpoon Gun", "Shot Gun", "Pulse Rifle", "Shot Harpoon Gun", "EPD", "Small Laser Gun" },
     MiscShop = { "HeadPhone", "Titan-Request", "SpecialTitan-Request", "Speaker-Request", "Grenade", "Jetpack", "Lens" },
@@ -384,6 +384,8 @@ local AllyNames = {
     ["Helicopter Camera"]        = true,
     ["Heavy Soldier Toilet V1"]  = true,
     ["Rocket Heli v2"]           = true,
+    ["Gunner Camera man"]        = true,
+    ["Swat Mutant"]              = true,
 }
 
 local function IsAlly(mob)
