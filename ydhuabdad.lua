@@ -1,4 +1,4 @@
--- v045
+-- v048
 -- =========================
 local version = "Rework"
 local ver = "v021.7"
@@ -385,6 +385,7 @@ local AllyNames = {
     ["Heavy Soldier Toilet V1"]  = true,
     ["Rocket Heli v2"]           = true,
     ["Gunner Camera man"]        = true,
+    ["Attack Helicopter"]        = true,
     ["Swat Mutant"]              = true,
 }
 
