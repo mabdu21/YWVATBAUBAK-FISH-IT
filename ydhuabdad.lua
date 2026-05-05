@@ -1,4 +1,4 @@
--- v048
+-- v049
 -- =========================
 local version = "Rework"
 local ver = "v021.7"
@@ -387,6 +387,7 @@ local AllyNames = {
     ["Gunner Camera man"]        = true,
     ["Attack Helicopter"]        = true,
     ["Swat Mutant"]              = true,
+    ["Huge DJ Toilet"]           = true,
 }
 
 local function IsAlly(mob)
