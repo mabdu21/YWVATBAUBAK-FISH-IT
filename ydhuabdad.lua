@@ -1,7 +1,7 @@
 -- v043
 -- =========================
 local version = "Rework"
-local ver = "v021.2"
+local ver = "v021.4"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -182,8 +182,8 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 06/04/2026",
-    Desc = "- [ Fixed ] Mob Height Override \n- [ New ] Damage Threshold System \n- [ Improved ] Smart padding \n- [ UI ] Slider Damage Threshold",
+    Title = "Update: 05/05/2026",
+    Desc = "- [ Fixed ] Dropdown ไม่ยิง FireServer อีกต่อไป (เลือกค่าเฉยๆ)\n- [ Fixed ] Auto Vote + Auto Start Sync\n- [ Improved ] Auto Vote + Auto Start loop on respawn\n- [ UI ] Slider Damage Threshold",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
@@ -296,7 +296,22 @@ local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 GlobalTables = {
     redeemCodes = { "100MVisit2", "100MVisit1", "CamArmada", "CCTVBase", "ADelayedGameIsEventuallyGoodButRushedGameIsForeverBad" },
     Mode  = { "Normal Mode", "Vague Memory", "Extreme Mode", "Hard Mode", "Insane Mode", "Nightmare Mode", "Boss Rush", "Dark Dimension", "Hell", "Mist", "Christmas Act 1", "Zombie Act 1", "Holdout", "Invasion" },
-    Votes = { "Normal Mode", "Vague Memory", "Extreme Mode", "Hard Mode", "Insane Mode", "Nightmare Mode", "Boss Rush", "Dark Dimension", "Hell", "Mist", "Christmas Act 1", "Zombie Act 1", "Holdout", "Invasion" },
+    Votes = {
+        "Normal",
+        "100MVisit",
+        "VeryHard",
+        "Hard",
+        "Insane",
+        "Nightmare",
+        "BossRush",
+        "DarkDimension",
+        "Hell",
+        "ThunderStorm",
+        "Christmas",
+        "Zombie",
+        "AstroV2",
+        "Astro"
+    },
     Weapon = { "Stungun", "Flamethrower", "Harpoon Gun", "Shot Gun", "Pulse Rifle", "Shot Harpoon Gun", "EPD", "Small Laser Gun" },
     MiscShop = { "HeadPhone", "Titan-Request", "SpecialTitan-Request", "Speaker-Request", "Grenade", "Jetpack", "Lens" },
 }
@@ -537,7 +552,6 @@ end
 
 -- ============================================================
 -- ====================== MOB VISUAL BOUNDS ===================
--- ใช้ทั้งใน Height Override และ Target CFrame
 -- ============================================================
 
 local function GetMobVisualBounds(mob)
@@ -571,64 +585,27 @@ local function GetMobVisualBounds(mob)
 end
 
 -- ============================================================
--- ====================== MOB HEIGHT OVERRIDE v3 ==============
---
--- ใหม่ใน v020.9:
---   1. Anti-clip floor — padding ไม่ลดลงต่ำกว่า
---      (minY_mob - playerHalfHeight + ANTI_CLIP_MARGIN) เพื่อไม่ให้ทะลุตัว mob
---   2. Damage Threshold System — ถ้าตีโดนครั้งแรกแล้ว damage ≥ DmgThreshold
---      ให้ confirmed ทันที (ไม่ต้องรอ streak 2)
---   3. Streak confirm — ถ้า damage < threshold แต่โดน ≥ 2 ครั้งติดกัน ก็ confirmed
+-- ====================== MOB HEIGHT OVERRIDE =================
 -- ============================================================
 
 local PADDING_REDUCE_STEP    = Config:Get("PaddingReduceStep", 2)
 local PADDING_SAFE_MIN       = Config:Get("PaddingSafeMin", -30)
 local PADDING_CHECK_INTERVAL = Config:Get("PaddingCheckInterval", 1)
-
--- [NEW v020.9] Damage Threshold — ตีเกินค่านี้ใน 1 tick = confirmed ทันที
 local DMG_THRESHOLD          = Config:Get("DmgThreshold", 100)
-
--- [NEW v020.9] Anti-clip margin — ระยะกันชนจากก้นของ mob (studs)
---   ผู้เล่น HRP อยู่สูงจากพื้น ~3 studs → margin ≥ 3 = ไม่ทะลุ
---   ปรับได้ใน UI
 local ANTI_CLIP_MARGIN       = Config:Get("AntiClipMargin", 3)
-
--- ครึ่งความสูง HRP ของผู้เล่น (ประมาณ)
 local PLAYER_HALF_HEIGHT     = 3
 
 local MobHeightOverride   = {}
 local MobConfirmedPadding = {}
 local MobLastHealth       = {}
 
--- ============================================================
--- GetAntiClipFloor — คำนวณ padding ต่ำสุดที่ไม่ทะลุตัว mob
--- ถ้า position == "Above": floor ต้องอยู่เหนือ maxY (บน mob)
---   → padding ≥ ANTI_CLIP_MARGIN (ออกมาด้านบน)
--- ถ้า position == "Under": floor ต้องอยู่ต่ำกว่า minY (ใต้ mob)
---   → padding ≥ ANTI_CLIP_MARGIN (ออกมาด้านล่าง)
--- แต่เราไม่ต้องการให้ "ลงไปเกิน" ดังนั้น:
---   Above: padding ≥ +ANTI_CLIP_MARGIN (บวก = อยู่บน)
---   Under: padding ≥ +ANTI_CLIP_MARGIN (บวก = ออกห่างลงล่าง)
--- ============================================================
 local function GetAntiClipFloor(mob, position)
     local _, minY, maxY = GetMobVisualBounds(mob)
     if position == "Above" then
-        -- เราอยู่เหนือ mob — padding ต่ำสุดคือ ANTI_CLIP_MARGIN เท่านั้น
-        -- (padding < 0 คืออยู่ต่ำลงมาจาก maxY, ถ้าต่ำเกินก็ทะลุ)
-        -- ถ้า mob สูง N studs → ห้ามลงต่ำกว่า -(visualHeight/2 - PLAYER_HALF_HEIGHT)
         local visualHeight = maxY - minY
-        -- จุดกึ่งกลาง mob = center, maxY = หัว mob
-        -- เราวาง Y = maxY + padding, ห้าม Y < minY + PLAYER_HALF_HEIGHT + ANTI_CLIP_MARGIN
-        -- → maxY + padding ≥ minY + PLAYER_HALF_HEIGHT + ANTI_CLIP_MARGIN
-        -- → padding ≥ -(visualHeight) + PLAYER_HALF_HEIGHT + ANTI_CLIP_MARGIN
         local floor = -(visualHeight) + PLAYER_HALF_HEIGHT + ANTI_CLIP_MARGIN
         return floor
     elseif position == "Under" then
-        -- เราอยู่ใต้ mob — วาง Y = minY - padding
-        -- ห้าม Y > maxY - PLAYER_HALF_HEIGHT - ANTI_CLIP_MARGIN (ไม่ให้ทะลุขึ้นไปข้างบน)
-        -- → minY - padding ≤ maxY - PLAYER_HALF_HEIGHT - ANTI_CLIP_MARGIN
-        -- → padding ≥ minY - (maxY - PLAYER_HALF_HEIGHT - ANTI_CLIP_MARGIN)
-        -- → padding ≥ -(visualHeight) + PLAYER_HALF_HEIGHT + ANTI_CLIP_MARGIN
         local visualHeight = maxY - minY
         local floor = -(visualHeight) + PLAYER_HALF_HEIGHT + ANTI_CLIP_MARGIN
         return floor
@@ -646,28 +623,12 @@ local function GetEffectivePadding(mob)
     return HeightValue
 end
 
--- ============================================================
--- ClampPaddingToAntiClip — ป้องกันทะลุ mob
--- เรียกก่อน set MobHeightOverride ทุกครั้ง
--- ============================================================
 local function ClampPaddingToAntiClip(mob, padding)
     local antiFloor = GetAntiClipFloor(mob, FarmPosition)
-    -- ห้าม padding ต่ำกว่า antiFloor
     local clamped = math.max(padding, antiFloor)
-    -- ห้าม padding ต่ำกว่า PADDING_SAFE_MIN (global)
     clamped = math.max(clamped, PADDING_SAFE_MIN)
     return clamped
 end
-
--- ============================================================
--- Smart Damage Checker v3
--- ─────────────────────────────────────────────────────────────
--- ใหม่:
---   • วัด damage จริงต่อ tick (HP drop magnitude)
---   • ถ้า damage ≥ DMG_THRESHOLD → confirmed ทันที (no streak needed)
---   • ถ้า damage < threshold แต่โดน ≥ 2 ครั้งติดกัน → confirmed
---   • ลด padding ผ่าน ClampPaddingToAntiClip เสมอ (ป้องกันทะลุ)
--- ─────────────────────────────────────────────────────────────
 
 local function StartDamageChecker(mob)
     task.spawn(function()
@@ -699,7 +660,7 @@ local function StartDamageChecker(mob)
 
             local currentHP = humanoid.Health
             local lastHP    = MobLastHealth[mob] or currentHP
-            local dmgDealt  = lastHP - currentHP   -- damage จริงใน tick นี้
+            local dmgDealt  = lastHP - currentHP
             local gotHit    = dmgDealt > 0
 
             if gotHit then
@@ -717,7 +678,6 @@ local function StartDamageChecker(mob)
                 local curPad = GetEffectivePadding(mob)
                 print("[DYHUB] HIT! dmg=" .. math.floor(dmgDealt) .. " streak=" .. hitStreak .. " pad=" .. curPad .. " mob=" .. mob.Name)
 
-                -- ── [NEW] Damage Threshold Confirm — ตีโดนดาเมจสูงครั้งแรกเลย ──
                 if dmgDealt >= DMG_THRESHOLD and MobConfirmedPadding[mob] == nil then
                     MobConfirmedPadding[mob] = curPad
                     MobHeightOverride[mob]   = curPad
@@ -725,7 +685,6 @@ local function StartDamageChecker(mob)
                     break
                 end
 
-                -- ── Streak Confirm — ตีโดน ≥ 2 ครั้งติดกัน (ไม่ต้องถึง threshold) ──
                 if hitStreak >= 2 and MobConfirmedPadding[mob] == nil then
                     MobConfirmedPadding[mob] = curPad
                     MobHeightOverride[mob]   = curPad
@@ -739,7 +698,6 @@ local function StartDamageChecker(mob)
                 noDamageTimer = tick() - lastDamageTime
             end
 
-            -- ── ลด padding ครั้งแรกหลัง 2s ไม่โดน (ผ่าน anti-clip clamp) ──
             if noDamageTimer >= 3 and not reducedOnce then
                 reducedOnce = true
                 local curPad = GetEffectivePadding(mob)
@@ -753,7 +711,6 @@ local function StartDamageChecker(mob)
                 end
             end
 
-            -- ── ลด padding ต่อทุก 5s ที่ยังไม่โดน (ผ่าน anti-clip clamp) ──
             if noDamageTimer >= 6 then
                 lastDamageTime = tick()
                 reducedOnce    = false
@@ -978,17 +935,27 @@ local function stopNoBarrier()
 end
 
 -- ============================================================
--- ====================== AUTO VOTE MODE v2 ===================
+-- ====================== AUTO VOTE MODE v3 ===================
+-- [FIX v021.4]
+--   • Dropdown เลือกค่าเฉยๆ ไม่ยิง FireServer
+--   • Toggle เท่านั้นที่ trigger การทำงาน
+--   • Auto Vote + Auto Start Sync:
+--     ถ้าเปิดทั้งคู่ → ยิง vote → รอ 2.5s → ยิง start
+--     รอ respawn แล้วลูปใหม่
+--   • ถ้าเปิดแค่อันเดียว ทำงานแยกของมัน
 -- ============================================================
 
 local AutoVoteEnabled       = Config:Get("AutoVoteEnabled", false)
 local AutoVoteValue         = Config:Get("AutoVoteValue", "Normal Mode")
 local AutoVoteinGameEnabled = Config:Get("AutoVoteinGameEnabled", false)
-local AutoVoteValue2        = Config:Get("AutoVoteValue2", "Normal Mode")
+local AutoVoteValue2        = Config:Get("AutoVoteValue2", "Normal")
 
+-- Connection handles
 local _voteRespawnConn    = nil
 local _voteIGRespawnConn  = nil
+local _syncRespawnConn    = nil
 
+-- ─── Helper: ยิง Vote Solo (ใช้ค่า AutoVoteValue ปัจจุบัน) ───
 local function FireVote_Solo()
     if not AutoVoteValue then return end
     pcall(function()
@@ -997,6 +964,14 @@ local function FireVote_Solo()
     print("[DYHUB] AutoVote Solo fired: " .. tostring(AutoVoteValue))
 end
 
+-- ─── Helper: ยิง GetReady (Auto Start) ───
+local function FireGetReady()
+    task.wait(2.5)
+    pcall(function() ReplicatedStorage.GetReadyRemote:FireServer("1", true) end)
+    print("[DYHUB] AutoStart fired")
+end
+
+-- ─── Helper: ยิง Vote InGame ───
 local function FireVote_InGame()
     if not AutoVoteValue2 then return end
     pcall(function()
@@ -1005,19 +980,98 @@ local function FireVote_InGame()
     print("[DYHUB] AutoVote IG fired: " .. tostring(AutoVoteValue2))
 end
 
-local function SetupAutoVote_Solo(enabled)
-    if _voteRespawnConn then
-        _voteRespawnConn:Disconnect()
-        _voteRespawnConn = nil
-    end
+-- ────────────────────────────────────────────────────────────
+-- SYNC MODE: Auto Vote Solo + Auto Start ทั้งคู่เปิด
+-- ลำดับ: FireVote → รอ 2.5s → FireStart → รอ respawn → loop
+-- ────────────────────────────────────────────────────────────
+local function SetupSyncVoteAndStart()
+    -- ตัด connection เก่าทั้งหมดก่อน
+    if _voteRespawnConn then _voteRespawnConn:Disconnect(); _voteRespawnConn = nil end
+    if _syncRespawnConn then _syncRespawnConn:Disconnect(); _syncRespawnConn = nil end
+
+    -- ยิงครั้งแรก
+    FireVote_Solo()
+    task.spawn(function()
+        task.wait(2.5)
+        if AutoVoteEnabled and AutoStartEnabled then
+            FireGetReady()
+        end
+    end)
+
+    -- รอ respawn แล้วยิงใหม่
+    _syncRespawnConn = LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(1.5)
+        if AutoVoteEnabled and AutoStartEnabled then
+            FireVote_Solo()
+            task.spawn(function()
+                task.wait(2.5)
+                if AutoVoteEnabled and AutoStartEnabled then
+                    FireGetReady()
+                end
+            end)
+        end
+    end)
+    print("[DYHUB] Sync Mode: AutoVote + AutoStart active")
+end
+
+-- ────────────────────────────────────────────────────────────
+-- SOLO MODE: Auto Vote เปิดอย่างเดียว (ไม่มี Auto Start)
+-- ────────────────────────────────────────────────────────────
+local function SetupAutoVote_SoloOnly(enabled)
+    if _voteRespawnConn then _voteRespawnConn:Disconnect(); _voteRespawnConn = nil end
     if not enabled then return end
     FireVote_Solo()
     _voteRespawnConn = LocalPlayer.CharacterAdded:Connect(function()
         task.wait(1.5)
-        if AutoVoteEnabled then FireVote_Solo() end
+        if AutoVoteEnabled and not AutoStartEnabled then
+            FireVote_Solo()
+        end
     end)
+    print("[DYHUB] AutoVote Solo-only active")
 end
 
+-- ────────────────────────────────────────────────────────────
+-- AUTO START ONLY: Auto Start เปิดอย่างเดียว (ไม่มี Auto Vote)
+-- (เดิม) ยิง GetReady + รอ respawn loop
+-- ────────────────────────────────────────────────────────────
+local function SetupAutoStartOnly(enabled)
+    if AutoStartConnection then AutoStartConnection:Disconnect(); AutoStartConnection = nil end
+    if not enabled then return end
+    FireGetReady()
+    AutoStartConnection = LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(1)
+        if AutoStartEnabled and not AutoVoteEnabled then
+            task.spawn(FireGetReady)
+        end
+    end)
+    print("[DYHUB] AutoStart-only active")
+end
+
+-- ────────────────────────────────────────────────────────────
+-- MASTER SETUP: เรียกทุกครั้งที่ toggle เปลี่ยน
+-- ────────────────────────────────────────────────────────────
+local function RefreshVoteAndStartSetup()
+    -- ล้าง connection ทั้งหมดก่อน
+    if _voteRespawnConn   then _voteRespawnConn:Disconnect();   _voteRespawnConn   = nil end
+    if _syncRespawnConn   then _syncRespawnConn:Disconnect();   _syncRespawnConn   = nil end
+    if AutoStartConnection then AutoStartConnection:Disconnect(); AutoStartConnection = nil end
+
+    if AutoVoteEnabled and AutoStartEnabled then
+        -- ทั้งคู่เปิด → Sync Mode
+        SetupSyncVoteAndStart()
+    elseif AutoVoteEnabled and not AutoStartEnabled then
+        -- Vote อย่างเดียว
+        SetupAutoVote_SoloOnly(true)
+    elseif not AutoVoteEnabled and AutoStartEnabled then
+        -- Start อย่างเดียว
+        SetupAutoStartOnly(true)
+    else
+        -- ทั้งคู่ปิด — ไม่ทำอะไร
+        print("[DYHUB] AutoVote + AutoStart both off")
+    end
+end
+
+-- ─── InGame Vote (แยกอิสระ ไม่ sync กับ AutoStart) ───
 local function SetupAutoVote_InGame(enabled)
     if _voteIGRespawnConn then
         _voteIGRespawnConn:Disconnect()
@@ -1031,23 +1085,19 @@ local function SetupAutoVote_InGame(enabled)
     end)
 end
 
--- ====================== AUTO START SYSTEM ======================
-local function FireGetReady()
-    task.wait(2.5)
-    pcall(function() ReplicatedStorage.GetReadyRemote:FireServer("1", true) end)
-end
-
+-- ============================================================
+-- ====================== AUTO START (Misc Farm Sync) =========
+-- ใช้ RefreshVoteAndStartSetup แทน StartAutoStart/StopAutoStart เดิม
+-- เพื่อ sync กับ AutoVote
+-- ============================================================
 local function StartAutoStart()
-    FireGetReady()
-    if AutoStartConnection then AutoStartConnection:Disconnect(); AutoStartConnection = nil end
-    AutoStartConnection = LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(1)
-        if AutoStartEnabled and AutoFarmEnabled then FireGetReady() end
-    end)
+    AutoStartEnabled = true
+    RefreshVoteAndStartSetup()
 end
 
 local function StopAutoStart()
-    if AutoStartConnection then AutoStartConnection:Disconnect(); AutoStartConnection = nil end
+    AutoStartEnabled = false
+    RefreshVoteAndStartSetup()
 end
 
 -- ====================== TELEPORT TO IDLE ======================
@@ -1344,7 +1394,6 @@ end
 -- ====================== MISC OPTIONS HANDLER ======================
 local function HandleMiscOptions(selectedOptions)
     MiscOptions = selectedOptions
-    if not AutoFarmEnabled then return end
 
     local hasAutoAttack = table.find(selectedOptions, "Auto Attack")
     if hasAutoAttack and not AutoAttackEnabled then AutoAttackEnabled = true; StartAutoAttack()
@@ -1363,12 +1412,18 @@ local function HandleMiscOptions(selectedOptions)
 
     SafeModeEnabled = table.find(selectedOptions, "Safe Mode") ~= nil
 
+    -- Auto Start sync กับ Auto Vote
     local hasAutoStart = table.find(selectedOptions, "Auto Start")
-    if hasAutoStart and not AutoStartEnabled then AutoStartEnabled = true; StartAutoStart()
-    elseif not hasAutoStart and AutoStartEnabled then AutoStartEnabled = false; StopAutoStart() end
+    if hasAutoStart and not AutoStartEnabled then
+        -- StartAutoStart จะเรียก RefreshVoteAndStartSetup ให้ sync กับ AutoVote อัตโนมัติ
+        StartAutoStart()
+    elseif not hasAutoStart and AutoStartEnabled then
+        StopAutoStart()
+    end
 
     local hasAutoFillUp = table.find(selectedOptions, "Auto Fill Up")
-    if hasAutoFillUp and not AutoFillUpEnabled then AutoFillUpEnabled = true; StartAutoFillUpLoop()
+    if hasAutoFillUp and not AutoFillUpEnabled then
+        if AutoFarmEnabled then AutoFillUpEnabled = true; StartAutoFillUpLoop() end
     elseif not hasAutoFillUp then AutoFillUpEnabled = false; FillUpRunning = false end
 
     Config:Set("MiscOptions", selectedOptions)
@@ -1404,7 +1459,7 @@ AutoFarmToggle = Main:Toggle({
             AutoAttackEnabled = false; AutoSkillEnabled = false
             AutoSkipHeliEnabled = false; AutoFillUpEnabled = false
             FillUpRunning = false
-            if AutoStartEnabled then AutoStartEnabled = false; StopAutoStart() end
+            if AutoStartEnabled then StopAutoStart() end
         end
         Config:Set("AutoFarmEnabled", state); Config:Save()
     end
@@ -1463,7 +1518,6 @@ PaddingSafeInput = Main:Input({
     end
 })
 
--- [NEW v020.9] Anti-Clip Margin Slider
 Main:Slider({
     Title = "Anti-Clip Margin (studs)",
     Value = { Min = 0, Max = 10, Default = ANTI_CLIP_MARGIN },
@@ -1476,7 +1530,6 @@ Main:Slider({
     end
 })
 
--- [NEW v020.9] Damage Threshold Slider
 Main:Slider({
     Title = "Damage Threshold (confirm lock)",
     Value = { Min = 1, Max = 500, Default = DMG_THRESHOLD },
@@ -2020,44 +2073,69 @@ Main7:Paragraph({
 Main7:Divider()
 Main7:Section({ Title = "Game Mode", Icon = "gamepad-2" })
 
+-- [FIX v021.4] Dropdown เลือกค่าเฉยๆ ไม่ยิง FireServer
 GameModeDropdown = Main7:Dropdown({
     Title = "Set Game Mode",
-    Values = GlobalTables.Mode, Multi = false, Value = AutoVoteValue,
+    Values = GlobalTables.Mode,
+    Multi = false,
+    Value = AutoVoteValue,
     Callback = function(value)
+        -- บันทึกค่าเฉยๆ ไม่ยิง FireServer
         AutoVoteValue = value
-        ReplicatedStorage:WaitForChild("Vote"):FireServer(value)
-        Config:Set("AutoVoteValue", value); Config:Save()
+        Config:Set("AutoVoteValue", value)
+        Config:Save()
+        print("[DYHUB] Game Mode selected: " .. tostring(value) .. " (toggle to activate)")
     end
 })
 
+-- [FIX v021.4] Toggle เท่านั้นที่ยิง + sync กับ AutoStart
 AutoVoteToggle = Main7:Toggle({
-    Title = "Auto Game Mode",
+    Title = "Auto Game Mode (Lobby)",
     Value = AutoVoteEnabled,
     Callback = function(enabled)
         AutoVoteEnabled = enabled
-        Config:Set("AutoVoteEnabled", enabled); Config:Save()
-        SetupAutoVote_Solo(enabled)
+        Config:Set("AutoVoteEnabled", enabled)
+        Config:Save()
+        -- RefreshVoteAndStartSetup จัดการ sync กับ AutoStart ให้อัตโนมัติ
+        RefreshVoteAndStartSetup()
     end
 })
 
+Main7:Divider()
+Main7:Section({ Title = "Vote Information", TextXAlignment = "Center", TextSize = 17 })
+Main7:Divider()
+Main7:Paragraph({
+    Title = "Auto Vote: Game Mode",
+    Desc = "- [ Step 1 ] Stay in the Lobby (inside a game)\n- [ Step 2 ] Set Auto Vote & Wait",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+})
+Main7:Divider()
 Main7:Section({ Title = "Vote Mode", Icon = "gamepad-2" })
 
+-- [FIX v021.4] Dropdown เลือกค่าเฉยๆ ไม่ยิง FireServer
 GameModeDropdown2 = Main7:Dropdown({
     Title = "Set Vote Mode",
-    Values = GlobalTables.Votes, Multi = false, Value = AutoVoteValue2,
+    Values = GlobalTables.Votes,
+    Multi = false,
+    Value = AutoVoteValue2,
     Callback = function(value)
+        -- บันทึกค่าเฉยๆ ไม่ยิง FireServer
         AutoVoteValue2 = value
-        ReplicatedStorage:WaitForChild("Vote"):FireServer(value)
-        Config:Set("AutoVoteValue2", value); Config:Save()
+        Config:Set("AutoVoteValue2", value)
+        Config:Save()
+        print("[DYHUB] Vote Mode selected: " .. tostring(value) .. " (toggle to activate)")
     end
 })
 
+-- [FIX v021.4] Toggle เท่านั้นที่ยิง (แยกอิสระจาก AutoStart)
 AutoVoteIGToggle = Main7:Toggle({
     Title = "Auto Vote Mode (In-Game)",
     Value = AutoVoteinGameEnabled,
     Callback = function(enabled)
         AutoVoteinGameEnabled = enabled
-        Config:Set("AutoVoteinGameEnabled", enabled); Config:Save()
+        Config:Set("AutoVoteinGameEnabled", enabled)
+        Config:Save()
         SetupAutoVote_InGame(enabled)
     end
 })
@@ -2303,7 +2381,11 @@ if AutoCollectEnabled then
     StartAutoCollectLoop()
 end
 
-if AutoVoteEnabled then SetupAutoVote_Solo(true) end
+-- [FIX v021.4] ใช้ RefreshVoteAndStartSetup แทนการเรียกแยก
+if AutoVoteEnabled or AutoStartEnabled then
+    RefreshVoteAndStartSetup()
+end
+
 if AutoVoteinGameEnabled then SetupAutoVote_InGame(true) end
 
 print("[DYHUB] Version " .. version .. " " .. ver .. " loaded successfully!")
