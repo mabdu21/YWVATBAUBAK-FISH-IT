@@ -1,7 +1,7 @@
 -- v043
 -- =========================
 local version = "Rework"
-local ver = "v021.5"
+local ver = "v021.6"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -183,7 +183,7 @@ Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 06/05/2026",
-    Desc = "- [ Fixed ] Auto Vote, Auto Start Sync\n- [ Improved ] Auto Vote, Auto Start loop on respawn",
+    Desc = "- [ Fixed ] Auto Vote & Start Sync\n- [ Improved ] Auto Vote & Start loop on respawn",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
@@ -378,11 +378,12 @@ end
 
 -- ====================== ALLY SYSTEM ======================
 local AllyNames = {
-    ["Heavy Soldier Toilet V2"] = true,
+    ["Heavy Soldier Toilet V2"]  = true,
     ["Quad Laser Toilet"]        = true,
     ["Strider Rocket Laser"]     = true,
     ["Helicopter Camera"]        = true,
     ["Heavy Soldier Toilet V1"]  = true,
+    ["Rocket Heli v2"]           = true,
 }
 
 local function IsAlly(mob)
