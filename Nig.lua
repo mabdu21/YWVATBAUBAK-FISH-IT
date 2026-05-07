@@ -1,3 +1,5 @@
+-- speed
+
 repeat task.wait() until game:IsLoaded()
 
 local vu = game:GetService("VirtualUser")
@@ -28,8 +30,8 @@ end
 
 local cfg = {
     f = {["Auto Farm"] = false, ["Auto Rebirth"] = false, ["Auto Bonus"] = false, ["Auto Collect"] = false},
-    s = {sp = 1.5, rs = 3, chk = 20},
-    p = {st = Vector3.new(700,3,236), wt = Vector3.new(677,-7,235), fn = Vector3.new(700,3,235), tx = 610}
+    s = {sp = 1.5, spfn = 0.2, rs = 3, chk = 20},
+    p = {st = Vector3.new(700,3,236), wt = Vector3.new(677,-7,235), fn = Vector3.new(700,3,235), tx = 605}
 }
 
 local p,ts,rs,w = game:GetService("Players").LocalPlayer, game:GetService("TweenService"), game:GetService("ReplicatedStorage"), workspace
@@ -160,7 +162,7 @@ function run()
                     local rp = m and (m:FindFirstChild("RootPart") or m:FindFirstChildWhichIsA("BasePart"))
                 until not cfg.f["Auto Farm"] or is_collecting or (rp and rp.Position.X >= cfg.p.tx) or p.Character.Humanoid.Health <= 0
                 if not is_collecting and p.Character.Humanoid.Health > 0 then
-                    say("Nigga Victory! Resetting position.") tw(cfg.p.fn, cfg.s.sp)
+                    say("Nigga Survived! Resetting position.") tw(cfg.p.fn, cfg.s.spfn)
                     farm_count = farm_count + 1
                 end
             end
@@ -237,6 +239,6 @@ dcL.Size = UDim2.new(1,0,0,25) dcL.Position = UDim2.new(0,0,1,-30)
 dcL.Text = "dsc.gg/dyhub (Copy Link)" dcL.TextColor3 = Color3.fromRGB(88, 101, 242)
 dcL.Font = "Gotham" dcL.TextSize = 10 dcL.BackgroundTransparency = 1
 dcL.MouseButton1Click:Connect(function()
-    setclipboard("https://dsc.gg/dyhub")
+    setclipboard("nigga credit script by https://dsc.gg/dyhub")
     say("Support link copied!")
 end)
