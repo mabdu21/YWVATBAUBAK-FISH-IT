@@ -1,0 +1,90 @@
+# Auto Farm Systems Recommended Upgrade
+
+## PRIORITY SYSTEMS
+- Helicopter Priority Override
+- Dynamic HP Priority Switching
+- Real-Time Target Recheck
+- Closest Target Fallback
+- Smart Target Lock
+
+## PERFORMANCE SYSTEMS
+- FPS Boost Mode
+- Auto Garbage Cleanup
+- Effect Remover
+- Lag Reduction
+- Smart Render Distance
+
+## COMBAT SYSTEMS
+- Auto Skill Combo
+- Smart Skill Rotation
+- Damage Detection
+- Critical Hit Timing
+- Auto Finish Low HP Mobs
+
+## MOVEMENT SYSTEMS
+- Smart Tween
+- Anti Stuck
+- Pathfinding Avoid Walls
+- Fast Teleport
+- Safe Teleport Validation
+
+## SAFETY SYSTEMS
+- Anti Void
+- Anti Fall
+- Auto Respawn
+- Auto Rejoin
+- Anti AFK
+
+## FARM AI IMPROVEMENTS
+- Boss Detection
+- Elite Priority
+- Spawn Prediction
+- Mob Group Detection
+- Auto Gather
+
+## HELICOPTER SYSTEM
+- Instant Detection
+- Mid Combat Interrupt
+- Spawn Scan Loop
+- Closest Helicopter Priority
+- Auto Air Position
+
+## TARGET SYSTEM
+Priority Order:
+1. Helicopter
+2. Highest HP Mob
+3. Closest Mob
+4. Lowest HP Mob
+
+Dynamic Switching:
+- If stronger mob appears -> instantly switch
+- If helicopter appears -> override all targets
+- If current target dies -> next highest priority target
+
+## SYSTEMS THAT SHOULD BE REWRITTEN
+- Tween Engine
+- Mob Detection
+- Attack Loop
+- Remote Spam Protection
+- Auto Equip
+- Cache System
+- Target Validation
+- Distance Calculation
+
+## BEST FUTURE FEATURES
+- AI Farming Brain
+- Smart Prediction
+- Adaptive Attack Speed
+- Smart Cooldown Manager
+- Auto Dungeon
+- Auto Boss
+- Team Sync Farm
+- Smart Farming Zones
+
+## NOTES
+Recommended:
+- Convert loops to task.spawn/task.defer
+- Reduce RenderStepped abuse
+- Cache frequently used objects
+- Add nil protection everywhere
+- Add anti memory leak cleanup
