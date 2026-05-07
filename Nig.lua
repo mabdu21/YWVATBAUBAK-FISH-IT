@@ -1,3 +1,31 @@
+repeat task.wait() until game:IsLoaded()
+
+local vu = game:GetService("VirtualUser")
+game:GetService("Players").LocalPlayer.Idled:Connect(function()
+    vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(67)
+    vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+if setfpscap then
+    setfpscap(1000000)
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "dsc.gg/dyhub",
+        Text = "Anti AFK & FPS Unlocked!",
+        Duration = 2,
+        Button1 = "Okay"
+    })
+    warn("Anti AFK Enabled & FPS Unlocked!")
+else
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "dsc.gg/dyhub",
+        Text = "Anti AFK Enabled (FPS Unlock Not Supported)",
+        Duration = 2,
+        Button1 = "Okay"
+    })
+    warn("Anti AFK Enabled but setfpscap is missing.")
+end
+
 local cfg = {
     f = {["Auto Farm"] = false, ["Auto Rebirth"] = false, ["Auto Bonus"] = false, ["Auto Collect"] = false},
     s = {sp = 1.5, rs = 3, chk = 20},
