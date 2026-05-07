@@ -74,7 +74,7 @@ function CustomConfig:Save()
     local success, err = pcall(function()
         writefile(self.ConfigPath, HttpService:JSONEncode(self.ConfigData))
     end)
-    if success then print("[DYHUB] Config saved!") else warn("[DYHUB] Save failed:", err) end
+    if success then warn("[DYHUB] Config saved!") else warn("[DYHUB] Save failed:", err) end
 end
 
 function CustomConfig:Load()
