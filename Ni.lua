@@ -1,7 +1,7 @@
 -- v085
 -- =========================
 local version = "Rework"
-local ver = "v023.2"
+local ver = "v023.3"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -49,7 +49,7 @@ end
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
-local ConfigFolder = "DYHUB_STBB_V0232"
+local ConfigFolder = "DYHUB_STBB_V0233"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
@@ -1278,8 +1278,8 @@ end
 
 local CollectItems = {
     "Clock Spider", "X-18 Core", "Green Energy Core", "Weird Transmitter",
-    "Presents", "Weird Prism", "Key Card", "Zombie Core",
-    "Flash Drives", "Astro Samples",
+    "Astro Samples", "Weird Prism", "Key Card", "Zombie Core",
+    "Flash Drives", "Presents",
 }
 
 local CollectGroupMap = {
@@ -1289,6 +1289,9 @@ local CollectGroupMap = {
         "Interceptor Spinner","Impactor Cannon","Impactor Laser","High Impactor Cannon",
         "High Impactor Laser","Destructor Laser","Destructor Blaster","Destructor Core",
         "Obliterator Blaster","Obliterator Spinner",
+    },
+    ["Presents"] = {
+        "Gacha Capsule",
     },
 }
 
