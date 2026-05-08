@@ -1,4 +1,4 @@
--- v070
+-- v071
 -- =========================
 local version = "Rework"
 local ver = "v022.6"
@@ -1655,7 +1655,7 @@ AutoFarmToggle = Main:Toggle({
         if state then
             StartFarmLoop()
             HandleMiscOptions(MiscOptions)
-            WindUI:Notify({ Title = "Auto Farm", Content = "เปิด Auto Farm แล้ว!", Duration = 2, Icon = "play" })
+            WindUI:Notify({ Title = "Auto Farm", Content = "Enabled, Auto Farm now!", Duration = 2, Icon = "play" })
         else
             AutoAttackEnabled = false; AutoSkillEnabled = false
             AutoSkipHeliEnabled = false; AutoFillUpEnabled = false
