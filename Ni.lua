@@ -1,7 +1,7 @@
--- v067
+-- v069
 -- =========================
 local version = "Rework"
-local ver = "v022.5"
+local ver = "v022.6"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -1568,7 +1568,7 @@ local function StartFarmLoop()
 end
 
 -- ====================== MISC OPTIONS HANDLER ======================
-local SyncFarmOnly = Config:Get("SyncFarmOnly", false)
+local SyncFarmOnly = Config:Get("SyncFarmOnly", true)
 
 local function HandleMiscOptions(selectedOptions)
     MiscOptions = selectedOptions
@@ -1648,6 +1648,7 @@ Main:Section({ Title = "Auto Farm", Icon = "package" })
 
 AutoFarmToggle = Main:Toggle({
     Title = "Auto Farm",
+    Description = "Automatically farms mobs based on priority system.",
     Value = AutoFarmEnabled,
     Callback = function(state)
         AutoFarmEnabled = state
@@ -1720,6 +1721,7 @@ MiscDropdown = Main:Dropdown({
 
 Main:Toggle({
     Title = "Sync Farm Only",
+    Description = "When enabled, all Misc Farm features require Auto Farm to be active.",
     Value = SyncFarmOnly,
     Callback = function(state)
         SyncFarmOnly = state
@@ -1787,13 +1789,13 @@ Main:Section({ Title = "Priority Settings", Icon = "list-ordered" })
 
 Main:Paragraph({
     Title = "Priority Order",
-    Desc = "Interrupt: If attacking a low-level mob and a higher-level mob appears to switch immediately",
+    Desc = "Interrupt: If attacking a low-maxhp mob and a higher-maxhp mob appears to switch immediately",
     Image = "rbxassetid://104487529937663",
     ImageSize = 26,
 })
 
 Main:Slider({
-    Title = "HighHP Threshold (MaxHP ต้องเกิน)",
+    Title = "HighHP Threshold (MaxHP)",
     Value = { Min = 100, Max = 100000, Default = HighHPThreshold },
     Step = 100,
     Callback = function(value)
@@ -1849,6 +1851,7 @@ Main:Slider({
 
 Main:Button({
     Title = "Reset All Confirmed Positions",
+    Description = "Clears all saved mob height positions and resets to default.",
     Callback = function()
         MobConfirmedPadding = {}
         MobHeightOverride   = {}
@@ -1870,6 +1873,7 @@ Main:Slider({
 
 Main:Toggle({
     Title = "Flush Aura",
+    Description = "Automatically flushes nearby flush prompts within the set radius.",
     Value = Flushaura,
     Callback = function(enabled)
         Flushaura = enabled; Config:Set("flushaura", enabled); Config:Save()
@@ -2194,6 +2198,7 @@ Main4:Section({ Title = "Esp Visual", Icon = "eye" })
 
 EspEnableToggle = Main4:Toggle({
     Title = "Enable ESP", Value = ESP.Enabled,
+    Description = "Enable ESP for all ESP visuals.",
     Callback = function(state)
         ESP.Enabled = state; Config:Set("EspEnabled", state); Config:Save()
         if state then StartESPLoop() else StopESPLoop() end
@@ -2202,6 +2207,7 @@ EspEnableToggle = Main4:Toggle({
 
 EspMobToggle = Main4:Toggle({
     Title = "Mob ESP", Value = ESP.MobEnabled,
+    Description = "Shows highlights and info labels above enemy mobs.",
     Callback = function(state)
         ESP.MobEnabled = state; Config:Set("EspMobEnabled", state); Config:Save()
         if not state then for mob, _ in pairs(ESP._mobHighlights) do RemoveESP(mob) end; ESP._mobHighlights = {} end
@@ -2210,6 +2216,7 @@ EspMobToggle = Main4:Toggle({
 
 EspPlayerToggle = Main4:Toggle({
     Title = "Player ESP", Value = ESP.PlayerEnabled,
+    Description = "Shows highlights and info labels above other players.",
     Callback = function(state)
         ESP.PlayerEnabled = state; Config:Set("EspPlayerEnabled", state); Config:Save()
         if not state then for char, _ in pairs(ESP._playerHighlights) do RemoveESP(char) end; ESP._playerHighlights = {} end
@@ -2218,6 +2225,7 @@ EspPlayerToggle = Main4:Toggle({
 
 EspItemToggle = Main4:Toggle({
     Title = "Item ESP", Value = ESP.ItemEnabled,
+    Description = "Shows highlights and info labels on collectible items.",
     Callback = function(state)
         ESP.ItemEnabled = state; Config:Set("EspItemEnabled", state); Config:Save()
         if not state then for obj, _ in pairs(ESP._itemHighlights) do RemoveESP(obj) end; ESP._itemHighlights = {} end
@@ -2291,6 +2299,7 @@ Main2:Slider({
 
 nocliptoggle = Main2:Toggle({
     Title = "No Clip", Value = NoClip,
+    Description = "Allows your character to pass through walls and parts.",
     Callback = function(state) NoClip = state; Config:Set("NoClip", state); Config:Save() end
 })
 
@@ -2306,6 +2315,7 @@ CodeDropdown = Main2:Dropdown({
 
 Main2:Button({
     Title = "Redeem Codes (Selected)",
+    Description = "Redeems only the codes you have selected in the dropdown.",
     Callback = function()
         for _, code in ipairs(SelectedCodes or {}) do
             pcall(function() ReplicatedStorage:WaitForChild("RedeemCode"):FireServer(code); task.wait(0.2) end)
@@ -2315,6 +2325,7 @@ Main2:Button({
 
 Main2:Button({
     Title = "Redeem Code (All)",
+    Description = "Redeems all available codes at once.",
     Callback = function()
         for _, code in ipairs(GlobalTables.redeemCodes or {}) do
             pcall(function() ReplicatedStorage:WaitForChild("RedeemCode"):FireServer(code); task.wait(0.5) end)
@@ -2342,7 +2353,8 @@ GamepassDropdown = Main2:Dropdown({
 })
 
 Main2:Button({
-    Title = "Unlock Selected Gamepass",
+    Title = "Unlock Gamepass (Selected)",
+    Description = "Unlocks the selected gamepasses locally for your character.",
     Callback = function()
         local gachaData = LocalPlayer:FindFirstChild("GachaData")
         if not gachaData then
@@ -2412,6 +2424,7 @@ GameModeDropdown2 = Main7:Dropdown({
 
 AutoVoteIGToggle = Main7:Toggle({
     Title = "Auto Vote Mode (In-Game)",
+    Description = "Automatically votes for the selected mode each round.",
     Value = AutoVoteinGameEnabled,
     Callback = function(enabled)
         AutoVoteinGameEnabled = enabled; Config:Set("AutoVoteinGameEnabled", enabled); Config:Save()
@@ -2578,6 +2591,7 @@ end)
 --// AUTO GAME MODE TOGGLE
 AutoVoteToggle = Main7:Toggle({
     Title = "Auto Game Mode (Lobby)",
+    Description = "Automatically creates the selected game mode when in the lobby.",
     Value = AutoVoteEnabled,
 
     Callback = function(enabled)
@@ -2595,6 +2609,7 @@ AutoVoteToggle = Main7:Toggle({
 })
 
 -- ====================== UI: AUTO BUY ======================
+Main5:Section({ Title = "BUG, UNDER FIXING", TextXAlignment = "Center", TextSize = 20 })
 Main5:Section({ Title = "Shop Weapon", Icon = "helicopter" })
 
 local AutoBuyWeaponValue         = Config:Get("AutoBuyWeaponValue", "Stungun")
@@ -2670,6 +2685,7 @@ Main6:Section({ Title = "Collect Item", Icon = "package" })
 
 AutoCollectToggle = Main6:Toggle({
     Title = "Auto Collect", Value = AutoCollectEnabled,
+    Description = "Automatically collects selected items that appear in the map.",
     Callback = function(state)
         AutoCollectEnabled = state; Config:Set("AutoCollectEnabled", state); Config:Save()
         if state then KnownCollectItems = {}; StartAutoCollectLoop()
@@ -2696,6 +2712,7 @@ Main3:Section({ Title = "Save Config", Icon = "save" })
 
 Main3:Button({
     Title = "Save Config (NOW)",
+    Description = "Saves all current settings to config file immediately.",
     Callback = function()
         Config:Save()
         WindUI:Notify({ Title = "Config Saved", Content = "Config saved successfully!", Duration = 2, Icon = "save" })
@@ -2720,6 +2737,7 @@ end
 
 Main3:Toggle({
     Title = "Auto Save Config", Value = AutoSaveEnabled,
+    Description = "Automatically saves your config at the set interval.",
     Callback = function(state) AutoSaveEnabled = state; Config:Set("AutoSaveEnabled", state); Config:Save(); RestartAutoSave() end
 })
 
@@ -2736,6 +2754,7 @@ Main3:Section({ Title = "Server Status", Icon = "server" })
 
 Main3:Button({
     Title = "Serverhop",
+    Description = "Teleports you to a different random server of this game.",
     Callback = function()
         local TeleportService = game:GetService("TeleportService")
         local servers = {}
@@ -2761,6 +2780,7 @@ Main3:Button({
 
 Main3:Button({
     Title = "Rejoin",
+    Description = "Rejoins the current game server.",
     Callback = function()
         WindUI:Notify({ Title = "Rejoin", Content = "Rejoining server...", Duration = 2, Icon = "refresh-cw" })
         task.wait(1)
@@ -2772,6 +2792,7 @@ Main3:Section({ Title = "Miscellaneous", Icon = "settings" })
 
 NoBarrierToggle = Main3:Toggle({
     Title = "Bypass Barrier (PATCHED)", Value = noBarrierActive,
+    Description = "Attempts to bypass invisible barriers.",
     Callback = function(value)
         noBarrierActive = value; Config:Set("NoBarrier", value); Config:Save()
         if value then startNoBarrier() else stopNoBarrier() end
@@ -2780,6 +2801,7 @@ NoBarrierToggle = Main3:Toggle({
 
 local antiafk = Main3:Toggle({
     Title = "Anti AFK", Value = AntiAFK,
+    Description = "Prevents the game from kicking you for being idle.",
     Callback = function(enabled)
         AntiAFK = enabled; Config:Set("AntiAfk", enabled); Config:Save()
         if enabled then
