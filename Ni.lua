@@ -1,7 +1,7 @@
--- v072
+-- v075
 -- =========================
 local version = "Rework"
-local ver = "v022.8"
+local ver = "v022.9"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -49,7 +49,7 @@ end
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
-local ConfigFolder = "DYHUB_STBB_V0228"
+local ConfigFolder = "DYHUB_STBB_V0229"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
@@ -2414,17 +2414,40 @@ Main2:Button({
 })
 
 -- ====================== UI: GAMEMODE TAB ======================
-Main7:Divider()
 Main7:Section({ Title = "Vote Information", TextXAlignment = "Center", TextSize = 17 })
 Main7:Divider()
 Main7:Paragraph({
     Title = "Auto Vote: Game Mode",
-    Desc = "- [ Step 1 ] Stay in the Lobby (inside a game)\n- [ Step 2 ] Set Auto Vote & Wait",
+    Desc = "- [ Step 1 ] Click Restore Vote System \n- [ Step 2 ] Stay in the Lobby (inside a game)\n- [ Step 3 ] Set Auto Vote & Wait",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
 Main7:Divider()
 Main7:Section({ Title = "Vote Mode", Icon = "gamepad-2" })
+
+Main7:Button({
+    Title = "Restore Vote System",
+    Desc = "⚠️ Press this once before using Auto Vote Mode for the first time.",
+    Callback = function()
+        pcall(function()
+            ReplicatedStorage.GetReadyRemote:FireServer("1", true)
+        end)
+        task.wait(2)
+        pcall(function()
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                char.HumanoidRootPart.CFrame = CFrame.new(-220, 3, -600)
+            end
+        end)
+        task.wait(2.5)
+        WindUI:Notify({
+            Title = "Restore Complete",
+            Content = "Vote GUI restored! You can now use Auto Vote Mode.",
+            Duration = 3,
+            Icon = "check-circle"
+        })
+    end
+})
 
 GameModeDropdown2 = Main7:Dropdown({
     Title = "Set Vote Mode",
@@ -2446,7 +2469,7 @@ AutoVoteIGToggle = Main7:Toggle({
         SetupAutoVote_InGame(enabled)
     end
 })
-
+Main7:Divider()
 Main7:Section({ Title = "Casual Information", TextXAlignment = "Center", TextSize = 17 })
 Main7:Divider()
 Main7:Paragraph({
