@@ -1,7 +1,7 @@
--- v071
+-- v072
 -- =========================
 local version = "Rework"
-local ver = "v022.6"
+local ver = "v022.8"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -49,7 +49,7 @@ end
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
-local ConfigFolder = "DYHUB_STBB_V022"
+local ConfigFolder = "DYHUB_STBB_V0228"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
@@ -342,7 +342,7 @@ local noBarrierActive        = Config:Get("NoBarrier", false)
 
 -- ====================== NEW PRIORITY SYSTEM CONFIG ======================
 -- มอนที่เลือดสูงสุดต่ำกว่า HighHPThreshold จะถูกข้ามไป → ไปฆ่ามอนปกติที่ใกล้ที่สุดแทน
-local HighHPThreshold        = Config:Get("HighHPThreshold", 300)
+local HighHPThreshold        = Config:Get("HighHPThreshold", 200)
 -- สัญญาณ interrupt: เมื่อ priority mob ระดับสูงกว่าปรากฏ ให้หยุดมอนปัจจุบันทันที
 local _currentTargetPriority = 0   -- 0=idle 1=NearMob 2=HighHP 3=Heli 4=GiantST
 local _interruptSignal       = false
@@ -613,13 +613,14 @@ end
 
 local PADDING_REDUCE_STEP    = Config:Get("PaddingReduceStep", 2)
 local PADDING_SAFE_MIN       = Config:Get("PaddingSafeMin", -30)
-local DMG_THRESHOLD          = Config:Get("DmgThreshold", 100)
+local DMG_THRESHOLD          = Config:Get("DmgThreshold", 40)
 local ANTI_CLIP_MARGIN       = Config:Get("AntiClipMargin", 3)
 local PLAYER_HALF_HEIGHT     = 3
 
 local MobHeightOverride   = {}
 local MobConfirmedPadding = {}
 local MobLastHealth       = {}
+local MobCheckerCancelled = {}
 
 local function GetAntiClipFloor(mob, position)
     local _, minY, maxY = GetMobVisualBounds(mob)
@@ -641,26 +642,24 @@ local function ClampPaddingToAntiClip(mob, padding)
 end
 
 local function StartDamageChecker(mob)
+    MobCheckerCancelled[mob] = false
     task.spawn(function()
         local humanoid = mob and mob:FindFirstChild("Humanoid")
         if not humanoid then return end
-        if MobConfirmedPadding[mob] ~= nil then
-            print("[DYHUB] DmgCheck: Using confirmed padding " .. MobConfirmedPadding[mob] .. " for " .. mob.Name)
-            return
-        end
+        if MobConfirmedPadding[mob] ~= nil then return end
+
         MobLastHealth[mob]     = humanoid.Health
         MobHeightOverride[mob] = ClampPaddingToAntiClip(mob, MobHeightOverride[mob] or HeightValue)
 
-        local lastDamageTime   = tick()
-        local noDamageTimer    = 0
-        local hitStreak        = 0
-        local lastWasHit       = false
-        local reducedOnce      = false
-
-        print("[DYHUB] DmgCheck: Start for " .. mob.Name .. " | init padding=" .. GetEffectivePadding(mob))
+        local lastDamageTime = tick()
+        local noDamageTimer  = 0
+        local hitStreak      = 0
+        local lastWasHit     = false
+        local reducedOnce    = false
 
         while mob and mob.Parent and not IsMobDead(mob) and AutoFarmEnabled do
             task.wait(0.3)
+            if MobCheckerCancelled[mob] then break end  -- ★ เช็ค cancel
             if not mob or not mob.Parent or IsMobDead(mob) then break end
             humanoid = mob:FindFirstChild("Humanoid")
             if not humanoid then break end
@@ -678,13 +677,17 @@ local function StartDamageChecker(mob)
                 lastWasHit = true
                 local curPad = GetEffectivePadding(mob)
                 if dmgDealt >= DMG_THRESHOLD and MobConfirmedPadding[mob] == nil then
-                    MobConfirmedPadding[mob] = curPad; MobHeightOverride[mob] = curPad
-                    print("[DYHUB] CONFIRMED (threshold) pad=" .. curPad .. " for " .. mob.Name)
+                    if not MobCheckerCancelled[mob] then  -- ★ เช็คก่อน save
+                        MobConfirmedPadding[mob] = curPad
+                        MobHeightOverride[mob]   = curPad
+                    end
                     break
                 end
                 if hitStreak >= 2 and MobConfirmedPadding[mob] == nil then
-                    MobConfirmedPadding[mob] = curPad; MobHeightOverride[mob] = curPad
-                    print("[DYHUB] CONFIRMED (streak) pad=" .. curPad .. " for " .. mob.Name)
+                    if not MobCheckerCancelled[mob] then  -- ★ เช็คก่อน save
+                        MobConfirmedPadding[mob] = curPad
+                        MobHeightOverride[mob]   = curPad
+                    end
                     break
                 end
             else
@@ -701,45 +704,57 @@ local function StartDamageChecker(mob)
             end
 
             if noDamageTimer >= 6 then
-                lastDamageTime = tick(); reducedOnce = false
-                local curPad = GetEffectivePadding(mob)
-                local newPad = ClampPaddingToAntiClip(mob, curPad - PADDING_REDUCE_STEP)
+                lastDamageTime = tick()
+                reducedOnce    = false
+                local curPad   = GetEffectivePadding(mob)
+                local newPad   = ClampPaddingToAntiClip(mob, curPad - PADDING_REDUCE_STEP)
                 if newPad ~= curPad then MobHeightOverride[mob] = newPad end
             end
 
             MobLastHealth[mob] = currentHP
         end
 
-        MobHeightOverride[mob] = nil
-        MobLastHealth[mob]     = nil
-        print("[DYHUB] DmgCheck: Done for " .. (mob and mob.Name or "?"))
+        if not MobCheckerCancelled[mob] then  -- ★ เช็คก่อน clear
+            MobHeightOverride[mob] = nil
+            MobLastHealth[mob]     = nil
+        end
     end)
 end
 
 local function ResetMobOverride(mob)
+    MobCheckerCancelled[mob] = true  -- บอกให้ DamageChecker หยุด
     MobHeightOverride[mob]   = nil
     MobConfirmedPadding[mob] = nil
     MobLastHealth[mob]       = nil
+    task.delay(0.5, function()
+        MobCheckerCancelled[mob] = nil
+    end)
 end
 
 -- ============================================================
 -- ====================== TARGET CFRAME =======================
 -- ============================================================
-
 local function GetTargetCFrame(mob, position)
     local mobRoot = mob:FindFirstChild("HumanoidRootPart")
     if not mobRoot then return nil end
+
     local padding = GetEffectivePadding(mob)
     local center, minY, maxY = GetMobVisualBounds(mob)
+
     if position == "Above" then
-        local targetPos = Vector3.new(center.X, maxY + padding, center.Z)
-        local lookAt    = Vector3.new(center.X, maxY, center.Z)
-        local lookCF    = CFrame.new(targetPos, lookAt)
+        -- ★ บังคับให้อยู่เหนือมอนเสมอ ป้องกันมองฟ้า
+        local safeTargetY = math.max(maxY + padding, maxY + 0.5)
+        local targetPos   = Vector3.new(center.X, safeTargetY, center.Z)
+        local lookAtPos   = Vector3.new(center.X, maxY, center.Z)
+        local lookCF      = CFrame.new(targetPos, lookAtPos)
         return lookCF * CFrame.Angles(math.rad(-10), 0, 0)
+
     elseif position == "Under" then
-        local targetPos = Vector3.new(center.X, minY - padding, center.Z)
-        local lookAt    = Vector3.new(center.X, minY, center.Z)
-        local lookCF    = CFrame.new(targetPos, lookAt)
+        -- ★ บังคับให้อยู่ใต้มอนเสมอ
+        local safeTargetY = math.min(minY - padding, minY - 0.5)
+        local targetPos   = Vector3.new(center.X, safeTargetY, center.Z)
+        local lookAtPos   = Vector3.new(center.X, minY, center.Z)
+        local lookCF      = CFrame.new(targetPos, lookAtPos)
         return lookCF * CFrame.Angles(math.rad(10), 0, 0)
     end
 end
@@ -1711,7 +1726,7 @@ MiscDropdown = Main:Dropdown({
                 WindUI:Notify({
                     Title = "Misc Farm",
                     Content = "You must turn on Auto Farm first (Sync Farm Only is on)",
-                    Duration = 3, Icon = "alert-triangle"
+                    Duration = 3, Icon = "triangle-alert"
                 })
             end
         end
@@ -1774,7 +1789,7 @@ Main:Slider({
 })
 
 Main:Slider({
-    Title = "God Mode (%)",
+    Title = "God Mode HP (%)",
     Value = { Min = 1, Max = 99, Default = GodModeValue },
     Step = 1,
     Callback = function(value)
@@ -1796,7 +1811,7 @@ Main:Paragraph({
 
 Main:Slider({
     Title = "HighHP Threshold (MaxHP)",
-    Value = { Min = 100, Max = 100000, Default = HighHPThreshold },
+    Value = { Min = 1, Max = 100000, Default = HighHPThreshold },
     Step = 100,
     Callback = function(value)
         HighHPThreshold = value
