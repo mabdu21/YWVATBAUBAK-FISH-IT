@@ -1,7 +1,7 @@
 -- v050
 -- =========================
 local version = "Rework"
-local ver = "v022.0"
+local ver = "v022.2"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -2068,77 +2068,154 @@ GameModeDropdown = Main7:Dropdown({
 })
 
 -- PLAY SYSTEM (auto-navigate to Classic/Casual on load)
-local DELAY = 2
+--// PLAY + LOBBY SYSTEM
+local DELAY = 1
+
 local function click_btn(btn)
     if btn and (btn:IsA("ImageButton") or btn:IsA("TextButton")) then
         pcall(function()
-            if firesignal then firesignal(btn.MouseButton1Click); firesignal(btn.Activated)
-            else btn:Activate() end
+            if firesignal then
+                firesignal(btn.MouseButton1Click)
+                firesignal(btn.Activated)
+            else
+                btn:Activate()
+            end
         end)
     end
 end
 
-local function notify(t, c, i)
-    WindUI:Notify({ Title = t, Content = c, Duration = 3, Icon = i or "check" })
+local function notify(title, content, icon)
+    WindUI:Notify({
+        Title = title,
+        Content = content,
+        Duration = 3,
+        Icon = icon or "check"
+    })
 end
 
+--// PLAY SYSTEM
 task.spawn(function()
     local playBtn =
         workspace:FindFirstChild("ForGui") and
         workspace.ForGui:FindFirstChild("SurfaceGui") and
         workspace.ForGui.SurfaceGui:FindFirstChild("Frame") and
         workspace.ForGui.SurfaceGui.Frame:FindFirstChild("Play")
-    if not playBtn then return end
-    notify("Checking", "found Play button")
-    task.wait(DELAY); click_btn(playBtn); task.wait(DELAY)
+
+    if playBtn then
+        notify("Auto Play", "Detected Play button, auto starting...")
+        task.wait(DELAY)
+
+        local playGui = pg:FindFirstChild("Play")
+
+        -- ถ้ายังไม่เปิด GUI Play แปลว่ายังไม่ได้กด
+        if not (playGui and playGui.Enabled) then
+            click_btn(playBtn)
+            notify("Auto Play", "Pressed Play button")
+        else
+            notify("Auto Play", "Play GUI already opened")
+        end
+    end
+
+    task.wait(DELAY)
+
     local playGui = pg:FindFirstChild("Play")
-    if not (playGui and playGui.Enabled) then return end
+    if not (playGui and playGui.Enabled) then
+        return
+    end
+
     local classicBtn = playGui:FindFirstChild("Classic")
-    if not classicBtn then return end
-    task.wait(DELAY); click_btn(classicBtn); task.wait(DELAY)
+
+    if classicBtn then
+        notify("Auto Play", "Selecting Classic mode...")
+        task.wait(DELAY)
+        click_btn(classicBtn)
+    end
+
+    task.wait(DELAY)
+
     local modeGui = pg:FindFirstChild("mode select2")
-    if not (modeGui and modeGui.Enabled) then return end
-    local diffBtn = modeGui:FindFirstChild("MainFrame") and modeGui.MainFrame:FindFirstChild("DiffMode")
-    if diffBtn then task.wait(DELAY); click_btn(diffBtn) end
+
+    if modeGui and modeGui.Enabled then
+        local diffBtn =
+            modeGui:FindFirstChild("MainFrame") and
+            modeGui.MainFrame:FindFirstChild("DiffMode")
+
+        if diffBtn then
+            notify("Auto Play", "Selecting difficulty...")
+            task.wait(DELAY)
+            click_btn(diffBtn)
+        end
+    end
 end)
 
+--// NEW LOBBY SYSTEM
 task.spawn(function()
-    local lobby = pg:FindFirstChild("Lobby")
-    if not lobby then return end
-    local btn =
-        lobby:FindFirstChild("MainFrame") and
-        lobby.MainFrame:FindFirstChild("Frame") and
-        lobby.MainFrame.Frame:FindFirstChild("Create") and
-        lobby.MainFrame.Frame.Create:FindFirstChild("TrackQuestButton")
-    if not btn then return end
-    notify("Checking", "found TrackQuestButton")
-    task.wait(DELAY); click_btn(btn); task.wait(DELAY)
+    while true do
+        task.wait(0.5)
+
+        local loadingGui = pg:FindFirstChild("LoadingScreen")
+
+        -- ลบ LoadingScreen ถ้ามี
+        if loadingGui then
+            notify("Lobby System", "Removing LoadingScreen...")
+            pcall(function()
+                loadingGui:Destroy()
+            end)
+        end
+
+        local lobby = pg:FindFirstChild("Lobby")
+
+        -- รอจน Lobby เปิด
+        if lobby and lobby.Enabled then
+            notify("Lobby System", "Lobby detected, preparing auto setup...")
+
+            local btn =
+                lobby:FindFirstChild("MainFrame") and
+                lobby.MainFrame:FindFirstChild("Frame") and
+                lobby.MainFrame.Frame:FindFirstChild("Create") and
+                lobby.MainFrame.Frame.Create:FindFirstChild("TrackQuestButton")
+
+            if btn and btn.Visible then
+                notify("Lobby System", "Pressing TrackQuestButton...")
+                click_btn(btn)
+
+                task.wait(0.5)
+
+                -- ยิง Remote เฉพาะตอนเปิด Toggle
+                if AutoVoteEnabled then
+                    notify("Lobby System", "Creating game mode...")
+
+                    ReplicatedStorage.MainHandler:FireServer({
+                        [1] = "StartSolo",
+                        [2] = AutoGameValue
+                    })
+
+                    notify("Lobby System", "Gamemode created successfully!")
+                else
+                    notify("Lobby System", "Auto Game Mode disabled")
+                end
+
+                break
+            end
+        end
+    end
 end)
 
--- AUTO GAME MODE TOGGLE
+--// AUTO GAME MODE TOGGLE
 AutoVoteToggle = Main7:Toggle({
     Title = "Auto Game Mode (Lobby)",
     Value = AutoVoteEnabled,
+
     Callback = function(enabled)
-        AutoVoteEnabled = enabled; Config:Set("AutoVoteEnabled", enabled); Config:Save()
+        AutoVoteEnabled = enabled
+
+        Config:Set("AutoVoteEnabled", enabled)
+        Config:Save()
+
         if enabled then
-            task.spawn(function()
-                while AutoVoteEnabled do
-                    local lobby = pg:FindFirstChild("Lobby")
-                    if lobby then
-                        local btn =
-                            lobby:FindFirstChild("MainFrame") and
-                            lobby.MainFrame:FindFirstChild("Frame") and
-                            lobby.MainFrame.Frame:FindFirstChild("Create") and
-                            lobby.MainFrame.Frame.Create:FindFirstChild("TrackQuestButton")
-                        if btn then
-                            ReplicatedStorage.MainHandler:FireServer({ [1] = "StartSolo", [2] = AutoGameValue })
-                            notify("Checking", "Create Gamemode, Done!")
-                        end
-                    end
-                    task.wait(1)
-                end
-            end)
+            notify("Auto Game Mode", "Enabled")
+        else
+            notify("Auto Game Mode", "Disabled", "x")
         end
     end
 })
