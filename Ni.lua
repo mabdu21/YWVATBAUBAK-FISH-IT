@@ -1,4 +1,4 @@
--- v075
+-- v076
 -- =========================
 local version = "Rework"
 local ver = "v022.9"
@@ -2432,18 +2432,24 @@ Main7:Button({
         pcall(function()
             ReplicatedStorage.GetReadyRemote:FireServer("1", true)
         end)
-        task.wait(2)
+        WindUI:Notify({
+            Title = "Restore Loading",
+            Content = "Ready, Restore Vote System...",
+            Duration = 2,
+            Icon = "check-circle"
+        })
+        task.wait(5)
         pcall(function()
             local char = LocalPlayer.Character
             if char and char:FindFirstChild("HumanoidRootPart") then
                 char.HumanoidRootPart.CFrame = CFrame.new(-220, 3, -600)
             end
         end)
-        task.wait(2.5)
+        task.wait(6.7)
         WindUI:Notify({
             Title = "Restore Complete",
-            Content = "Vote GUI restored! You can now use Auto Vote Mode.",
-            Duration = 3,
+            Content = "Vote System restored! You can now use Auto Vote Mode.",
+            Duration = 5,
             Icon = "check-circle"
         })
     end
