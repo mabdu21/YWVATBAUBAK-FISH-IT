@@ -1,4 +1,4 @@
--- v076
+-- v078
 -- =========================
 local version = "Rework"
 local ver = "v022.9"
@@ -501,8 +501,11 @@ end
 local function GetHelicopter()
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return nil end
-    local heli = livingFolder:FindFirstChild("Helicopter")
-    if heli and IsValidMob(heli) then return heli end
+    for _, mob in ipairs(livingFolder:GetChildren()) do
+        if mob.Name:lower():find("helicopter") and IsValidMob(mob) then
+            return mob
+        end
+    end
     return nil
 end
 
