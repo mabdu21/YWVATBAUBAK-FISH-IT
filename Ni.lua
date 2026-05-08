@@ -1,7 +1,7 @@
--- v224
+-- v050
 -- =========================
 local version = "Rework"
-local ver = "v022.4"
+local ver = "v022.2"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -49,7 +49,7 @@ end
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
-local ConfigFolder = "DYHUB_STBB_e1f3d"
+local ConfigFolder = "DYHUB_REWORK_V2_STBB"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
@@ -182,8 +182,8 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 05/09/2026",
-    Desc = "- [ New ] Priority System \n- [ New ] Sync Farm Only \n- [ Added ] God Mode \n- [ Added ] Unlock Gamepass \n- [ Fixed ] Esp Core \n- [ Improved ] Delete Map",
+    Title = "Update: 08/05/2026",
+    Desc = "- [ New ] Priority System: GiantST → Heli → HighHP (>300) → Nearest\n- [ New ] Interrupt: ถ้ากำลังตีมอนอื่นแล้ว Priority mob ใหม่ปรากฏ → สลับทันที\n- [ Fixed ] Auto Vote & Start Sync\n- [ Improved ] Auto Vote & Start loop on respawn",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
@@ -303,9 +303,6 @@ GlobalTables = {
     },
     Weapon   = { "Stungun", "Flamethrower", "Harpoon Gun", "Shot Gun", "Pulse Rifle", "Shot Harpoon Gun", "EPD", "Small Laser Gun" },
     MiscShop = { "HeadPhone", "Titan-Request", "SpecialTitan-Request", "Speaker-Request", "Grenade", "Jetpack", "Lens" },
-    -- [NEW] Gamepass list
-    Gamepasst = { "All", "LuckyBoost", "RareLuckyBoost", "LegendaryLuckyBoost" },
-    Gamepassts = {},
 }
 
 -- ====================== CONFIG VARIABLES ======================
@@ -338,265 +335,11 @@ local AutoStartConnection    = nil
 local noBarrierConnection    = nil
 local noBarrierActive        = Config:Get("NoBarrier", false)
 
--- ====================== [NEW] GOD MODE ======================
-local GodModeEnabled         = false
-local GodModeValue           = Config:Get("GodModeValue", 30)
-local GodModeTriggered       = false  -- ป้องกัน destroy ซ้ำในรอบเดียวกัน
-local GodModeThread          = nil
-
-local function StartGodModeLoop()
-    if GodModeThread then task.cancel(GodModeThread); GodModeThread = nil end
-    GodModeThread = task.spawn(function()
-        while GodModeEnabled do
-            task.wait(0.1)
-            pcall(function()
-                local char = LocalPlayer.Character
-                if not char then return end
-                local humanoid = char:FindFirstChildOfClass("Humanoid")
-                if not humanoid then return end
-                if humanoid.MaxHealth <= 0 then return end
-                local hpPercent = (humanoid.Health / humanoid.MaxHealth) * 100
-                if hpPercent < GodModeValue then
-                    if not GodModeTriggered then
-                        GodModeTriggered = true
-                        -- Destroy head
-                        local head = char:FindFirstChild("Head")
-                        if head then head:Destroy() end
-                    end
-                else
-                    GodModeTriggered = false
-                end
-            end)
-        end
-        GodModeThread = nil
-    end)
-end
-
-local function StopGodModeLoop()
-    GodModeEnabled = false
-    if GodModeThread then task.cancel(GodModeThread); GodModeThread = nil end
-end
-
--- ====================== [NEW] SYNC FARM ONLY ======================
--- ถ้า SyncFarmOnly = true → ระบบ Misc จะทำงานเฉพาะตอนเปิด AutoFarm
--- ถ้า SyncFarmOnly = false → ระบบส่วนใหญ่ทำงานได้แม้ไม่ได้เปิด AutoFarm
-local SyncFarmOnly = Config:Get("SyncFarmOnly", true)
-
--- ====================== [NEW] DELETE MAP (FPS BOOST) ======================
--- เก็บค่าเดิมไว้ก่อน apply
-local _originalPartData = {}   -- [part] = { Transparency, Material, CastShadow }
-local _originalDecals   = {}   -- เก็บ decal/texture references ที่ถูก disable
-local _originalEffects  = {}   -- เก็บ effect references
-local _deleteMapActive  = false
-local _deleteMapScanConn = nil
-
-local function HasHumanoid(instance)
-    -- เช็คว่า instance นี้อยู่ใน model ที่มี Humanoid หรือไม่
-    local model = instance
-    while model do
-        if model:IsA("Model") and model:FindFirstChildOfClass("Humanoid") then
-            return true
-        end
-        model = model.Parent
-    end
-    return false
-end
-
-local function ApplyDeleteMap()
-    if _deleteMapActive then return end
-    _deleteMapActive = true
-    _originalPartData = {}
-    _originalDecals   = {}
-    _originalEffects  = {}
-
-    pcall(function()
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            pcall(function()
-                -- ข้ามสิ่งมีชีวิต (มี Humanoid)
-                if HasHumanoid(obj) then return end
-
-                if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("Part") or obj:IsA("UnionOperation") or obj:IsA("SpecialMesh") then
-                    if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("Part") or obj:IsA("UnionOperation") then
-                        _originalPartData[obj] = {
-                            Transparency = obj.Transparency,
-                            Material     = obj.Material,
-                            CastShadow   = obj.CastShadow,
-                        }
-                        obj.Transparency = 1
-                        obj.CastShadow   = false
-                        obj.Material     = Enum.Material.SmoothPlastic
-                    end
-                    if obj:IsA("MeshPart") then
-                        _originalPartData[obj] = _originalPartData[obj] or {}
-                        _originalPartData[obj].TextureID = obj.TextureID
-                        obj.TextureID = ""
-                    end
-
-                elseif obj:IsA("Decal") or obj:IsA("Texture") then
-                    _originalDecals[obj] = obj.Transparency
-                    obj.Transparency = 1
-
-                elseif obj:IsA("SpecialMesh") then
-                    _originalEffects[obj] = { TextureId = obj.TextureId }
-                    obj.TextureId = ""
-
-                elseif obj:IsA("ParticleEmitter") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") or obj:IsA("Explosion") then
-                    _originalEffects[obj] = { Enabled = obj.Enabled }
-                    if obj:IsA("ParticleEmitter") then
-                        _originalEffects[obj].Rate = obj.Rate
-                        obj.Rate = 0
-                    else
-                        obj.Enabled = false
-                    end
-
-                elseif obj:IsA("Sky") then
-                    _originalEffects[obj] = { Parent = obj.Parent }
-                    obj.Parent = nil
-
-                elseif obj:IsA("Atmosphere") or obj:IsA("Bloom") or obj:IsA("BlurEffect") or obj:IsA("ColorCorrectionEffect") or obj:IsA("DepthOfFieldEffect") or obj:IsA("SunRaysEffect") then
-                    _originalEffects[obj] = { Enabled = obj.Enabled }
-                    obj.Enabled = false
-
-                elseif obj:IsA("Sound") then
-                    _originalEffects[obj] = { Volume = obj.Volume }
-                    obj.Volume = 0
-                end
-            end)
-        end
-    end)
-
-    -- ตั้ง Lighting ให้ประหยัด
-    pcall(function()
-        local Lighting = game:GetService("Lighting")
-        _originalEffects["_lighting_ambient"]     = Lighting.Ambient
-        _originalEffects["_lighting_brightness"]  = Lighting.Brightness
-        _originalEffects["_lighting_shadowsoftness"] = Lighting.ShadowSoftness
-        Lighting.Ambient       = Color3.new(1, 1, 1)
-        Lighting.Brightness    = 2
-        Lighting.ShadowSoftness = 0
-    end)
-
-    -- Loop เช็คว่ามีของใหม่เข้ามาใน workspace แล้ว apply ด้วย
-    if _deleteMapScanConn then _deleteMapScanConn:Disconnect() end
-    _deleteMapScanConn = workspace.DescendantAdded:Connect(function(obj)
-        if not _deleteMapActive then return end
-        pcall(function()
-            if HasHumanoid(obj) then return end
-            if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("Part") or obj:IsA("UnionOperation") then
-                if not _originalPartData[obj] then
-                    _originalPartData[obj] = {
-                        Transparency = obj.Transparency,
-                        Material     = obj.Material,
-                        CastShadow   = obj.CastShadow,
-                    }
-                end
-                obj.Transparency = 1
-                obj.CastShadow   = false
-                obj.Material     = Enum.Material.SmoothPlastic
-            elseif obj:IsA("Decal") or obj:IsA("Texture") then
-                if not _originalDecals[obj] then _originalDecals[obj] = obj.Transparency end
-                obj.Transparency = 1
-            elseif obj:IsA("ParticleEmitter") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
-                if not _originalEffects[obj] then
-                    _originalEffects[obj] = { Enabled = obj.Enabled }
-                    if obj:IsA("ParticleEmitter") then _originalEffects[obj].Rate = obj.Rate end
-                end
-                if obj:IsA("ParticleEmitter") then obj.Rate = 0 else obj.Enabled = false end
-            elseif obj:IsA("Atmosphere") or obj:IsA("Bloom") or obj:IsA("BlurEffect") or obj:IsA("ColorCorrectionEffect") or obj:IsA("DepthOfFieldEffect") or obj:IsA("SunRaysEffect") then
-                if not _originalEffects[obj] then _originalEffects[obj] = { Enabled = obj.Enabled } end
-                obj.Enabled = false
-            end
-        end)
-    end)
-
-    WindUI:Notify({ Title = "Delete Map", Content = "FPS Boost Activated!", Duration = 3, Icon = "zap" })
-end
-
-local function RestoreDeleteMap()
-    if not _deleteMapActive then return end
-    _deleteMapActive = false
-
-    if _deleteMapScanConn then _deleteMapScanConn:Disconnect(); _deleteMapScanConn = nil end
-
-    -- คืนค่า Part
-    for obj, data in pairs(_originalPartData) do
-        pcall(function()
-            if obj and obj.Parent then
-                obj.Transparency = data.Transparency
-                obj.Material     = data.Material
-                obj.CastShadow   = data.CastShadow
-                if data.TextureID ~= nil then obj.TextureID = data.TextureID end
-            end
-        end)
-    end
-    _originalPartData = {}
-
-    -- คืนค่า Decal/Texture
-    for obj, trans in pairs(_originalDecals) do
-        pcall(function()
-            if obj and obj.Parent then obj.Transparency = trans end
-        end)
-    end
-    _originalDecals = {}
-
-    -- คืนค่า Effects
-    for key, data in pairs(_originalEffects) do
-        pcall(function()
-            if type(key) == "string" then
-                -- Lighting keys
-                local Lighting = game:GetService("Lighting")
-                if key == "_lighting_ambient"        then Lighting.Ambient       = data
-                elseif key == "_lighting_brightness" then Lighting.Brightness    = data
-                elseif key == "_lighting_shadowsoftness" then Lighting.ShadowSoftness = data end
-            else
-                if key and key.Parent then
-                    if key:IsA("ParticleEmitter") and data.Rate ~= nil then key.Rate = data.Rate end
-                    if data.Enabled ~= nil then key.Enabled = data.Enabled end
-                    if key:IsA("SpecialMesh") and data.TextureId ~= nil then key.TextureId = data.TextureId end
-                    if key:IsA("Sky") and data.Parent then key.Parent = data.Parent end
-                end
-            end
-        end)
-    end
-    _originalEffects = {}
-
-    WindUI:Notify({ Title = "Delete Map", Content = "Map Restored!", Duration = 3, Icon = "rotate-ccw" })
-end
-
--- Loop เช็คว่าแมพกลับมาแล้วแต่เรายังไม่ได้ปิด Delete Map
--- (ป้องกันกรณี respawn หรือ map reload)
-task.spawn(function()
-    while true do
-        task.wait(5)
-        if _deleteMapActive then
-            -- เช็คว่ามี part ที่ควรจะ transparent แต่กลับมาปกติหรือไม่
-            local needReapply = false
-            for obj, data in pairs(_originalPartData) do
-                if obj and obj.Parent then
-                    if obj.Transparency ~= 1 and data.Transparency ~= 1 then
-                        needReapply = true
-                        break
-                    end
-                end
-            end
-            if needReapply then
-                -- Reapply delete map เพราะแมพ reload
-                pcall(function()
-                    for obj, data in pairs(_originalPartData) do
-                        if obj and obj.Parent and not HasHumanoid(obj) then
-                            obj.Transparency = 1
-                            obj.CastShadow = false
-                        end
-                    end
-                end)
-            end
-        end
-    end
-end)
-
 -- ====================== NEW PRIORITY SYSTEM CONFIG ======================
+-- มอนที่เลือดสูงสุดต่ำกว่า HighHPThreshold จะถูกข้ามไป → ไปฆ่ามอนปกติที่ใกล้ที่สุดแทน
 local HighHPThreshold        = Config:Get("HighHPThreshold", 300)
-local _currentTargetPriority = 0
+-- สัญญาณ interrupt: เมื่อ priority mob ระดับสูงกว่าปรากฏ ให้หยุดมอนปัจจุบันทันที
+local _currentTargetPriority = 0   -- 0=idle 1=NearMob 2=HighHP 3=Heli 4=GiantST
 local _interruptSignal       = false
 
 local VirtualUser = game:GetService("VirtualUser")
@@ -744,7 +487,12 @@ local function GetHighestMob()
     return highestMob
 end
 
--- ====================== NEW PRIORITY SYSTEM ======================
+-- ============================================================
+-- ====================== NEW PRIORITY SYSTEM =================
+-- ลำดับ: GiantST (4) → Helicopter (3) → HighHP >threshold (2) → Nearest (1)
+-- ถ้า HighHP MaxHP ต่ำกว่า HighHPThreshold → ข้ามไปใช้ Nearest แทน
+-- ============================================================
+
 local function GetHelicopter()
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return nil end
@@ -767,10 +515,11 @@ local function GetGiantSTToilet()
     return nil, nil
 end
 
+-- หา mob ที่มี MaxHP สูงสุด และ MaxHP ต้องเกิน HighHPThreshold
 local function GetHighHPMob()
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return nil end
-    local bestMob, bestHP = nil, HighHPThreshold
+    local bestMob, bestHP = nil, HighHPThreshold  -- ต้องเกิน threshold ถึงจะนับ
     for _, mob in ipairs(livingFolder:GetChildren()) do
         if IsValidMob(mob) then
             local hp = GetMobMaxHP(mob)
@@ -780,36 +529,49 @@ local function GetHighHPMob()
             end
         end
     end
-    return bestMob
+    return bestMob  -- nil ถ้าไม่มีมอนที่ MaxHP เกิน threshold
 end
 
+-- ─── GetPriorityMob: คืน mob, mobType, extraData, priorityLevel ───
+-- priorityLevel: 4=GiantST, 3=Heli, 2=HighHP, 1=Nearest
 local function GetPriorityMob()
+    -- ลำดับ 1: GiantST
     local giant, prompt = GetGiantSTToilet()
     if giant and prompt then return giant, "GiantST", prompt, 4 end
+    -- ลำดับ 2: Helicopter
     local heli = GetHelicopter()
     if heli then return heli, "Helicopter", nil, 3 end
+    -- ลำดับ 3: HighHP mob (MaxHP > threshold)
     local highHPMob = GetHighHPMob()
     if highHPMob then return highHPMob, "HighHP", nil, 2 end
+    -- ลำดับ 4: Nearest mob ปกติ
     local nearMob = GetNearestMob()
     if nearMob then return nearMob, "NearestMob", nil, 1 end
     return nil, nil, nil, 0
 end
 
+-- ─── Interrupt Check: เช็คว่ามี priority mob ระดับสูงกว่า current หรือไม่ ───
 local function CheckInterrupt(currentPriority)
+    -- GiantST ปรากฏ → interrupt เสมอ (ถ้า current ไม่ใช่ GiantST)
     if currentPriority < 4 then
         local g, pr = GetGiantSTToilet()
         if g and pr then return true, 4 end
     end
+    -- Helicopter ปรากฏ → interrupt ถ้า current ต่ำกว่า 3
     if currentPriority < 3 then
         if GetHelicopter() then return true, 3 end
     end
+    -- HighHP mob ปรากฏ → interrupt ถ้า current ต่ำกว่า 2
     if currentPriority < 2 then
         if GetHighHPMob() then return true, 2 end
     end
     return false, currentPriority
 end
 
--- ====================== MOB VISUAL BOUNDS ======================
+-- ============================================================
+-- ====================== MOB VISUAL BOUNDS ===================
+-- ============================================================
+
 local function GetMobVisualBounds(mob)
     local minY, maxY = math.huge, -math.huge
     local centerX, centerZ, count = 0, 0, 0
@@ -840,7 +602,10 @@ local function GetMobVisualBounds(mob)
     return Vector3.new(cx, cy, cz), minY, maxY
 end
 
--- ====================== MOB HEIGHT OVERRIDE ======================
+-- ============================================================
+-- ====================== MOB HEIGHT OVERRIDE =================
+-- ============================================================
+
 local PADDING_REDUCE_STEP    = Config:Get("PaddingReduceStep", 2)
 local PADDING_SAFE_MIN       = Config:Get("PaddingSafeMin", -30)
 local DMG_THRESHOLD          = Config:Get("DmgThreshold", 100)
@@ -952,7 +717,10 @@ local function ResetMobOverride(mob)
     MobLastHealth[mob]       = nil
 end
 
--- ====================== TARGET CFRAME ======================
+-- ============================================================
+-- ====================== TARGET CFRAME =======================
+-- ============================================================
+
 local function GetTargetCFrame(mob, position)
     local mobRoot = mob:FindFirstChild("HumanoidRootPart")
     if not mobRoot then return nil end
@@ -1053,6 +821,22 @@ local function TriggerAutoSkipHeli(state)
     pcall(function() ReplicatedStorage.SetSettingAutoSkipWave:FireServer(state) end)
 end
 
+local function DeleteMapTextures()
+    pcall(function()
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("Decal") or obj:IsA("Texture") then
+                obj:Destroy()
+            elseif obj:IsA("MeshPart") then
+                obj.TextureID = ""
+            elseif obj:IsA("SpecialMesh") then
+                obj.TextureId = ""
+            elseif obj:IsA("Part") or obj:IsA("BasePart") then
+                obj.Material = Enum.Material.SmoothPlastic
+            end
+        end
+    end)
+end
+
 -- ====================== PLAYER HP HELPERS ======================
 local function GetPlayerHPInfo()
     local humanoid = Character and Character:FindFirstChild("Humanoid")
@@ -1129,7 +913,10 @@ local function stopNoBarrier()
     end
 end
 
+-- ============================================================
 -- ====================== AUTO VOTE MODE ======================
+-- ============================================================
+
 local AutoVoteEnabled       = Config:Get("AutoVoteEnabled", false)
 local AutoGameValue         = Config:Get("AutoGameValue", "Normal Mode")
 local AutoVoteinGameEnabled = Config:Get("AutoVoteinGameEnabled", false)
@@ -1273,7 +1060,10 @@ local function ActivateAllFlushPrompts()
     end)
 end
 
+-- ============================================================
 -- ====================== COLLECT SYSTEM ======================
+-- ============================================================
+
 local CollectItems = {
     "Clock Spider", "X-18 Core", "Green Energy Core", "Weird Transmitter",
     "Presents", "Weird Prism", "Key Card", "Zombie Core",
@@ -1409,6 +1199,7 @@ local function StartAutoCollectLoop()
                             if not IsItemGone(obj) then CollectSingleItem(obj) else KnownCollectItems[obj] = true end
                         end
                         if AutoFarmEnabled then TeleportToIdle(); WaitingRespawn = false end
+
                     elseif CollectMode == "Clean" then
                         local waitedClean = 0
                         while not AllMobsDead() and AutoCollectEnabled do
@@ -1450,9 +1241,14 @@ workspace.DescendantAdded:Connect(function(obj)
     print("[DYHUB] Collect: New item: " .. obj.Name)
 end)
 
--- ====================== MAIN FARM LOOP ======================
+-- ============================================================
+-- ====================== MAIN FARM LOOP (NEW SYSTEM) =========
+-- Priority: GiantST(4) → Heli(3) → HighHP>threshold(2) → Nearest(1)
+-- Interrupt: ถ้ากำลังตีมอนระดับต่ำ และมอบระดับสูงกว่าปรากฏ → หยุดทันที
+-- ============================================================
 local function StartFarmLoop()
     task.spawn(function()
+        -- Sub-loop: รักษา Idle Position ขณะ WaitingRespawn
         task.spawn(function()
             while AutoFarmEnabled do
                 if WaitingRespawn and not LockActive then
@@ -1468,6 +1264,7 @@ local function StartFarmLoop()
         end)
 
         while AutoFarmEnabled do
+            -- Refresh character reference
             if not Character or not Character.Parent then
                 Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
                 HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
@@ -1480,6 +1277,7 @@ local function StartFarmLoop()
                 WaitingRespawn = false
                 _currentTargetPriority = priority
 
+                -- ============ CASE: GiantST ============
                 if mobType == "GiantST" and extraData then
                     local cf = GetTargetCFrame(mob, FarmPosition)
                     if cf then
@@ -1506,6 +1304,8 @@ local function StartFarmLoop()
                         ActivateAllFlushPrompts()
                     until IsMobDead(mob) or not mob.Parent or not AutoFarmEnabled
                     giantLockConn:Disconnect()
+
+                -- ============ CASE: Helicopter / HighHP / Nearest ============
                 else
                     if SafeModeEnabled and GetPlayerHealthPercent() < SafeValue then
                         local mobRoot = mob:FindFirstChild("HumanoidRootPart")
@@ -1522,6 +1322,7 @@ local function StartFarmLoop()
                         StartDamageChecker(mob)
                         TeleportToMob(mob)
 
+                        -- Lock + Interrupt loop
                         LockActive = true
                         local lockConn
                         lockConn = RunService.RenderStepped:Connect(function()
@@ -1537,8 +1338,10 @@ local function StartFarmLoop()
                             end
                         end)
 
+                        -- รอจนกว่ามอบตาย, AutoFarm ปิด, หรือถูก interrupt
                         repeat
                             task.wait(0.1)
+                            -- เช็ค interrupt: มี priority mob ระดับสูงกว่าปรากฏหรือไม่
                             local shouldInterrupt, newPriority = CheckInterrupt(priority)
                             if shouldInterrupt then
                                 print("[DYHUB] INTERRUPT! Priority " .. priority .. " → " .. newPriority .. " | current mob: " .. mob.Name)
@@ -1553,7 +1356,9 @@ local function StartFarmLoop()
                         ResetMobOverride(mob)
                     end
                 end
+
             else
+                -- ไม่มี mob → ไป Idle รอ
                 _currentTargetPriority = 0
                 TeleportToIdle()
                 repeat task.wait(0.5) until GetPriorityMob() ~= nil or not AutoFarmEnabled
@@ -1568,74 +1373,31 @@ local function StartFarmLoop()
     end)
 end
 
--- ============================================================
--- ====================== MISC OPTIONS HANDLER (UPDATED) =======
--- ============================================================
+-- ====================== MISC OPTIONS HANDLER ======================
 local function HandleMiscOptions(selectedOptions)
     MiscOptions = selectedOptions
 
-    -- ─── ตรวจว่าระบบต้องการ AutoFarm หรือไม่ ───
-    -- SyncFarmOnly = true → ทุกระบบต้องการ AutoFarm
-    -- SyncFarmOnly = false → ระบบทำงานได้อิสระ (ยกเว้นบางระบบที่ต้องการ AutoFarm จริงๆ)
-    local farmRequired = SyncFarmOnly
-
-    -- Auto Attack
     local hasAutoAttack = table.find(selectedOptions, "Auto Attack")
-    if hasAutoAttack and not AutoAttackEnabled then
-        if not farmRequired or AutoFarmEnabled then
-            AutoAttackEnabled = true; StartAutoAttack()
-        end
+    if hasAutoAttack and not AutoAttackEnabled then AutoAttackEnabled = true; StartAutoAttack()
     elseif not hasAutoAttack then AutoAttackEnabled = false end
 
-    -- Auto Skill
     local hasAutoSkill = table.find(selectedOptions, "Auto Skill")
-    if hasAutoSkill and not AutoSkillEnabled then
-        if not farmRequired or AutoFarmEnabled then
-            AutoSkillEnabled = true; StartAutoSkill()
-        end
+    if hasAutoSkill and not AutoSkillEnabled then AutoSkillEnabled = true; StartAutoSkill()
     elseif not hasAutoSkill then AutoSkillEnabled = false end
 
-    -- Auto Skip Helicopter
     local hasAutoSkipHeli = table.find(selectedOptions, "Auto Skip Helicopter")
-    if hasAutoSkipHeli and not AutoSkipHeliEnabled then
-        if not farmRequired or AutoFarmEnabled then
-            AutoSkipHeliEnabled = true; TriggerAutoSkipHeli(true)
-        end
-    elseif not hasAutoSkipHeli and AutoSkipHeliEnabled then
-        AutoSkipHeliEnabled = false; TriggerAutoSkipHeli(false)
-    end
+    if hasAutoSkipHeli and not AutoSkipHeliEnabled then AutoSkipHeliEnabled = true; TriggerAutoSkipHeli(true)
+    elseif not hasAutoSkipHeli and AutoSkipHeliEnabled then AutoSkipHeliEnabled = false; TriggerAutoSkipHeli(false) end
 
-    -- Delete Map (FPS Boost) - ทำงานได้อิสระ ไม่ต้องการ AutoFarm
     local hasDeleteMap = table.find(selectedOptions, "Delete Map")
-    if hasDeleteMap and not DeleteMapEnabled then
-        DeleteMapEnabled = true
-        ApplyDeleteMap()
-    elseif not hasDeleteMap and DeleteMapEnabled then
-        DeleteMapEnabled = false
-        RestoreDeleteMap()
-    end
+    if hasDeleteMap and not DeleteMapEnabled then DeleteMapEnabled = true; DeleteMapTextures() end
 
-    -- Safe Mode
     SafeModeEnabled = table.find(selectedOptions, "Safe Mode") ~= nil
 
-    -- God Mode
-    local hasGodMode = table.find(selectedOptions, "God Mode")
-    if hasGodMode and not GodModeEnabled then
-        if not farmRequired or AutoFarmEnabled then
-            GodModeEnabled = true
-            StartGodModeLoop()
-        end
-    elseif not hasGodMode and GodModeEnabled then
-        StopGodModeLoop()
-    end
-
-    -- Auto Start
     local hasAutoStart = table.find(selectedOptions, "Auto Start")
-    if hasAutoStart and not AutoStartEnabled then
-        if not farmRequired or AutoFarmEnabled then StartAutoStart() end
+    if hasAutoStart and not AutoStartEnabled then StartAutoStart()
     elseif not hasAutoStart and AutoStartEnabled then StopAutoStart() end
 
-    -- Auto Fill Up
     local hasAutoFillUp = table.find(selectedOptions, "Auto Fill Up")
     if hasAutoFillUp and not AutoFillUpEnabled then
         if AutoFarmEnabled then AutoFillUpEnabled = true; StartAutoFillUpLoop() end
@@ -1653,7 +1415,6 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     MobHeightOverride   = {}
     MobConfirmedPadding = {}
     MobLastHealth       = {}
-    GodModeTriggered    = false
     task.wait(1)
     local cam = workspace.CurrentCamera
     cam.CameraSubject = HumanoidRootPart
@@ -1675,7 +1436,6 @@ AutoFarmToggle = Main:Toggle({
             AutoAttackEnabled = false; AutoSkillEnabled = false
             AutoSkipHeliEnabled = false; AutoFillUpEnabled = false
             FillUpRunning = false; LockActive = false
-            if GodModeEnabled then StopGodModeLoop() end
             if AutoStartEnabled then StopAutoStart() end
         end
         Config:Set("AutoFarmEnabled", state); Config:Save()
@@ -1700,99 +1460,13 @@ ModeDropdown = Main:Dropdown({
     Callback = function(value) FarmMode = value; Config:Set("FarmMode", value); Config:Save() end
 })
 
--- ====================== MISC FARM DROPDOWN (UPDATED) ======================
 MiscDropdown = Main:Dropdown({
     Title = "Misc Farm",
-    Values = { "Auto Attack", "Auto Skill", "Auto Start", "Auto Skip Helicopter", "Auto Fill Up", "Safe Mode", "God Mode", "Delete Map" },
+    Values = { "Auto Attack", "Auto Skill", "Auto Start", "Auto Skip Helicopter", "Auto Fill Up", "Safe Mode", "Delete Map" },
     Multi = true,
     Value = MiscOptions,
-    Callback = function(values)
-        MiscOptions = values
-        -- ถ้า SyncFarmOnly = true และ AutoFarm ยังไม่ได้เปิด → แจ้งเตือน
-        if SyncFarmOnly and not AutoFarmEnabled then
-            -- Delete Map ทำงานได้อิสระ
-            local hasDeleteMap = table.find(values, "Delete Map")
-            if hasDeleteMap and not DeleteMapEnabled then
-                DeleteMapEnabled = true; ApplyDeleteMap()
-            elseif not hasDeleteMap and DeleteMapEnabled then
-                DeleteMapEnabled = false; RestoreDeleteMap()
-            end
-            -- Safe Mode set ค่าไว้ล่วงหน้า
-            SafeModeEnabled = table.find(values, "Safe Mode") ~= nil
-            WindUI:Notify({ Title = "Misc Farm", Content = "Please enable Auto Farm first! (Sync Farm Only is ON)", Duration = 3, Icon = "alert-triangle" })
-            Config:Set("MiscOptions", values); Config:Save()
-            return
-        end
-        HandleMiscOptions(values)
-    end
+    Callback = function(values) MiscOptions = values; HandleMiscOptions(values) end
 })
-
--- ====================== SYNC FARM ONLY TOGGLE (NEW) ======================
-Main:Toggle({
-    Title = "Sync Farm Only",
-    Value = SyncFarmOnly,
-    Callback = function(state)
-        SyncFarmOnly = state
-        Config:Set("SyncFarmOnly", state)
-        Config:Save()
-        if state then
-            WindUI:Notify({ Title = "Sync Farm Only", Content = "ON: Misc Farm, You need to turn on Auto Farm first", Duration = 3, Icon = "lock" })
-        else
-            WindUI:Notify({ Title = "Sync Farm Only", Content = "OFF: Misc Farm, Can work independently", Duration = 3, Icon = "unlock" })
-            -- ถ้าปิด SyncFarmOnly → เปิดระบบที่เลือกไว้
-            HandleMiscOptions(MiscOptions)
-        end
-    end
-})
-
-Main:Section({ Title = "General Settings", Icon = "zap" })
-
-SkillDropdown = Main:Dropdown({
-    Title = "Auto Skill (Keys)",
-    Values = skillDropdownValues,
-    Multi = true,
-    Value = SelectedSkills,
-    Callback = function(values) SelectedSkills = values; Config:Set("SelectedSkills", values); Config:Save() end
-})
-
-SkillDelaySlider = Main:Slider({
-    Title = "Skill Delay (S)",
-    Value = { Min = 1, Max = 30, Default = SkillDelay },
-    Step = 1,
-    Callback = function(value) SkillDelay = value; Config:Set("SkillDelay", value); Config:Save() end
-})
-
-SafeModeSlider = Main:Slider({
-    Title = "Safe Mode HP (%)",
-    Value = { Min = 1, Max = 100, Default = SafeValue },
-    Step = 1,
-    Callback = function(value) SafeValue = value; Config:Set("SafeValue", value); Config:Save() end
-})
-
--- ====================== [NEW] GOD MODE SLIDER ======================
-Main:Slider({
-    Title = "God Mode HP (%)",
-    Value = { Min = 1, Max = 100, Default = GodModeValue },
-    Step = 1,
-    Callback = function(value)
-        GodModeValue = value
-        Config:Set("GodModeValue", value)
-        Config:Save()
-    end
-})
-
-FarmHeightSlider = Main:Slider({
-    Title = "Farm Height (+Y)",
-    Value = { Min = -30, Max = 30, Default = HeightValue },
-    Step = 1,
-    Callback = function(value)
-        HeightValue = value; Config:Set("HeightValue", value); Config:Save()
-        for mob, _ in pairs(MobHeightOverride) do
-            if MobConfirmedPadding[mob] == nil then MobHeightOverride[mob] = nil end
-        end
-    end
-})
-
 
 -- ====================== UI: PRIORITY SETTINGS ======================
 Main:Section({ Title = "Priority Settings", Icon = "list-ordered" })
@@ -1868,6 +1542,42 @@ Main:Button({
     end
 })
 
+Main:Section({ Title = "General Settings", Icon = "zap" })
+
+SkillDropdown = Main:Dropdown({
+    Title = "Auto Skill (Keys)",
+    Values = skillDropdownValues,
+    Multi = true,
+    Value = SelectedSkills,
+    Callback = function(values) SelectedSkills = values; Config:Set("SelectedSkills", values); Config:Save() end
+})
+
+SkillDelaySlider = Main:Slider({
+    Title = "Skill Delay (S)",
+    Value = { Min = 1, Max = 30, Default = SkillDelay },
+    Step = 1,
+    Callback = function(value) SkillDelay = value; Config:Set("SkillDelay", value); Config:Save() end
+})
+
+SafeModeSlider = Main:Slider({
+    Title = "Safe Mode HP (%)",
+    Value = { Min = 1, Max = 100, Default = SafeValue },
+    Step = 1,
+    Callback = function(value) SafeValue = value; Config:Set("SafeValue", value); Config:Save() end
+})
+
+FarmHeightSlider = Main:Slider({
+    Title = "Farm Height (+Y)",
+    Value = { Min = -30, Max = 30, Default = HeightValue },
+    Step = 1,
+    Callback = function(value)
+        HeightValue = value; Config:Set("HeightValue", value); Config:Save()
+        for mob, _ in pairs(MobHeightOverride) do
+            if MobConfirmedPadding[mob] == nil then MobHeightOverride[mob] = nil end
+        end
+    end
+})
+
 Main:Section({ Title = "Flush Settings", Icon = "toilet" })
 
 local Flushaura      = Config:Get("flushaura", false)
@@ -1916,7 +1626,10 @@ Main:Toggle({
     end
 })
 
--- ====================== ESP SYSTEM ======================
+-- ============================================================
+-- ====================== ESP SYSTEM =========================
+-- ============================================================
+
 local ESP = {
     Enabled       = Config:Get("EspEnabled", false),
     MobEnabled    = Config:Get("EspMobEnabled", true),
@@ -2303,7 +2016,6 @@ nocliptoggle = Main2:Toggle({
     Callback = function(state) NoClip = state; Config:Set("NoClip", state); Config:Save() end
 })
 
--- ====================== REDEEM CODES ======================
 Main2:Section({ Title = "Redeem Codes", Icon = "bird" })
 
 local SelectedCodes = Config:Get("SelectedCodes", {})
@@ -2332,71 +2044,6 @@ Main2:Button({
     end,
 })
 
--- ====================== [NEW] UNLOCK GAMEPASS ======================
-Main2:Section({ Title = "Unlock Gamepass", Icon = "badge-dollar-sign" })
-
-local SelectedGamepasses = Config:Get("SelectedGamepasses", {})
-GlobalTables.Gamepassts  = SelectedGamepasses
-
-Main2:Dropdown({
-    Title = "Select Gamepass",
-    Multi = true,
-    Values = GlobalTables.Gamepasst,
-    Value = SelectedGamepasses,
-    Callback = function(value)
-        GlobalTables.Gamepassts = value or {}
-        SelectedGamepasses      = value or {}
-        Config:Set("SelectedGamepasses", value)
-        Config:Save()
-    end,
-})
-
-Main2:Button({
-    Title = "Unlock Selected Gamepass",
-    Callback = function()
-        local gachaData = LocalPlayer:FindFirstChild("GachaData")
-        if not gachaData then
-            gachaData = Instance.new("Folder")
-            gachaData.Name = "GachaData"
-            gachaData.Parent = LocalPlayer
-        end
-        local toUnlock = {}
-        for _, v in ipairs(GlobalTables.Gamepassts) do
-            if v == "All" then
-                toUnlock = {"LuckyBoost", "RareLuckyBoost", "LegendaryLuckyBoost"}
-                break
-            else
-                table.insert(toUnlock, v)
-            end
-        end
-        if #toUnlock == 0 then
-            WindUI:Notify({ Title = "Gamepass", Content = "Please select a gamepass first!", Duration = 3, Icon = "alert-triangle" })
-            return
-        end
-        local unlocked = 0
-        for _, gamepassName in ipairs(toUnlock) do
-            pcall(function()
-                local boolValue = gachaData:FindFirstChild(gamepassName)
-                if not boolValue then
-                    boolValue = Instance.new("BoolValue")
-                    boolValue.Name = gamepassName
-                    boolValue.Parent = gachaData
-                end
-                boolValue.Value = true
-                unlocked = unlocked + 1
-                task.wait(0.2)
-            end)
-        end
-        WindUI:Notify({
-            Title = "Gamepass Unlocked!",
-            Content = "Unlocked " .. unlocked .. " gamepass(es) successfully!",
-            Duration = 4,
-            Icon = "badge-dollar-sign"
-        })
-        print("[DYHUB] Unlocked gamepasses: " .. table.concat(toUnlock, ", "))
-    end,
-})
-
 -- ====================== UI: GAMEMODE TAB ======================
 Main7:Section({ Title = "Casual Information", TextXAlignment = "Center", TextSize = 17 })
 Main7:Divider()
@@ -2420,6 +2067,8 @@ GameModeDropdown = Main7:Dropdown({
     end
 })
 
+-- PLAY SYSTEM (auto-navigate to Classic/Casual on load)
+--// PLAY + LOBBY SYSTEM
 local DELAY = 1
 
 local function click_btn(btn)
@@ -2444,6 +2093,7 @@ local function notify(title, content, icon)
     })
 end
 
+--// PLAY SYSTEM
 task.spawn(function()
     local playBtn =
         workspace:FindFirstChild("ForGui") and
@@ -2457,6 +2107,7 @@ task.spawn(function()
 
         local playGui = pg:FindFirstChild("Play")
 
+        -- ถ้ายังไม่เปิด GUI Play แปลว่ายังไม่ได้กด
         if not (playGui and playGui.Enabled) then
             click_btn(playBtn)
             notify("Auto Play", "Pressed Play button")
@@ -2468,7 +2119,9 @@ task.spawn(function()
     task.wait(DELAY)
 
     local playGui = pg:FindFirstChild("Play")
-    if not (playGui and playGui.Enabled) then return end
+    if not (playGui and playGui.Enabled) then
+        return
+    end
 
     local classicBtn = playGui:FindFirstChild("Classic")
 
@@ -2495,19 +2148,24 @@ task.spawn(function()
     end
 end)
 
+--// NEW LOBBY SYSTEM
 task.spawn(function()
     while true do
         task.wait(0.5)
 
         local loadingGui = pg:FindFirstChild("LoadingScreen")
 
+        -- ลบ LoadingScreen ถ้ามี
         if loadingGui then
             notify("Lobby System", "Removing LoadingScreen...")
-            pcall(function() loadingGui:Destroy() end)
+            pcall(function()
+                loadingGui:Destroy()
+            end)
         end
 
         local lobby = pg:FindFirstChild("Lobby")
 
+        -- รอจน Lobby เปิด
         if lobby and lobby.Enabled then
             notify("Lobby System", "Lobby detected, preparing auto setup...")
 
@@ -2523,12 +2181,15 @@ task.spawn(function()
 
                 task.wait(0.5)
 
+                -- ยิง Remote เฉพาะตอนเปิด Toggle
                 if AutoVoteEnabled then
                     notify("Lobby System", "Creating game mode...")
+
                     ReplicatedStorage.MainHandler:FireServer({
                         [1] = "StartSolo",
                         [2] = AutoGameValue
                     })
+
                     notify("Lobby System", "Gamemode created successfully!")
                 else
                     notify("Lobby System", "Auto Game Mode disabled")
@@ -2540,13 +2201,17 @@ task.spawn(function()
     end
 end)
 
+--// AUTO GAME MODE TOGGLE
 AutoVoteToggle = Main7:Toggle({
     Title = "Auto Game Mode (Lobby)",
     Value = AutoVoteEnabled,
+
     Callback = function(enabled)
         AutoVoteEnabled = enabled
+
         Config:Set("AutoVoteEnabled", enabled)
         Config:Save()
+
         if enabled then
             notify("Auto Game Mode", "Enabled")
         else
@@ -2833,12 +2498,6 @@ if AutoVoteEnabled or AutoStartEnabled then
 end
 
 if AutoVoteinGameEnabled then SetupAutoVote_InGame(true) end
-
--- โหลด Delete Map ถ้ามีใน config
-if table.find(MiscOptions, "Delete Map") then
-    DeleteMapEnabled = true
-    ApplyDeleteMap()
-end
 
 print("[DYHUB] Version " .. version .. " " .. ver .. " loaded successfully!")
 print("[DYHUB] Config system active | Auto saving every 15 seconds")
