@@ -1,7 +1,7 @@
 -- v050
 -- =========================
 local version = "Rework"
-local ver = "v022.2"
+local ver = "v022.5"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -182,8 +182,8 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 08/05/2026",
-    Desc = "- [ New ] Priority System: GiantST → Heli → HighHP (>300) → Nearest\n- [ New ] Interrupt: ถ้ากำลังตีมอนอื่นแล้ว Priority mob ใหม่ปรากฏ → สลับทันที\n- [ Fixed ] Auto Vote & Start Sync\n- [ Improved ] Auto Vote & Start loop on respawn",
+    Title = "Update: 05/09/2026",
+    Desc = "- [ New ] Priority System \n- [ Added ] God Mode \n- [ Added ] Unlock Gamepass \n- [ Fixed ] Esp Core \n- [ Improved ] Delete Map",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
@@ -303,6 +303,8 @@ GlobalTables = {
     },
     Weapon   = { "Stungun", "Flamethrower", "Harpoon Gun", "Shot Gun", "Pulse Rifle", "Shot Harpoon Gun", "EPD", "Small Laser Gun" },
     MiscShop = { "HeadPhone", "Titan-Request", "SpecialTitan-Request", "Speaker-Request", "Grenade", "Jetpack", "Lens" },
+    Gamepasst = { "All", "LuckyBoost", "RareLuckyBoost", "LegendaryLuckyBoost" },
+    Gamepassts = {},
 }
 
 -- ====================== CONFIG VARIABLES ======================
@@ -317,12 +319,15 @@ local MiscOptions            = Config:Get("MiscOptions", {})
 local AutoAttackEnabled      = false
 local AutoSkillEnabled       = false
 local AutoSkipHeliEnabled    = false
-local DeleteMapEnabled       = false
+local BoostFPS_Active_dummy  = false -- managed by BoostFPS system
 local AutoStartEnabled       = false
 local AutoFillUpEnabled      = false
 local SelectedSkills         = Config:Get("SelectedSkills", { "All" })
 local SafeModeEnabled        = false
 local SafeValue              = Config:Get("SafeValue", 30)
+local GodModeEnabled         = false
+local GodModeValue           = Config:Get("GodModeValue", 30)
+local GodModeTriggered       = false
 local WaitingRespawn         = false
 local IdlePosition           = CFrame.new(-23.3435822, 67, 0.341766357) * CFrame.Angles(math.rad(0), 0, 0)
 local SkillDelay             = Config:Get("SkillDelay", 1)
@@ -821,21 +826,183 @@ local function TriggerAutoSkipHeli(state)
     pcall(function() ReplicatedStorage.SetSettingAutoSkipWave:FireServer(state) end)
 end
 
-local function DeleteMapTextures()
+local function HasHumanoid(obj)
+    if obj:IsA("Model") then
+        return obj:FindFirstChildOfClass("Humanoid") ~= nil
+    end
+    return false
+end
+
+local function IsLivingDescendant(obj)
+    local current = obj
+    while current and current ~= workspace do
+        if current:IsA("Model") and current:FindFirstChildOfClass("Humanoid") then
+            return true
+        end
+        current = current.Parent
+    end
+    return false
+end
+
+-- ====================== BOOST FPS (Delete Map) SYSTEM ======================
+local BoostFPS_OriginalData = {}
+local BoostFPS_Active = false
+local BoostFPS_RestoreConnection = nil
+local BoostFPS_LightingData = {}
+
+local function SaveAndBoostFPS()
+    if BoostFPS_Active then return end
+    BoostFPS_Active = true
+    BoostFPS_OriginalData = {}
+    BoostFPS_LightingData = {}
+
+    -- บันทึกและปิด Lighting effects
+    local Lighting = game:GetService("Lighting")
+    BoostFPS_LightingData = {
+        Brightness        = Lighting.Brightness,
+        GlobalShadows     = Lighting.GlobalShadows,
+        FogEnd            = Lighting.FogEnd,
+        FogStart          = Lighting.FogStart,
+    }
+    pcall(function()
+        Lighting.GlobalShadows = false
+        Lighting.Brightness    = 1
+        Lighting.FogEnd        = 100000
+        Lighting.FogStart      = 100000
+    end)
+    -- ลบ Atmosphere, Bloom, ColorCorrection, DepthOfField, SunRays, Sky
+    for _, effect in ipairs(Lighting:GetChildren()) do
+        pcall(function()
+            if effect:IsA("Atmosphere") or effect:IsA("BloomEffect") or
+               effect:IsA("ColorCorrectionEffect") or effect:IsA("DepthOfFieldEffect") or
+               effect:IsA("SunRaysEffect") or effect:IsA("Sky") then
+                BoostFPS_LightingData["effect_" .. effect.Name] = { class = effect.ClassName, inst = effect }
+                effect.Parent = nil
+            end
+        end)
+    end
+
     pcall(function()
         for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("Decal") or obj:IsA("Texture") then
-                obj:Destroy()
-            elseif obj:IsA("MeshPart") then
-                obj.TextureID = ""
+            -- ข้ามสิ่งมีชีวิต (มี Humanoid)
+            if IsLivingDescendant(obj) then continue end
+
+            if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") or obj:IsA("SpecialMesh") then
+                if not IsLivingDescendant(obj) then
+                    if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
+                        BoostFPS_OriginalData[obj] = {
+                            Transparency = obj.Transparency,
+                            CastShadow   = obj.CastShadow,
+                            Material     = obj.Material,
+                        }
+                        obj.Transparency = 1
+                        obj.CastShadow   = false
+                        pcall(function() obj.Material = Enum.Material.SmoothPlastic end)
+                    end
+                end
+            elseif obj:IsA("Decal") or obj:IsA("Texture") then
+                BoostFPS_OriginalData[obj] = { Transparency = obj.Transparency }
+                obj.Transparency = 1
+            elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or
+                   obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") or obj:IsA("SelectionBox") then
+                BoostFPS_OriginalData[obj] = { Enabled = obj.Enabled }
+                pcall(function() obj.Enabled = false end)
             elseif obj:IsA("SpecialMesh") then
+                BoostFPS_OriginalData[obj] = { TextureId = obj.TextureId }
                 obj.TextureId = ""
-            elseif obj:IsA("Part") or obj:IsA("BasePart") then
-                obj.Material = Enum.Material.SmoothPlastic
             end
         end
     end)
+
+    -- เฝ้าดูถ้าแมพ respawn (DescendantAdded) แล้วทำ transparency ทันที
+    BoostFPS_RestoreConnection = workspace.DescendantAdded:Connect(function(obj)
+        if not BoostFPS_Active then return end
+        if IsLivingDescendant(obj) then return end
+        task.wait(0.05)
+        pcall(function()
+            if obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") then
+                if not IsLivingDescendant(obj) then
+                    obj.Transparency = 1
+                    obj.CastShadow   = false
+                end
+            elseif obj:IsA("Decal") or obj:IsA("Texture") then
+                obj.Transparency = 1
+            elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or
+                   obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") then
+                pcall(function() obj.Enabled = false end)
+            end
+        end)
+    end)
+
+    print("[DYHUB] Boost FPS: ON")
 end
+
+local function RestoreBoostFPS()
+    if not BoostFPS_Active then return end
+    BoostFPS_Active = false
+
+    if BoostFPS_RestoreConnection then
+        BoostFPS_RestoreConnection:Disconnect()
+        BoostFPS_RestoreConnection = nil
+    end
+
+    -- คืน Lighting
+    local Lighting = game:GetService("Lighting")
+    pcall(function()
+        if BoostFPS_LightingData.Brightness        ~= nil then Lighting.Brightness        = BoostFPS_LightingData.Brightness end
+        if BoostFPS_LightingData.GlobalShadows     ~= nil then Lighting.GlobalShadows     = BoostFPS_LightingData.GlobalShadows end
+        if BoostFPS_LightingData.FogEnd            ~= nil then Lighting.FogEnd            = BoostFPS_LightingData.FogEnd end
+        if BoostFPS_LightingData.FogStart          ~= nil then Lighting.FogStart          = BoostFPS_LightingData.FogStart end
+    end)
+    for key, data in pairs(BoostFPS_LightingData) do
+        if type(key) == "string" and key:sub(1, 7) == "effect_" then
+            pcall(function()
+                if data.inst then data.inst.Parent = Lighting end
+            end)
+        end
+    end
+
+    -- คืนค่าทุก object
+    for obj, data in pairs(BoostFPS_OriginalData) do
+        pcall(function()
+            if not obj or not obj.Parent then return end
+            if data.Transparency ~= nil and (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation") or obj:IsA("Decal") or obj:IsA("Texture")) then
+                obj.Transparency = data.Transparency
+            end
+            if data.CastShadow ~= nil then obj.CastShadow = data.CastShadow end
+            if data.Material   ~= nil then pcall(function() obj.Material = data.Material end) end
+            if data.Enabled    ~= nil then pcall(function() obj.Enabled  = data.Enabled  end) end
+            if data.TextureId  ~= nil then obj.TextureId = data.TextureId end
+        end)
+    end
+
+    BoostFPS_OriginalData = {}
+    BoostFPS_LightingData = {}
+    print("[DYHUB] Boost FPS: OFF (restored)")
+end
+
+-- ตรวจสอบแบบ loop ว่าถ้า Boost FPS เปิดอยู่แต่แมพ reset แล้ว ให้ re-apply
+task.spawn(function()
+    while true do
+        task.wait(3)
+        if BoostFPS_Active then
+            pcall(function()
+                for _, obj in ipairs(workspace:GetDescendants()) do
+                    if IsLivingDescendant(obj) then continue end
+                    if (obj:IsA("BasePart") or obj:IsA("MeshPart") or obj:IsA("UnionOperation")) then
+                        if not IsLivingDescendant(obj) then
+                            if obj.Transparency < 0.99 and not BoostFPS_OriginalData[obj] then
+                                -- object ใหม่ที่ยังไม่ถูก process
+                                obj.Transparency = 1
+                                obj.CastShadow   = false
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
 
 -- ====================== PLAYER HP HELPERS ======================
 local function GetPlayerHPInfo()
@@ -856,6 +1023,33 @@ local function GetPlayerHealthPercent()
     if humanoid.MaxHealth <= 0 then return 100 end
     return (humanoid.Health / humanoid.MaxHealth) * 100
 end
+
+-- ====================== GOD MODE LOOP ======================
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if GodModeEnabled then
+            pcall(function()
+                local char = LocalPlayer.Character
+                if not char then return end
+                local humanoid = char:FindFirstChild("Humanoid")
+                if not humanoid then return end
+                if humanoid.MaxHealth <= 0 then return end
+                local hpPercent = (humanoid.Health / humanoid.MaxHealth) * 100
+                if hpPercent < GodModeValue then
+                    -- destroy head ทันที (respawn)
+                    local head = char:FindFirstChild("Head")
+                    if head then
+                        head:Destroy()
+                    else
+                        -- fallback: set health 0
+                        humanoid.Health = 0
+                    end
+                end
+            end)
+        end
+    end
+end)
 
 -- ====================== AUTO FILL UP ======================
 local function DoFillUp()
@@ -1374,34 +1568,62 @@ local function StartFarmLoop()
 end
 
 -- ====================== MISC OPTIONS HANDLER ======================
+local SyncFarmOnly = Config:Get("SyncFarmOnly", false)
+
 local function HandleMiscOptions(selectedOptions)
     MiscOptions = selectedOptions
 
+    -- ถ้า Sync Farm Only ปิด: ระบบทำงานได้แม้ AutoFarm ปิด
+    -- ถ้า Sync Farm Only เปิด: ต้องเปิด AutoFarm ก่อนถึงจะทำงาน
+    -- ถ้า AutoFarm ปิดและ Sync Farm Only ปิด: ระบบใน MiscFarm ยังทำงาน
+    -- ถ้า AutoFarm ปิดและ Sync Farm Only เปิด: ระบบหยุดทำงาน
+
+    local canRun = AutoFarmEnabled or not SyncFarmOnly
+
     local hasAutoAttack = table.find(selectedOptions, "Auto Attack")
-    if hasAutoAttack and not AutoAttackEnabled then AutoAttackEnabled = true; StartAutoAttack()
-    elseif not hasAutoAttack then AutoAttackEnabled = false end
+    if hasAutoAttack and not AutoAttackEnabled and canRun then
+        AutoAttackEnabled = true; StartAutoAttack()
+    elseif not hasAutoAttack then
+        AutoAttackEnabled = false
+    end
 
     local hasAutoSkill = table.find(selectedOptions, "Auto Skill")
-    if hasAutoSkill and not AutoSkillEnabled then AutoSkillEnabled = true; StartAutoSkill()
-    elseif not hasAutoSkill then AutoSkillEnabled = false end
+    if hasAutoSkill and not AutoSkillEnabled and canRun then
+        AutoSkillEnabled = true; StartAutoSkill()
+    elseif not hasAutoSkill then
+        AutoSkillEnabled = false
+    end
 
     local hasAutoSkipHeli = table.find(selectedOptions, "Auto Skip Helicopter")
-    if hasAutoSkipHeli and not AutoSkipHeliEnabled then AutoSkipHeliEnabled = true; TriggerAutoSkipHeli(true)
-    elseif not hasAutoSkipHeli and AutoSkipHeliEnabled then AutoSkipHeliEnabled = false; TriggerAutoSkipHeli(false) end
+    if hasAutoSkipHeli and not AutoSkipHeliEnabled and canRun then
+        AutoSkipHeliEnabled = true; TriggerAutoSkipHeli(true)
+    elseif not hasAutoSkipHeli and AutoSkipHeliEnabled then
+        AutoSkipHeliEnabled = false; TriggerAutoSkipHeli(false)
+    end
 
-    local hasDeleteMap = table.find(selectedOptions, "Delete Map")
-    if hasDeleteMap and not DeleteMapEnabled then DeleteMapEnabled = true; DeleteMapTextures() end
+    local hasBoostFPS = table.find(selectedOptions, "Boost FPS")
+    if hasBoostFPS and not BoostFPS_Active then
+        SaveAndBoostFPS()
+    elseif not hasBoostFPS and BoostFPS_Active then
+        RestoreBoostFPS()
+    end
 
     SafeModeEnabled = table.find(selectedOptions, "Safe Mode") ~= nil
+    GodModeEnabled  = table.find(selectedOptions, "God Mode") ~= nil
 
     local hasAutoStart = table.find(selectedOptions, "Auto Start")
-    if hasAutoStart and not AutoStartEnabled then StartAutoStart()
-    elseif not hasAutoStart and AutoStartEnabled then StopAutoStart() end
+    if hasAutoStart and not AutoStartEnabled and canRun then
+        StartAutoStart()
+    elseif not hasAutoStart and AutoStartEnabled then
+        StopAutoStart()
+    end
 
     local hasAutoFillUp = table.find(selectedOptions, "Auto Fill Up")
     if hasAutoFillUp and not AutoFillUpEnabled then
-        if AutoFarmEnabled then AutoFillUpEnabled = true; StartAutoFillUpLoop() end
-    elseif not hasAutoFillUp then AutoFillUpEnabled = false; FillUpRunning = false end
+        if canRun then AutoFillUpEnabled = true; StartAutoFillUpLoop() end
+    elseif not hasAutoFillUp then
+        AutoFillUpEnabled = false; FillUpRunning = false
+    end
 
     Config:Set("MiscOptions", selectedOptions)
     Config:Save()
@@ -1432,11 +1654,19 @@ AutoFarmToggle = Main:Toggle({
         if state then
             StartFarmLoop()
             HandleMiscOptions(MiscOptions)
+            WindUI:Notify({ Title = "Auto Farm", Content = "เปิด Auto Farm แล้ว!", Duration = 2, Icon = "play" })
         else
             AutoAttackEnabled = false; AutoSkillEnabled = false
             AutoSkipHeliEnabled = false; AutoFillUpEnabled = false
             FillUpRunning = false; LockActive = false
             if AutoStartEnabled then StopAutoStart() end
+            -- ถ้า SyncFarmOnly เปิดอยู่ ให้หยุดระบบ Misc ที่ต้องการ AutoFarm
+            if SyncFarmOnly then
+                TriggerAutoSkipHeli(false)
+                WindUI:Notify({ Title = "Auto Farm", Content = "ปิด Auto Farm: ระบบ Misc Farm หยุดทำงาน (Sync Farm Only)", Duration = 3, Icon = "square" })
+            else
+                WindUI:Notify({ Title = "Auto Farm", Content = "ปิด Auto Farm แล้ว", Duration = 2, Icon = "square" })
+            end
         end
         Config:Set("AutoFarmEnabled", state); Config:Save()
     end
@@ -1462,10 +1692,65 @@ ModeDropdown = Main:Dropdown({
 
 MiscDropdown = Main:Dropdown({
     Title = "Misc Farm",
-    Values = { "Auto Attack", "Auto Skill", "Auto Start", "Auto Skip Helicopter", "Auto Fill Up", "Safe Mode", "Delete Map" },
+    Values = { "Auto Attack", "Auto Skill", "Auto Start", "Auto Skip Helicopter", "Auto Fill Up", "Safe Mode", "God Mode", "Boost FPS" },
     Multi = true,
     Value = MiscOptions,
-    Callback = function(values) MiscOptions = values; HandleMiscOptions(values) end
+    Callback = function(values)
+        MiscOptions = values
+        -- ถ้า Misc Farm ไม่เปิด AutoFarm และ SyncFarmOnly เปิด → notify เตือน
+        if not AutoFarmEnabled and SyncFarmOnly then
+            local hasFeatures = #values > 0
+            local onlyGodOrBoost = true
+            for _, v in ipairs(values) do
+                if v ~= "God Mode" and v ~= "Boost FPS" then
+                    onlyGodOrBoost = false; break
+                end
+            end
+            if hasFeatures and not onlyGodOrBoost then
+                WindUI:Notify({
+                    Title = "Misc Farm",
+                    Content = "ต้องเปิด Auto Farm ก่อน (Sync Farm Only เปิดอยู่)",
+                    Duration = 3, Icon = "alert-triangle"
+                })
+            end
+        end
+        HandleMiscOptions(values)
+    end
+})
+
+Main:Toggle({
+    Title = "Sync Farm Only",
+    Value = SyncFarmOnly,
+    Callback = function(state)
+        SyncFarmOnly = state
+        Config:Set("SyncFarmOnly", state)
+        Config:Save()
+        if state then
+            WindUI:Notify({ Title = "Sync Farm Only", Content = "เปิดแล้ว: ระบบ Misc Farm ต้องเปิด Auto Farm ก่อน", Duration = 3, Icon = "link" })
+        else
+            WindUI:Notify({ Title = "Sync Farm Only", Content = "ปิดแล้ว: ระบบ Misc Farm ทำงานได้โดยไม่ต้อง Auto Farm", Duration = 3, Icon = "unlink" })
+            -- re-apply misc options ตอนปิด sync
+            HandleMiscOptions(MiscOptions)
+        end
+    end
+})
+
+Main:Slider({
+    Title = "Safe Mode HP (%)",
+    Value = { Min = 1, Max = 100, Default = SafeValue },
+    Step = 1,
+    Callback = function(value) SafeValue = value; Config:Set("SafeValue", value); Config:Save() end
+})
+
+Main:Slider({
+    Title = "God Mode (%)",
+    Value = { Min = 1, Max = 99, Default = GodModeValue },
+    Step = 1,
+    Callback = function(value)
+        GodModeValue = value
+        Config:Set("GodModeValue", value)
+        Config:Save()
+    end
 })
 
 -- ====================== UI: PRIORITY SETTINGS ======================
@@ -1557,13 +1842,6 @@ SkillDelaySlider = Main:Slider({
     Value = { Min = 1, Max = 30, Default = SkillDelay },
     Step = 1,
     Callback = function(value) SkillDelay = value; Config:Set("SkillDelay", value); Config:Save() end
-})
-
-SafeModeSlider = Main:Slider({
-    Title = "Safe Mode HP (%)",
-    Value = { Min = 1, Max = 100, Default = SafeValue },
-    Step = 1,
-    Callback = function(value) SafeValue = value; Config:Set("SafeValue", value); Config:Save() end
 })
 
 FarmHeightSlider = Main:Slider({
@@ -2041,6 +2319,70 @@ Main2:Button({
         for _, code in ipairs(GlobalTables.redeemCodes or {}) do
             pcall(function() ReplicatedStorage:WaitForChild("RedeemCode"):FireServer(code); task.wait(0.5) end)
         end
+    end,
+})
+
+-- ====================== UI: UNLOCK GAMEPASS ======================
+Main2:Section({ Title = "Unlock Gamepass for real!", Icon = "badge-dollar-sign" })
+
+local SelectedGamepass = Config:Get("SelectedGamepass", {})
+GlobalTables.Gamepassts = SelectedGamepass
+
+GamepassDropdown = Main2:Dropdown({
+    Title = "Select Gamepass",
+    Multi = true,
+    Values = GlobalTables.Gamepasst,
+    Value = SelectedGamepass,
+    Callback = function(value)
+        GlobalTables.Gamepassts = value or {}
+        SelectedGamepass = value or {}
+        Config:Set("SelectedGamepass", value)
+        Config:Save()
+    end,
+})
+
+Main2:Button({
+    Title = "Unlock Selected Gamepass",
+    Callback = function()
+        local gachaData = LocalPlayer:FindFirstChild("GachaData")
+        if not gachaData then
+            gachaData = Instance.new("Folder")
+            gachaData.Name = "GachaData"
+            gachaData.Parent = LocalPlayer
+        end
+        local toUnlock = {}
+        for _, v in ipairs(GlobalTables.Gamepassts) do
+            if v == "All" then
+                toUnlock = {"LuckyBoost", "RareLuckyBoost", "LegendaryLuckyBoost"}
+                break
+            else
+                table.insert(toUnlock, v)
+            end
+        end
+        if #toUnlock == 0 then
+            WindUI:Notify({ Title = "Unlock Gamepass", Content = "เลือก Gamepass ก่อน!", Duration = 3, Icon = "alert-triangle" })
+            return
+        end
+        local successCount = 0
+        for _, gamepassName in ipairs(toUnlock) do
+            pcall(function()
+                local boolValue = gachaData:FindFirstChild(gamepassName)
+                if not boolValue then
+                    boolValue = Instance.new("BoolValue")
+                    boolValue.Name = gamepassName
+                    boolValue.Parent = gachaData
+                end
+                boolValue.Value = true
+                successCount = successCount + 1
+                task.wait(0.2)
+            end)
+        end
+        WindUI:Notify({
+            Title = "Unlock Gamepass",
+            Content = "Unlocked " .. successCount .. "/" .. #toUnlock .. " gamepass(es) สำเร็จ!",
+            Duration = 3,
+            Icon = "badge-check"
+        })
     end,
 })
 
