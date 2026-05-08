@@ -1,0 +1,126 @@
+local Players = game:GetService("Players")
+
+local plr = Players.LocalPlayer
+local pg = plr:WaitForChild("PlayerGui")
+
+local DELAY = 2 -- เปลี่ยนได้ 2 หรือ 3
+
+local function notify(t,c,i)
+    WindUI:Notify({
+        Title = t,
+        Content = c,
+        Duration = 3,
+        Icon = i or "check"
+    })
+end
+
+local function click_btn(btn)
+    if btn and (btn:IsA("ImageButton") or btn:IsA("TextButton")) then
+        pcall(function()
+            if firesignal then
+                firesignal(btn.MouseButton1Click)
+                firesignal(btn.Activated)
+            else
+                btn:Activate()
+            end
+        end)
+    end
+end
+
+--// PLAY SYSTEM
+task.spawn(function()
+
+    local playBtn = workspace:FindFirstChild("ForGui")
+    and workspace.ForGui:FindFirstChild("SurfaceGui")
+    and workspace.ForGui.SurfaceGui:FindFirstChild("Frame")
+    and workspace.ForGui.SurfaceGui.Frame:FindFirstChild("Play")
+
+    if not playBtn then
+        return
+    end
+
+    notify("Checking","found Play button")
+
+    task.wait(DELAY)
+
+    click_btn(playBtn)
+
+    task.wait(DELAY)
+
+    local playGui = pg:FindFirstChild("Play")
+
+    if not (playGui and playGui.Enabled) then
+        notify("Checking","Play gui not enabled","x")
+        return
+    end
+
+    notify("Checking","Play gui enabled")
+
+    local classicBtn = playGui:FindFirstChild("Classic")
+
+    if not classicBtn then
+        notify("Checking","Classic button not found","x")
+        return
+    end
+
+    task.wait(DELAY)
+
+    notify("Checking","clicking Classic")
+
+    click_btn(classicBtn)
+
+    task.wait(DELAY)
+
+    local modeGui = pg:FindFirstChild("mode select2")
+
+    if not (modeGui and modeGui.Enabled) then
+        notify("Checking","mode select2 not enabled","x")
+        return
+    end
+
+    notify("Checking","mode select2 enabled")
+
+    local diffBtn = modeGui:FindFirstChild("MainFrame")
+    and modeGui.MainFrame:FindFirstChild("DiffMode")
+
+    if diffBtn then
+        task.wait(DELAY)
+
+        notify("Checking","clicking DiffMode")
+
+        click_btn(diffBtn)
+    end
+
+end)
+
+--// LOBBY SYSTEM
+task.spawn(function()
+
+    local lobby = pg:FindFirstChild("Lobby")
+
+    if not lobby then
+        return
+    end
+
+    local btn = lobby:FindFirstChild("MainFrame")
+    and lobby.MainFrame:FindFirstChild("Frame")
+    and lobby.MainFrame.Frame:FindFirstChild("Create")
+    and lobby.MainFrame.Frame.Create:FindFirstChild("TrackQuestButton")
+
+    if not btn then
+        return
+    end
+
+    notify("Checking","found TrackQuestButton")
+
+    task.wait(DELAY)
+
+    click_btn(btn)
+
+    task.wait(DELAY)
+
+    if lobby.Enabled == false then
+        notify("Checking","Lobby disabled, stopping")
+    end
+
+end)
