@@ -1,7 +1,7 @@
 -- v080
 -- =========================
 local version = "Rework"
-local ver = "v023.1"
+local ver = "v023.2"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -49,7 +49,7 @@ end
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
-local ConfigFolder = "DYHUB_STBB_V0231"
+local ConfigFolder = "DYHUB_STBB_V0232"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
@@ -2433,6 +2433,10 @@ Main7:Button({
     Desc = "⚠️ Press this once before using Auto Vote Mode for the first time.",
     Callback = function()
         pcall(function()
+            ReplicatedStorage.GetReadyRemote:FireServer("3", true)
+            task.wait(1.25)
+            ReplicatedStorage.GetReadyRemote:FireServer("2", true)
+            task.wait(1.25)
             ReplicatedStorage.GetReadyRemote:FireServer("1", true)
         end)
         WindUI:Notify({
@@ -2441,20 +2445,31 @@ Main7:Button({
             Duration = 2,
             Icon = "check-circle"
         })
-        task.wait(5)
+        task.wait(6)
         pcall(function()
             local char = LocalPlayer.Character
             if char and char:FindFirstChild("HumanoidRootPart") then
                 char.HumanoidRootPart.CFrame = CFrame.new(-220, 3, -600)
             end
         end)
-        task.wait(6.7)
+        WindUI:Notify({
+            Title = "Restore Loading",
+            Content = "Restore Vote System, please wait.",
+            Duration = 5,
+            Icon = "check-circle"
+        })
+        task.wait(10)
         WindUI:Notify({
             Title = "Restore Complete",
             Content = "Vote System restored! You can now use Auto Vote Mode.",
             Duration = 5,
             Icon = "check-circle"
         })
+        pcall(function()
+            ReplicatedStorage.GetReadyRemote:FireServer("3", true)
+            task.wait(1.25)
+            ReplicatedStorage.GetReadyRemote:FireServer("2", true)
+        end)
     end
 })
 
@@ -2523,7 +2538,7 @@ local function notify(title, content, icon)
         Title = title,
         Content = content,
         Duration = 3,
-        Icon = icon or "check"
+        Icon = "check"
     })
 end
 
