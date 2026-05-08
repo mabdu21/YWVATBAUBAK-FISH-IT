@@ -1,7 +1,7 @@
--- v078
+-- v080
 -- =========================
 local version = "Rework"
-local ver = "v022.9"
+local ver = "v023.1"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -49,7 +49,7 @@ end
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
-local ConfigFolder = "DYHUB_STBB_V0229"
+local ConfigFolder = "DYHUB_STBB_V0231"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
@@ -74,7 +74,7 @@ function CustomConfig:Save()
     local success, err = pcall(function()
         writefile(self.ConfigPath, HttpService:JSONEncode(self.ConfigData))
     end)
-    if success then print("[DYHUB] Config saved!") else warn("[DYHUB] Save failed:", err) end
+    if success then warn("[DYHUB] Config saved!") else warn("[DYHUB] Save failed:", err) end
 end
 
 function CustomConfig:Load()
@@ -1149,13 +1149,13 @@ end
 local function FireGetReady()
     task.wait(2.5)
     pcall(function() ReplicatedStorage.GetReadyRemote:FireServer("1", true) end)
-    print("[DYHUB] AutoStart fired")
+    --print("[DYHUB] AutoStart fired")
 end
 
 local function FireVote_InGame()
     if not AutoVoteValue then return end
     pcall(function() ReplicatedStorage.Vote:FireServer(AutoVoteValue) end)
-    print("[DYHUB] AutoVote IG fired: " .. tostring(AutoVoteValue))
+    --print("[DYHUB] AutoVote IG fired: " .. tostring(AutoVoteValue))
 end
 
 local function SetupSyncVoteAndStart()
@@ -1556,7 +1556,7 @@ local function StartFarmLoop()
                             -- เช็ค interrupt: มี priority mob ระดับสูงกว่าปรากฏหรือไม่
                             local shouldInterrupt, newPriority = CheckInterrupt(priority)
                             if shouldInterrupt then
-                                print("[DYHUB] INTERRUPT! Priority " .. priority .. " → " .. newPriority .. " | current mob: " .. mob.Name)
+                                --print("[DYHUB] INTERRUPT! Priority " .. priority .. " → " .. newPriority .. " | current mob: " .. mob.Name)
                                 _interruptSignal = true
                                 break
                             end
