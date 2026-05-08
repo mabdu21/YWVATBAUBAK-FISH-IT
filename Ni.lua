@@ -1,4 +1,4 @@
--- v080
+-- v085
 -- =========================
 local version = "Rework"
 local ver = "v023.2"
@@ -2435,8 +2435,12 @@ Main7:Button({
         pcall(function()
             ReplicatedStorage.GetReadyRemote:FireServer("3", true)
             task.wait(1.25)
+            ReplicatedStorage.GetReadyRemote:FireServer("3", false)
+            task.wait(0.67)
             ReplicatedStorage.GetReadyRemote:FireServer("2", true)
             task.wait(1.25)
+            ReplicatedStorage.GetReadyRemote:FireServer("2", false)
+            task.wait(0.67)
             ReplicatedStorage.GetReadyRemote:FireServer("1", true)
         end)
         WindUI:Notify({
@@ -2468,7 +2472,11 @@ Main7:Button({
         pcall(function()
             ReplicatedStorage.GetReadyRemote:FireServer("3", true)
             task.wait(1.25)
+            ReplicatedStorage.GetReadyRemote:FireServer("3", false)
+            task.wait(0.67)
             ReplicatedStorage.GetReadyRemote:FireServer("2", true)
+            task.wait(1.25)
+            ReplicatedStorage.GetReadyRemote:FireServer("2", false)
         end)
     end
 })
