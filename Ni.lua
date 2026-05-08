@@ -1,7 +1,7 @@
 -- v050
 -- =========================
 local version = "Rework"
-local ver = "v022.2"
+local ver = "v022.3"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -183,7 +183,7 @@ Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 08/05/2026",
-    Desc = "- [ New ] Priority System: GiantST → Heli → HighHP (>300) → Nearest\n- [ New ] Interrupt: ถ้ากำลังตีมอนอื่นแล้ว Priority mob ใหม่ปรากฏ → สลับทันที\n- [ Fixed ] Auto Vote & Start Sync\n- [ Improved ] Auto Vote & Start loop on respawn",
+    Desc = "- [ New ] Priority System \n- [ Added ] God Mode \n- [ Added ] Unlock Gamepass \n- [ Fixed ] Esp Core \n- [ Improved ] Delete Map",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
@@ -303,6 +303,7 @@ GlobalTables = {
     },
     Weapon   = { "Stungun", "Flamethrower", "Harpoon Gun", "Shot Gun", "Pulse Rifle", "Shot Harpoon Gun", "EPD", "Small Laser Gun" },
     MiscShop = { "HeadPhone", "Titan-Request", "SpecialTitan-Request", "Speaker-Request", "Grenade", "Jetpack", "Lens" },
+    Gamepasst  = { "All", "LuckyBoost", "RareLuckyBoost", "LegendaryLuckyBoost" },
 }
 
 -- ====================== CONFIG VARIABLES ======================
@@ -323,6 +324,9 @@ local AutoFillUpEnabled      = false
 local SelectedSkills         = Config:Get("SelectedSkills", { "All" })
 local SafeModeEnabled        = false
 local SafeValue              = Config:Get("SafeValue", 30)
+local GodModeEnabled = false
+local GodModeValue   = Config:Get("GodModeValue", 30)
+local GodModeLoopRunning = false
 local WaitingRespawn         = false
 local IdlePosition           = CFrame.new(-23.3435822, 67, 0.341766357) * CFrame.Angles(math.rad(0), 0, 0)
 local SkillDelay             = Config:Get("SkillDelay", 1)
@@ -334,6 +338,8 @@ local LockActive             = false
 local AutoStartConnection    = nil
 local noBarrierConnection    = nil
 local noBarrierActive        = Config:Get("NoBarrier", false)
+
+local Gamepassts = Config:Get("SelectedGamepasses", {})
 
 -- ====================== NEW PRIORITY SYSTEM CONFIG ======================
 -- มอนที่เลือดสูงสุดต่ำกว่า HighHPThreshold จะถูกข้ามไป → ไปฆ่ามอนปกติที่ใกล้ที่สุดแทน
@@ -821,20 +827,269 @@ local function TriggerAutoSkipHeli(state)
     pcall(function() ReplicatedStorage.SetSettingAutoSkipWave:FireServer(state) end)
 end
 
-local function DeleteMapTextures()
+-- ====================== BOOST FPS SYSTEM (DELETE MAP REWORK) ======================
+local _originalTransparency = {}  -- { [BasePart] = originalTransparency }
+local _originalMaterial    = {}   -- { [BasePart] = originalMaterial }
+local _originalTextureID   = {}   -- { [MeshPart/SpecialMesh] = originalTextureID }
+local _originalDecals      = {}   -- list of { parent, name, face, texture, transparency }
+local _originalTextures    = {}   -- list of { parent, name, face, texture, transparency }
+local _originalSounds      = {}   -- { [Sound] = { Volume, Playing } }
+local _originalParticles   = {}   -- { [ParticleEmitter/Beam/Trail/etc] = Enabled }
+local _deletedDecals        = {}   -- { Instance } (decals we destroyed)
+local _deletedTextures      = {}   -- { Instance }
+local _mapBoostActive       = false
+local _mapCheckConn         = nil
+
+local function HasHumanoid(obj)
+    -- เช็คว่า obj อยู่ใน Model ที่มี Humanoid หรือไม่
+    local model = obj:FindFirstAncestorOfClass("Model")
+    if model and model:FindFirstChildOfClass("Humanoid") then return true end
+    return false
+end
+
+local function EnableBoostFPS()
+    if _mapBoostActive then return end
+    _mapBoostActive = true
+
+    -- Reset storage
+    _originalTransparency = {}
+    _originalMaterial     = {}
+    _originalTextureID    = {}
+    _originalDecals       = {}
+    _originalTextures     = {}
+    _originalSounds       = {}
+    _originalParticles    = {}
+    _deletedDecals        = {}
+    _deletedTextures      = {}
+
     pcall(function()
         for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("Decal") or obj:IsA("Texture") then
-                obj:Destroy()
-            elseif obj:IsA("MeshPart") then
-                obj.TextureID = ""
-            elseif obj:IsA("SpecialMesh") then
+            -- ข้ามสิ่งมีชีวิต
+            if HasHumanoid(obj) then continue end
+
+            -- BasePart / MeshPart / UnionOperation / Part
+            if obj:IsA("BasePart") then
+                _originalTransparency[obj] = obj.Transparency
+                _originalMaterial[obj]     = obj.Material
+                obj.Transparency = 1
+                obj.Material     = Enum.Material.SmoothPlastic
+                -- ลบ TextureID ของ MeshPart
+                if obj:IsA("MeshPart") and obj.TextureID ~= "" then
+                    _originalTextureID[obj] = obj.TextureID
+                    obj.TextureID = ""
+                end
+            end
+
+            -- SpecialMesh
+            if obj:IsA("SpecialMesh") and obj.TextureId ~= "" then
+                _originalTextureID[obj] = obj.TextureId
                 obj.TextureId = ""
-            elseif obj:IsA("Part") or obj:IsA("BasePart") then
-                obj.Material = Enum.Material.SmoothPlastic
+            end
+
+            -- Decal
+            if obj:IsA("Decal") then
+                table.insert(_deletedDecals, {
+                    parent      = obj.Parent,
+                    name        = obj.Name,
+                    face        = obj.Face,
+                    texture     = obj.Texture,
+                    transparency= obj.Transparency,
+                    zIndex      = obj.ZIndex,
+                    color       = obj.Color3,
+                    ref         = obj,
+                })
+                obj:Destroy()
+            end
+
+            -- Texture
+            if obj:IsA("Texture") then
+                table.insert(_deletedTextures, {
+                    parent       = obj.Parent,
+                    name         = obj.Name,
+                    face         = obj.Face,
+                    texture      = obj.Texture,
+                    transparency = obj.Transparency,
+                    studsSizeU   = obj.StudsPerTileU,
+                    studsSizeV   = obj.StudsPerTileV,
+                    offsetU      = obj.OffsetStudsU,
+                    offsetV      = obj.OffsetStudsV,
+                    color        = obj.Color3,
+                    ref          = obj,
+                })
+                obj:Destroy()
+            end
+
+            -- Effects (ParticleEmitter, Beam, Trail, Fire, Smoke, Sparkles, etc.)
+            if obj:IsA("ParticleEmitter") or obj:IsA("Beam") or obj:IsA("Trail") then
+                _originalParticles[obj] = obj.Enabled
+                obj.Enabled = false
+            end
+            if obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") then
+                _originalParticles[obj] = obj.Enabled
+                obj.Enabled = false
+            end
+
+            -- Sound
+            if obj:IsA("Sound") then
+                _originalSounds[obj] = { Volume = obj.Volume, Playing = obj.Playing }
+                obj.Volume  = 0
+                obj.Playing = false
+                pcall(function() obj:Pause() end)
+            end
+
+            -- Lighting effects
+            if obj:IsA("BloomEffect") or obj:IsA("BlurEffect") or
+               obj:IsA("ColorCorrectionEffect") or obj:IsA("SunRaysEffect") or
+               obj:IsA("DepthOfFieldEffect") or obj:IsA("SelectionEffect") then
+                _originalParticles[obj] = obj.Enabled
+                obj.Enabled = false
             end
         end
     end)
+
+    -- Auto-detect ถ้าแมพกลับมาปกติ (เช่น server reset ส่วน)
+    _mapCheckConn = workspace.DescendantAdded:Connect(function(obj)
+        if not _mapBoostActive then
+            if _mapCheckConn then _mapCheckConn:Disconnect(); _mapCheckConn = nil end
+            return
+        end
+        -- ถ้าเพิ่ม BasePart ใหม่มาและไม่ใช่สิ่งมีชีวิต → ซ่อนทันที
+        task.wait(0.05)
+        if not obj or not obj.Parent then return end
+        if HasHumanoid(obj) then return end
+        pcall(function()
+            if obj:IsA("BasePart") then
+                _originalTransparency[obj] = obj.Transparency
+                _originalMaterial[obj]     = obj.Material
+                obj.Transparency = 1
+                obj.Material     = Enum.Material.SmoothPlastic
+                if obj:IsA("MeshPart") and obj.TextureID ~= "" then
+                    _originalTextureID[obj] = obj.TextureID
+                    obj.TextureID = ""
+                end
+            end
+            if obj:IsA("ParticleEmitter") or obj:IsA("Beam") or obj:IsA("Trail") or
+               obj:IsA("Fire") or obj:IsA("Smoke") or obj:IsA("Sparkles") then
+                _originalParticles[obj] = obj.Enabled
+                obj.Enabled = false
+            end
+            if obj:IsA("Decal") then obj:Destroy() end
+            if obj:IsA("Texture") then obj:Destroy() end
+            if obj:IsA("Sound") then
+                _originalSounds[obj] = { Volume = obj.Volume, Playing = obj.Playing }
+                obj.Volume = 0; obj.Playing = false
+                pcall(function() obj:Pause() end)
+            end
+        end)
+    end)
+
+    WindUI:Notify({
+        Title = "Delete Map",
+        Content = "Remove Map! particle hidden, effects off.",
+        Duration = 3, Icon = "zap"
+    })
+end
+
+local function DisableBoostFPS()
+    if not _mapBoostActive then return end
+    _mapBoostActive = false
+
+    if _mapCheckConn then _mapCheckConn:Disconnect(); _mapCheckConn = nil end
+
+    pcall(function()
+        -- คืน BasePart
+        for obj, transparency in pairs(_originalTransparency) do
+            if obj and obj.Parent then
+                pcall(function() obj.Transparency = transparency end)
+            end
+        end
+        for obj, mat in pairs(_originalMaterial) do
+            if obj and obj.Parent then
+                pcall(function() obj.Material = mat end)
+            end
+        end
+        -- คืน TextureID
+        for obj, texID in pairs(_originalTextureID) do
+            if obj and obj.Parent then
+                pcall(function()
+                    if obj:IsA("MeshPart") then obj.TextureID = texID
+                    elseif obj:IsA("SpecialMesh") then obj.TextureId = texID end
+                end)
+            end
+        end
+        -- สร้าง Decal คืน
+        for _, data in ipairs(_deletedDecals) do
+            if data.parent and data.parent.Parent then
+                pcall(function()
+                    local d = Instance.new("Decal")
+                    d.Name         = data.name
+                    d.Face         = data.face
+                    d.Texture      = data.texture
+                    d.Transparency = data.transparency
+                    d.ZIndex       = data.zIndex
+                    d.Color3       = data.color
+                    d.Parent       = data.parent
+                end)
+            end
+        end
+        -- สร้าง Texture คืน
+        for _, data in ipairs(_deletedTextures) do
+            if data.parent and data.parent.Parent then
+                pcall(function()
+                    local t = Instance.new("Texture")
+                    t.Name           = data.name
+                    t.Face           = data.face
+                    t.Texture        = data.texture
+                    t.Transparency   = data.transparency
+                    t.StudsPerTileU  = data.studsSizeU
+                    t.StudsPerTileV  = data.studsSizeV
+                    t.OffsetStudsU   = data.offsetU
+                    t.OffsetStudsV   = data.offsetV
+                    t.Color3         = data.color
+                    t.Parent         = data.parent
+                end)
+            end
+        end
+        -- คืน Effects
+        for obj, enabled in pairs(_originalParticles) do
+            if obj and obj.Parent then
+                pcall(function() obj.Enabled = enabled end)
+            end
+        end
+        -- คืน Sound
+        for obj, data in pairs(_originalSounds) do
+            if obj and obj.Parent then
+                pcall(function()
+                    obj.Volume  = data.Volume
+                    obj.Playing = data.Playing
+                end)
+            end
+        end
+    end)
+
+    -- Reset storage
+    _originalTransparency = {}
+    _originalMaterial     = {}
+    _originalTextureID    = {}
+    _originalDecals       = {}
+    _originalTextures     = {}
+    _originalSounds       = {}
+    _originalParticles    = {}
+    _deletedDecals        = {}
+    _deletedTextures      = {}
+
+    WindUI:Notify({
+        Title = "Delete Map",
+        Content = "Map restored to normal.",
+        Duration = 3, Icon = "eye"
+    })
+end
+
+-- compat shim (เผื่อ code เก่า call DeleteMapTextures)
+local function DeleteMapTextures()
+    if not _mapBoostActive then
+        EnableBoostFPS()
+    end
 end
 
 -- ====================== PLAYER HP HELPERS ======================
@@ -855,6 +1110,30 @@ local function GetPlayerHealthPercent()
     if not humanoid then return 100 end
     if humanoid.MaxHealth <= 0 then return 100 end
     return (humanoid.Health / humanoid.MaxHealth) * 100
+end
+
+-- ====================== GOD MODE LOOP ======================
+local function StartGodModeLoop()
+    if GodModeLoopRunning then return end
+    GodModeLoopRunning = true
+    task.spawn(function()
+        while GodModeEnabled do
+            pcall(function()
+                local pct = GetPlayerHealthPercent()
+                if pct < GodModeValue then
+                    local char = LocalPlayer.Character
+                    if char then
+                        local head = char:FindFirstChild("Head")
+                        if head then
+                            head:Destroy()
+                        end
+                    end
+                end
+            end)
+            task.wait(0.1)
+        end
+        GodModeLoopRunning = false
+    end)
 end
 
 -- ====================== AUTO FILL UP ======================
@@ -1373,35 +1652,86 @@ local function StartFarmLoop()
     end)
 end
 
--- ====================== MISC OPTIONS HANDLER ======================
+-- ====================== MISC OPTIONS HANDLER (REWORKED) ======================
+--[[
+    Rules:
+    - ถ้า Sync Farm Only = OFF  → ทุก feature ต้องการ AutoFarm ON
+    - ถ้า Sync Farm Only = ON   → features ทำงานได้แม้ AutoFarm OFF
+    - God Mode ทำงานอิสระ (ไม่ขึ้นกับ Sync Farm Only หรือ AutoFarm)
+--]]
+
+local SyncFarmOnly = false  -- ถ้า true = ต้องการ AutoFarm, ถ้า false = ทำงานอิสระ
+
+local function MiscFarmCanRun()
+    -- ถ้า SyncFarmOnly = false → ไม่ต้องการ AutoFarm (ทำงานได้เลย)
+    -- ถ้า SyncFarmOnly = true  → ต้องการ AutoFarm ON
+    if SyncFarmOnly then
+        return AutoFarmEnabled
+    end
+    return true
+end
+
 local function HandleMiscOptions(selectedOptions)
     MiscOptions = selectedOptions
 
+    -- Auto Attack
     local hasAutoAttack = table.find(selectedOptions, "Auto Attack")
-    if hasAutoAttack and not AutoAttackEnabled then AutoAttackEnabled = true; StartAutoAttack()
-    elseif not hasAutoAttack then AutoAttackEnabled = false end
+    if hasAutoAttack and not AutoAttackEnabled and MiscFarmCanRun() then
+        AutoAttackEnabled = true; StartAutoAttack()
+    elseif not hasAutoAttack then
+        AutoAttackEnabled = false
+    end
 
+    -- Auto Skill
     local hasAutoSkill = table.find(selectedOptions, "Auto Skill")
-    if hasAutoSkill and not AutoSkillEnabled then AutoSkillEnabled = true; StartAutoSkill()
-    elseif not hasAutoSkill then AutoSkillEnabled = false end
+    if hasAutoSkill and not AutoSkillEnabled and MiscFarmCanRun() then
+        AutoSkillEnabled = true; StartAutoSkill()
+    elseif not hasAutoSkill then
+        AutoSkillEnabled = false
+    end
 
+    -- Auto Skip Helicopter
     local hasAutoSkipHeli = table.find(selectedOptions, "Auto Skip Helicopter")
-    if hasAutoSkipHeli and not AutoSkipHeliEnabled then AutoSkipHeliEnabled = true; TriggerAutoSkipHeli(true)
-    elseif not hasAutoSkipHeli and AutoSkipHeliEnabled then AutoSkipHeliEnabled = false; TriggerAutoSkipHeli(false) end
+    if hasAutoSkipHeli and MiscFarmCanRun() then
+        if not AutoSkipHeliEnabled then AutoSkipHeliEnabled = true; TriggerAutoSkipHeli(true) end
+    elseif not hasAutoSkipHeli and AutoSkipHeliEnabled then
+        AutoSkipHeliEnabled = false; TriggerAutoSkipHeli(false)
+    end
 
+    -- Boost FPS (Delete Map)
     local hasDeleteMap = table.find(selectedOptions, "Delete Map")
-    if hasDeleteMap and not DeleteMapEnabled then DeleteMapEnabled = true; DeleteMapTextures() end
+    if hasDeleteMap and not _mapBoostActive and MiscFarmCanRun() then
+        DeleteMapEnabled = true; EnableBoostFPS()
+    elseif not hasDeleteMap and _mapBoostActive then
+        DeleteMapEnabled = false; DisableBoostFPS()
+    end
 
+    -- Safe Mode
     SafeModeEnabled = table.find(selectedOptions, "Safe Mode") ~= nil
 
-    local hasAutoStart = table.find(selectedOptions, "Auto Start")
-    if hasAutoStart and not AutoStartEnabled then StartAutoStart()
-    elseif not hasAutoStart and AutoStartEnabled then StopAutoStart() end
+    -- God Mode (ทำงานอิสระ ไม่ต้องการ AutoFarm)
+    local hasGodMode = table.find(selectedOptions, "God Mode")
+    if hasGodMode and not GodModeEnabled then
+        GodModeEnabled = true; StartGodModeLoop()
+    elseif not hasGodMode then
+        GodModeEnabled = false
+    end
 
+    -- Auto Start
+    local hasAutoStart = table.find(selectedOptions, "Auto Start")
+    if hasAutoStart and not AutoStartEnabled and MiscFarmCanRun() then
+        StartAutoStart()
+    elseif not hasAutoStart and AutoStartEnabled then
+        StopAutoStart()
+    end
+
+    -- Auto Fill Up
     local hasAutoFillUp = table.find(selectedOptions, "Auto Fill Up")
-    if hasAutoFillUp and not AutoFillUpEnabled then
-        if AutoFarmEnabled then AutoFillUpEnabled = true; StartAutoFillUpLoop() end
-    elseif not hasAutoFillUp then AutoFillUpEnabled = false; FillUpRunning = false end
+    if hasAutoFillUp and not AutoFillUpEnabled and MiscFarmCanRun() then
+        AutoFillUpEnabled = true; StartAutoFillUpLoop()
+    elseif not hasAutoFillUp then
+        AutoFillUpEnabled = false; FillUpRunning = false
+    end
 
     Config:Set("MiscOptions", selectedOptions)
     Config:Save()
@@ -1462,10 +1792,90 @@ ModeDropdown = Main:Dropdown({
 
 MiscDropdown = Main:Dropdown({
     Title = "Misc Farm",
-    Values = { "Auto Attack", "Auto Skill", "Auto Start", "Auto Skip Helicopter", "Auto Fill Up", "Safe Mode", "Delete Map" },
+    Values = {
+        "Sync Farm Only",
+        "Auto Attack",
+        "Auto Skill",
+        "Auto Start",
+        "Auto Skip Helicopter",
+        "Auto Fill Up",
+        "Safe Mode",
+        "God Mode",         -- ใหม่
+        "Delete Map",       -- ระบบใหม่
+    },
     Multi = true,
     Value = MiscOptions,
-    Callback = function(values) MiscOptions = values; HandleMiscOptions(values) end
+    Callback = function(values)
+        MiscOptions = values
+
+        -- Handle Sync Farm Only toggle
+        local wasSyncOnly = SyncFarmOnly
+        SyncFarmOnly = table.find(values, "Sync Farm Only") ~= nil
+
+        -- ถ้า Sync Farm Only ถูกเพิ่ม และ AutoFarm ปิดอยู่ → notify
+        if SyncFarmOnly and not wasSyncOnly and not AutoFarmEnabled then
+            WindUI:Notify({
+                Title = "Sync Farm Only",
+                Content = "Please enable Auto Farm first!",
+                Duration = 3, Icon = "alert-triangle"
+            })
+        end
+
+        HandleMiscOptions(values)
+    end
+})
+
+Main:Section({ Title = "General Settings", Icon = "zap" })
+
+SkillDropdown = Main:Dropdown({
+    Title = "Auto Skill (Keys)",
+    Values = skillDropdownValues,
+    Multi = true,
+    Value = SelectedSkills,
+    Callback = function(values) SelectedSkills = values; Config:Set("SelectedSkills", values); Config:Save() end
+})
+
+SkillDelaySlider = Main:Slider({
+    Title = "Skill Delay (S)",
+    Value = { Min = 1, Max = 30, Default = SkillDelay },
+    Step = 1,
+    Callback = function(value) SkillDelay = value; Config:Set("SkillDelay", value); Config:Save() end
+})
+
+-- Safe Mode Slider (เดิม - คงไว้)
+SafeModeSlider = Main:Slider({
+    Title = "Safe Mode HP (%)",
+    Value = { Min = 1, Max = 100, Default = SafeValue },
+    Step = 1,
+    Callback = function(value)
+        SafeValue = value
+        Config:Set("SafeValue", value)
+        Config:Save()
+    end
+})
+
+-- God Mode Slider (ใหม่ - ใต้ Safe Mode)
+GodModeSlider = Main:Slider({
+    Title = "God Mode (%)",
+    Value = { Min = 1, Max = 100, Default = GodModeValue },
+    Step = 1,
+    Callback = function(value)
+        GodModeValue = value
+        Config:Set("GodModeValue", value)
+        Config:Save()
+    end
+})
+
+FarmHeightSlider = Main:Slider({
+    Title = "Farm Height (+Y)",
+    Value = { Min = -30, Max = 30, Default = HeightValue },
+    Step = 1,
+    Callback = function(value)
+        HeightValue = value; Config:Set("HeightValue", value); Config:Save()
+        for mob, _ in pairs(MobHeightOverride) do
+            if MobConfirmedPadding[mob] == nil then MobHeightOverride[mob] = nil end
+        end
+    end
 })
 
 -- ====================== UI: PRIORITY SETTINGS ======================
@@ -1539,42 +1949,6 @@ Main:Button({
         MobConfirmedPadding = {}
         MobHeightOverride   = {}
         WindUI:Notify({ Title = "Override Reset", Content = "All confirmed mob positions cleared.", Duration = 2, Icon = "refresh-cw" })
-    end
-})
-
-Main:Section({ Title = "General Settings", Icon = "zap" })
-
-SkillDropdown = Main:Dropdown({
-    Title = "Auto Skill (Keys)",
-    Values = skillDropdownValues,
-    Multi = true,
-    Value = SelectedSkills,
-    Callback = function(values) SelectedSkills = values; Config:Set("SelectedSkills", values); Config:Save() end
-})
-
-SkillDelaySlider = Main:Slider({
-    Title = "Skill Delay (S)",
-    Value = { Min = 1, Max = 30, Default = SkillDelay },
-    Step = 1,
-    Callback = function(value) SkillDelay = value; Config:Set("SkillDelay", value); Config:Save() end
-})
-
-SafeModeSlider = Main:Slider({
-    Title = "Safe Mode HP (%)",
-    Value = { Min = 1, Max = 100, Default = SafeValue },
-    Step = 1,
-    Callback = function(value) SafeValue = value; Config:Set("SafeValue", value); Config:Save() end
-})
-
-FarmHeightSlider = Main:Slider({
-    Title = "Farm Height (+Y)",
-    Value = { Min = -30, Max = 30, Default = HeightValue },
-    Step = 1,
-    Callback = function(value)
-        HeightValue = value; Config:Set("HeightValue", value); Config:Save()
-        for mob, _ in pairs(MobHeightOverride) do
-            if MobConfirmedPadding[mob] == nil then MobHeightOverride[mob] = nil end
-        end
     end
 })
 
@@ -2041,6 +2415,76 @@ Main2:Button({
         for _, code in ipairs(GlobalTables.redeemCodes or {}) do
             pcall(function() ReplicatedStorage:WaitForChild("RedeemCode"):FireServer(code); task.wait(0.5) end)
         end
+    end,
+})
+
+-- ====================== UNLOCK GAMEPASS ======================
+Main2:Section({ Title = "Unlock Gamepass", Icon = "badge-dollar-sign" })
+
+local UnlockGamepassDropdown = Main2:Dropdown({
+    Title = "Select Gamepass",
+    Multi = true,
+    Values = GlobalTables.Gamepasst,
+    Value = Gamepassts,
+    Callback = function(value)
+        Gamepassts = value or {}
+        Config:Set("SelectedGamepasses", value)
+        Config:Save()
+    end,
+})
+
+Main2:Button({
+    Title = "Unlock Gamepass",
+    Callback = function()
+        local gachaData = LocalPlayer:FindFirstChild("GachaData")
+        if not gachaData then
+            gachaData = Instance.new("Folder")
+            gachaData.Name   = "GachaData"
+            gachaData.Parent = LocalPlayer
+        end
+
+        local toUnlock = {}
+        for _, v in ipairs(Gamepassts) do
+            if v == "All" then
+                toUnlock = { "LuckyBoost", "RareLuckyBoost", "LegendaryLuckyBoost" }
+                break
+            else
+                table.insert(toUnlock, v)
+            end
+        end
+
+        if #toUnlock == 0 then
+            WindUI:Notify({
+                Title   = "Unlock Gamepass",
+                Content = "Please select at least one gamepass!",
+                Duration = 3, Icon = "alert-triangle"
+            })
+            return
+        end
+
+        local unlocked = {}
+        for _, gamepassName in ipairs(toUnlock) do
+            pcall(function()
+                local boolValue = gachaData:FindFirstChild(gamepassName)
+                if not boolValue then
+                    boolValue        = Instance.new("BoolValue")
+                    boolValue.Name   = gamepassName
+                    boolValue.Parent = gachaData
+                end
+                boolValue.Value = true
+                table.insert(unlocked, gamepassName)
+                task.wait(0.2)
+            end)
+        end
+
+        WindUI:Notify({
+            Title   = "Unlock Gamepass",
+            Content = "Unlocked: " .. table.concat(unlocked, ", "),
+            Duration = 4, Icon = "badge-check"
+        })
+
+        Config:Set("SelectedGamepasses", Gamepassts)
+        Config:Save()
     end,
 })
 
