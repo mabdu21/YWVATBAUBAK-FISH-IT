@@ -1,4 +1,4 @@
--- v050
+-- v067
 -- =========================
 local version = "Rework"
 local ver = "v022.5"
@@ -49,7 +49,7 @@ end
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
-local ConfigFolder = "DYHUB_REWORK_V2_STBB"
+local ConfigFolder = "DYHUB_STBB_V022"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
@@ -348,7 +348,7 @@ local _currentTargetPriority = 0   -- 0=idle 1=NearMob 2=HighHP 3=Heli 4=GiantST
 local _interruptSignal       = false
 
 local VirtualUser = game:GetService("VirtualUser")
-local hi1 = Config:Get("hi2", true)
+local AntiAFK = Config:Get("AntiAfk", true)
 
 local AutoBuyWeaponEnabled   = Config:Get("AutoBuyWeaponEnabled", false)
 local AutoBuyMiscEnabled     = Config:Get("AutoBuyMiscEnabled", false)
@@ -844,7 +844,7 @@ local function IsLivingDescendant(obj)
     return false
 end
 
--- ====================== BOOST FPS (Delete Map) SYSTEM ======================
+-- ====================== Delete Map (Delete Map) SYSTEM ======================
 local BoostFPS_OriginalData = {}
 local BoostFPS_Active = false
 local BoostFPS_RestoreConnection = nil
@@ -934,7 +934,7 @@ local function SaveAndBoostFPS()
         end)
     end)
 
-    print("[DYHUB] Boost FPS: ON")
+    print("[DYHUB] Delete Map: ON")
 end
 
 local function RestoreBoostFPS()
@@ -978,10 +978,10 @@ local function RestoreBoostFPS()
 
     BoostFPS_OriginalData = {}
     BoostFPS_LightingData = {}
-    print("[DYHUB] Boost FPS: OFF (restored)")
+    print("[DYHUB] Delete Map: OFF (restored)")
 end
 
--- ตรวจสอบแบบ loop ว่าถ้า Boost FPS เปิดอยู่แต่แมพ reset แล้ว ให้ re-apply
+-- ตรวจสอบแบบ loop ว่าถ้า Delete Map เปิดอยู่แต่แมพ reset แล้ว ให้ re-apply
 task.spawn(function()
     while true do
         task.wait(3)
@@ -1601,7 +1601,7 @@ local function HandleMiscOptions(selectedOptions)
         AutoSkipHeliEnabled = false; TriggerAutoSkipHeli(false)
     end
 
-    local hasBoostFPS = table.find(selectedOptions, "Boost FPS")
+    local hasBoostFPS = table.find(selectedOptions, "Delete Map")
     if hasBoostFPS and not BoostFPS_Active then
         SaveAndBoostFPS()
     elseif not hasBoostFPS and BoostFPS_Active then
@@ -1663,9 +1663,9 @@ AutoFarmToggle = Main:Toggle({
             -- ถ้า SyncFarmOnly เปิดอยู่ ให้หยุดระบบ Misc ที่ต้องการ AutoFarm
             if SyncFarmOnly then
                 TriggerAutoSkipHeli(false)
-                WindUI:Notify({ Title = "Auto Farm", Content = "ปิด Auto Farm: ระบบ Misc Farm หยุดทำงาน (Sync Farm Only)", Duration = 3, Icon = "square" })
+                WindUI:Notify({ Title = "Auto Farm", Content = "Turn off Auto Farm: Misc Farm system stops working (Sync Farm Only)", Duration = 3, Icon = "square" })
             else
-                WindUI:Notify({ Title = "Auto Farm", Content = "ปิด Auto Farm แล้ว", Duration = 2, Icon = "square" })
+                WindUI:Notify({ Title = "Auto Farm", Content = "Auto Farm is turned off", Duration = 2, Icon = "square" })
             end
         end
         Config:Set("AutoFarmEnabled", state); Config:Save()
@@ -1692,7 +1692,7 @@ ModeDropdown = Main:Dropdown({
 
 MiscDropdown = Main:Dropdown({
     Title = "Misc Farm",
-    Values = { "Auto Attack", "Auto Skill", "Auto Start", "Auto Skip Helicopter", "Auto Fill Up", "Safe Mode", "God Mode", "Boost FPS" },
+    Values = { "Auto Attack", "Auto Skill", "Auto Start", "Auto Skip Helicopter", "Auto Fill Up", "Safe Mode", "God Mode", "Delete Map" },
     Multi = true,
     Value = MiscOptions,
     Callback = function(values)
@@ -1702,14 +1702,14 @@ MiscDropdown = Main:Dropdown({
             local hasFeatures = #values > 0
             local onlyGodOrBoost = true
             for _, v in ipairs(values) do
-                if v ~= "God Mode" and v ~= "Boost FPS" then
+                if v ~= "God Mode" and v ~= "Delete Map" then
                     onlyGodOrBoost = false; break
                 end
             end
             if hasFeatures and not onlyGodOrBoost then
                 WindUI:Notify({
                     Title = "Misc Farm",
-                    Content = "ต้องเปิด Auto Farm ก่อน (Sync Farm Only เปิดอยู่)",
+                    Content = "You must turn on Auto Farm first (Sync Farm Only is on)",
                     Duration = 3, Icon = "alert-triangle"
                 })
             end
@@ -1726,11 +1726,40 @@ Main:Toggle({
         Config:Set("SyncFarmOnly", state)
         Config:Save()
         if state then
-            WindUI:Notify({ Title = "Sync Farm Only", Content = "เปิดแล้ว: ระบบ Misc Farm ต้องเปิด Auto Farm ก่อน", Duration = 3, Icon = "link" })
+            WindUI:Notify({ Title = "Sync Farm Only", Content = "ON: Misc Farm system must have Auto Farm enabled first", Duration = 3, Icon = "link" })
         else
-            WindUI:Notify({ Title = "Sync Farm Only", Content = "ปิดแล้ว: ระบบ Misc Farm ทำงานได้โดยไม่ต้อง Auto Farm", Duration = 3, Icon = "unlink" })
+            WindUI:Notify({ Title = "Sync Farm Only", Content = "OFF: Misc Farm system works without needing Auto Farm.", Duration = 3, Icon = "unlink" })
             -- re-apply misc options ตอนปิด sync
             HandleMiscOptions(MiscOptions)
+        end
+    end
+})
+
+Main:Section({ Title = "General Settings", Icon = "zap" })
+
+SkillDropdown = Main:Dropdown({
+    Title = "Auto Skill (Keys)",
+    Values = skillDropdownValues,
+    Multi = true,
+    Value = SelectedSkills,
+    Callback = function(values) SelectedSkills = values; Config:Set("SelectedSkills", values); Config:Save() end
+})
+
+SkillDelaySlider = Main:Slider({
+    Title = "Skill Delay (S)",
+    Value = { Min = 1, Max = 30, Default = SkillDelay },
+    Step = 1,
+    Callback = function(value) SkillDelay = value; Config:Set("SkillDelay", value); Config:Save() end
+})
+
+FarmHeightSlider = Main:Slider({
+    Title = "Farm Height (+Y)",
+    Value = { Min = -30, Max = 30, Default = HeightValue },
+    Step = 1,
+    Callback = function(value)
+        HeightValue = value; Config:Set("HeightValue", value); Config:Save()
+        for mob, _ in pairs(MobHeightOverride) do
+            if MobConfirmedPadding[mob] == nil then MobHeightOverride[mob] = nil end
         end
     end
 })
@@ -1758,7 +1787,7 @@ Main:Section({ Title = "Priority Settings", Icon = "list-ordered" })
 
 Main:Paragraph({
     Title = "Priority Order",
-    Desc = "1. GiantST Toilet (กด lever ฆ่า)\n2. Helicopter (ฆ่าปกติ)\n3. HighHP Mob (MaxHP > threshold)\n4. Nearest Mob\n\n★ Interrupt: ถ้าตี mob ระดับต่ำอยู่แล้วมี mob ระดับสูงกว่าปรากฏ → สลับทันที",
+    Desc = "Interrupt: If attacking a low-level mob and a higher-level mob appears to switch immediately",
     Image = "rbxassetid://104487529937663",
     ImageSize = 26,
 })
@@ -1824,35 +1853,6 @@ Main:Button({
         MobConfirmedPadding = {}
         MobHeightOverride   = {}
         WindUI:Notify({ Title = "Override Reset", Content = "All confirmed mob positions cleared.", Duration = 2, Icon = "refresh-cw" })
-    end
-})
-
-Main:Section({ Title = "General Settings", Icon = "zap" })
-
-SkillDropdown = Main:Dropdown({
-    Title = "Auto Skill (Keys)",
-    Values = skillDropdownValues,
-    Multi = true,
-    Value = SelectedSkills,
-    Callback = function(values) SelectedSkills = values; Config:Set("SelectedSkills", values); Config:Save() end
-})
-
-SkillDelaySlider = Main:Slider({
-    Title = "Skill Delay (S)",
-    Value = { Min = 1, Max = 30, Default = SkillDelay },
-    Step = 1,
-    Callback = function(value) SkillDelay = value; Config:Set("SkillDelay", value); Config:Save() end
-})
-
-FarmHeightSlider = Main:Slider({
-    Title = "Farm Height (+Y)",
-    Value = { Min = -30, Max = 30, Default = HeightValue },
-    Step = 1,
-    Callback = function(value)
-        HeightValue = value; Config:Set("HeightValue", value); Config:Save()
-        for mob, _ in pairs(MobHeightOverride) do
-            if MobConfirmedPadding[mob] == nil then MobHeightOverride[mob] = nil end
-        end
     end
 })
 
@@ -2360,7 +2360,7 @@ Main2:Button({
             end
         end
         if #toUnlock == 0 then
-            WindUI:Notify({ Title = "Unlock Gamepass", Content = "เลือก Gamepass ก่อน!", Duration = 3, Icon = "alert-triangle" })
+            WindUI:Notify({ Title = "Unlock Gamepass", Content = "Choose Gamepass first!", Duration = 3, Icon = "alert-triangle" })
             return
         end
         local successCount = 0
@@ -2379,7 +2379,7 @@ Main2:Button({
         end
         WindUI:Notify({
             Title = "Unlock Gamepass",
-            Content = "Unlocked " .. successCount .. "/" .. #toUnlock .. " gamepass(es) สำเร็จ!",
+            Content = "Unlocked " .. successCount .. "/" .. #toUnlock .. " gamepass(es) Done!",
             Duration = 3,
             Icon = "badge-check"
         })
@@ -2387,6 +2387,38 @@ Main2:Button({
 })
 
 -- ====================== UI: GAMEMODE TAB ======================
+Main7:Divider()
+Main7:Section({ Title = "Vote Information", TextXAlignment = "Center", TextSize = 17 })
+Main7:Divider()
+Main7:Paragraph({
+    Title = "Auto Vote: Game Mode",
+    Desc = "- [ Step 1 ] Stay in the Lobby (inside a game)\n- [ Step 2 ] Set Auto Vote & Wait",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+})
+Main7:Divider()
+Main7:Section({ Title = "Vote Mode", Icon = "gamepad-2" })
+
+GameModeDropdown2 = Main7:Dropdown({
+    Title = "Set Vote Mode",
+    Values = GlobalTables.Votes,
+    Multi = false,
+    Value = AutoVoteValue,
+    Callback = function(value)
+        AutoVoteValue = value; Config:Set("AutoVoteValue", value); Config:Save()
+        print("[DYHUB] Vote Mode selected: " .. tostring(value))
+    end
+})
+
+AutoVoteIGToggle = Main7:Toggle({
+    Title = "Auto Vote Mode (In-Game)",
+    Value = AutoVoteinGameEnabled,
+    Callback = function(enabled)
+        AutoVoteinGameEnabled = enabled; Config:Set("AutoVoteinGameEnabled", enabled); Config:Save()
+        SetupAutoVote_InGame(enabled)
+    end
+})
+
 Main7:Section({ Title = "Casual Information", TextXAlignment = "Center", TextSize = 17 })
 Main7:Divider()
 Main7:Paragraph({
@@ -2534,7 +2566,7 @@ task.spawn(function()
 
                     notify("Lobby System", "Gamemode created successfully!")
                 else
-                    notify("Lobby System", "Auto Game Mode disabled")
+                    notify("Lobby System", "Use with Auto Game Mode!")
                 end
 
                 break
@@ -2559,38 +2591,6 @@ AutoVoteToggle = Main7:Toggle({
         else
             notify("Auto Game Mode", "Disabled", "x")
         end
-    end
-})
-
-Main7:Divider()
-Main7:Section({ Title = "Vote Information", TextXAlignment = "Center", TextSize = 17 })
-Main7:Divider()
-Main7:Paragraph({
-    Title = "Auto Vote: Game Mode",
-    Desc = "- [ Step 1 ] Stay in the Lobby (inside a game)\n- [ Step 2 ] Set Auto Vote & Wait",
-    Image = "rbxassetid://104487529937663",
-    ImageSize = 30,
-})
-Main7:Divider()
-Main7:Section({ Title = "Vote Mode", Icon = "gamepad-2" })
-
-GameModeDropdown2 = Main7:Dropdown({
-    Title = "Set Vote Mode",
-    Values = GlobalTables.Votes,
-    Multi = false,
-    Value = AutoVoteValue,
-    Callback = function(value)
-        AutoVoteValue = value; Config:Set("AutoVoteValue", value); Config:Save()
-        print("[DYHUB] Vote Mode selected: " .. tostring(value))
-    end
-})
-
-AutoVoteIGToggle = Main7:Toggle({
-    Title = "Auto Vote Mode (In-Game)",
-    Value = AutoVoteinGameEnabled,
-    Callback = function(enabled)
-        AutoVoteinGameEnabled = enabled; Config:Set("AutoVoteinGameEnabled", enabled); Config:Save()
-        SetupAutoVote_InGame(enabled)
     end
 })
 
@@ -2779,16 +2779,16 @@ NoBarrierToggle = Main3:Toggle({
 })
 
 local antiafk = Main3:Toggle({
-    Title = "Anti AFK", Value = hi1,
+    Title = "Anti AFK", Value = AntiAFK,
     Callback = function(enabled)
-        hi1 = enabled; Config:Set("hi2", enabled); Config:Save()
+        AntiAFK = enabled; Config:Set("AntiAfk", enabled); Config:Save()
         if enabled then
             task.spawn(function()
                 game.Players.LocalPlayer.Idled:Connect(function()
                     VirtualUser:CaptureController()
                     VirtualUser:ClickButton2(Vector2.new())
                 end)
-                while hi1 do
+                while AntiAFK do
                     VirtualUser:CaptureController()
                     VirtualUser:ClickButton2(Vector2.new())
                     task.wait(60)
