@@ -1,7 +1,7 @@
 -- v085
 -- =========================
 local version = "Rework"
-local ver = "v023.3"
+local ver = "v023.4"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -49,7 +49,7 @@ end
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
-local ConfigFolder = "DYHUB_STBB_V0233"
+local ConfigFolder = "DYHUB_STBB_V0234"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
@@ -138,7 +138,7 @@ local Window = WindUI:CreateWindow({
     Title = "DYHUB",
     IconThemed = true,
     Icon = "rbxassetid://104487529937663",
-    Author = "STBB | " .. userversion,
+    Author = "STBB | Showcase",
     Folder = "DYHUB",
     Size = UDim2.fromOffset(550, 380),
     Transparent = true,
@@ -183,7 +183,7 @@ Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/09/2026",
-    Desc = "- [ New ] Priority System \n- [ Added ] God Mode \n- [ Added ] Unlock Gamepass \n- [ Fixed ] Esp Core \n- [ Improved ] Delete Map",
+    Desc = "- [ New ] Priority System \n- [ New ] Restore Vote System \n- [ Added ] God Mode \n- [ Added ] Unlock Gamepass \n- [ Fixed ] Mob Height Override  \n- [ Fixed ] Esp Core \n- [ Improved ] Delete Map",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
