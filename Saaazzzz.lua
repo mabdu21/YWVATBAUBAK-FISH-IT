@@ -1,41 +1,51 @@
--- =========================
+--// =========================
+--// DYHUB | SZA
+--// =========================
+
 local version = "BETA"
--- =========================
 
 repeat task.wait() until game:IsLoaded()
 
--- FPS Unlock
-if setfpscap then
-    setfpscap(1000000)
-    game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = "dsc.gg/dyhub",
-        Text = "FPS Unlocked!",
-        Duration = 2,
-        Button1 = "Okay"
-    })
-    warn("FPS Unlocked!")
-else
-    game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = "dsc.gg/dyhub",
-        Text = "Your exploit does not support setfpscap.",
-        Duration = 2,
-        Button1 = "Okay"
-    })
-    warn("Your exploit does not support setfpscap.")
-end
+--// FPS Unlock
+pcall(function()
+    if setfpscap then
+        setfpscap(1000000)
 
+        game:GetService("StarterGui"):SetCore("SendNotification",{
+            Title = "dsc.gg/dyhub",
+            Text = "FPS Unlocked!",
+            Duration = 3
+        })
+
+        warn("FPS Unlocked!")
+    else
+        game:GetService("StarterGui"):SetCore("SendNotification",{
+            Title = "dsc.gg/dyhub",
+            Text = "Executor unsupported setfpscap",
+            Duration = 3
+        })
+    end
+end)
+
+--// Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+
+--// UI
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
-local Players = game:GetService("Players")
-local HttpService = game:GetService("HttpService")
-
+--// Premium Check
 local FreeVersion = "Free Version"
 local PremiumVersion = "Premium Version"
 
 local function checkVersion(playerName)
     local url = "https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/listpremium.lua"
 
-    local success, response = pcall(function()
+    local success,response = pcall(function()
         return game:HttpGet(url)
     end)
 
@@ -43,38 +53,41 @@ local function checkVersion(playerName)
         return FreeVersion
     end
 
-    local premiumData
-    local func, err = loadstring(response)
-    if func then
-        premiumData = func()
-    else
+    local func = loadstring(response)
+
+    if not func then
         return FreeVersion
     end
 
-    if premiumData[playerName] then
+    local data = func()
+
+    if data[playerName] then
         return PremiumVersion
-    else
-        return FreeVersion
     end
+
+    return FreeVersion
 end
 
-local player = Players.LocalPlayer
-local userversion = checkVersion(player.Name)
+local userversion = checkVersion(LocalPlayer.Name)
 
+--// Window
 local Window = WindUI:CreateWindow({
     Title = "DYHUB",
     IconThemed = true,
     Icon = "rbxassetid://104487529937663",
-    Author = "Survive Zombie Arena | " .. userversion,
+    Author = "Survive Zombie Arena | "..userversion,
     Folder = "DYHUB_SZA",
-    Size = UDim2.fromOffset(500, 350),
+    Size = UDim2.fromOffset(520,380),
     Transparent = true,
     Theme = "Dark",
     BackgroundImageTransparency = 0.8,
     HasOutline = false,
     HideSearchBar = true,
     ScrollBarEnabled = false,
-    User = { Enabled = true, Anonymous = false },
+    User = {
+        Enabled = true,
+        Anonymous = false
+    }
 })
 
 Window:SetToggleKey(Enum.KeyCode.K)
@@ -87,22 +100,18 @@ pcall(function()
 end)
 
 Window:EditOpenButton({
-    Title = "DYHUB - Open",
+    Title = "DYHUB",
     Icon = "monitor",
-    CornerRadius = UDim.new(0, 6),
+    CornerRadius = UDim.new(0,6),
     StrokeThickness = 2,
-    Color = ColorSequence.new(Color3.fromRGB(30, 30, 30), Color3.fromRGB(255, 255, 255)),
-    Draggable = true,
+    Color = ColorSequence.new(
+        Color3.fromRGB(30,30,30),
+        Color3.fromRGB(255,255,255)
+    ),
+    Draggable = true
 })
 
-
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-
-local LocalPlayer = Players.LocalPlayer
-
--- Tabs
+--// Tabs
 local Main = Window:Tab({
     Title = "Main",
     Icon = "rocket"
@@ -113,13 +122,14 @@ local Upgrade = Window:Tab({
     Icon = "shopping-cart"
 })
 
+local Misc = Window:Tab({
+    Title = "Misc",
+    Icon = "settings"
+})
 
 Window:SelectTab(1)
 
--- =========================
--- VARIABLES
--- =========================
-
+--// Globals
 getgenv().KillAura = false
 getgenv().SafeZone = false
 getgenv().InstantWave = false
@@ -131,15 +141,29 @@ getgenv().SkillE = false
 getgenv().SkillR = false
 getgenv().SkillQ = false
 
+getgenv().AutoRejoin = false
+getgenv().AutoEquip = false
+
 local savedCFrame
 
--- =========================
--- FUNCTIONS
--- =========================
+--// Remotes
+local gunRemote = ReplicatedStorage:WaitForChild("GunRemotes"):WaitForChild("GunHit")
+
+--// Functions
+local function getCharacter()
+    return LocalPlayer.Character
+end
+
+local function getRoot()
+    local char = getCharacter()
+    if char then
+        return char:FindFirstChild("HumanoidRootPart")
+    end
+end
 
 local function equipTool()
-    local char = LocalPlayer.Character
-    if not char then return nil end
+    local char = getCharacter()
+    if not char then return end
 
     local tool = char:FindFirstChildOfClass("Tool")
 
@@ -147,7 +171,7 @@ local function equipTool()
         return tool
     end
 
-    for _,v in pairs(LocalPlayer.Backpack:GetChildren()) do
+    for _,v in ipairs(LocalPlayer.Backpack:GetChildren()) do
         if v:IsA("Tool") then
             v.Parent = char
             return v
@@ -155,50 +179,72 @@ local function equipTool()
     end
 end
 
+local function spamKey(key,global)
+    task.spawn(function()
+        while getgenv()[global] do
+            task.wait(1)
 
-local gunRemote = ReplicatedStorage:WaitForChild("GunRemotes"):WaitForChild("GunHit")
+            VirtualInputManager:SendKeyEvent(true,key,false,game)
+            VirtualInputManager:SendKeyEvent(false,key,false,game)
+        end
+    end)
+end
 
+--// Kill Aura
 local function startKillAura()
     task.spawn(function()
         while getgenv().KillAura do
-            task.wait(0.05)
+            task.wait(0.03)
 
             pcall(function()
-                local char = LocalPlayer.Character
-                if not char then return end
 
-                local root = char:FindFirstChild("HumanoidRootPart")
-                if not root then return end
+                local char = getCharacter()
+                local root = getRoot()
+
+                if not char or not root then
+                    return
+                end
 
                 local tool = equipTool()
-                if not tool then return end
+
+                if not tool then
+                    return
+                end
 
                 local zombies = workspace:FindFirstChild("Zombies_Local")
-                if not zombies then return end
 
-                local count = 0
+                if not zombies then
+                    return
+                end
+
+                local hit = 0
 
                 for _,zombie in ipairs(zombies:GetChildren()) do
-                    if count >= 8 then
+
+                    if hit >= 12 then
                         break
                     end
 
                     local zroot = zombie:FindFirstChild("HumanoidRootPart")
+                    local hum = zombie:FindFirstChildOfClass("Humanoid")
 
-                    if zroot then
+                    if zroot and hum and hum.Health > 0 then
+
                         local dist = (root.Position - zroot.Position).Magnitude
 
-                        if dist <= 120 then
+                        if dist <= 150 then
+
                             local id = tonumber(zombie.Name:match("%d+"))
 
                             if id then
+
                                 gunRemote:FireServer(
                                     tool.Name,
                                     id,
                                     zroot.Position
                                 )
 
-                                count += 1
+                                hit += 1
                             end
                         end
                     end
@@ -208,31 +254,28 @@ local function startKillAura()
     end)
 end
 
-local function spamKey(key, global)
-    task.spawn(function()
-        while getgenv()[global] do
-            task.wait(1)
-
-            VirtualInputManager:SendKeyEvent(
-                true,
-                key,
-                false,
-                game
-            )
-
-            VirtualInputManager:SendKeyEvent(
-                false,
-                key,
-                false,
-                game
-            )
+--// Auto Equip
+task.spawn(function()
+    while task.wait(1) do
+        if getgenv().AutoEquip then
+            pcall(function()
+                equipTool()
+            end)
         end
-    end)
-end
+    end
+end)
 
--- =========================
--- MAIN
--- =========================
+--// Auto Rejoin
+LocalPlayer.CharacterRemoving:Connect(function()
+    if getgenv().AutoRejoin then
+        task.wait(3)
+        game:GetService("TeleportService"):Teleport(game.PlaceId)
+    end
+end)
+
+--// =========================
+--// MAIN
+--// =========================
 
 Main:Section({
     Title = "Auto Farm",
@@ -241,7 +284,7 @@ Main:Section({
 
 Main:Toggle({
     Title = "Kill Aura",
-    Desc = "Automatically kill all zombies",
+    Desc = "Automatically kill zombies",
     Default = false,
     Callback = function(state)
         getgenv().KillAura = state
@@ -253,13 +296,23 @@ Main:Toggle({
 })
 
 Main:Toggle({
-    Title = "Safe Zone",
-    Desc = "Fly above zombies",
+    Title = "Auto Equip",
+    Desc = "Automatically equip weapon",
     Default = false,
     Callback = function(state)
+        getgenv().AutoEquip = state
+    end
+})
+
+Main:Toggle({
+    Title = "Safe Zone",
+    Desc = "Float above zombies",
+    Default = false,
+    Callback = function(state)
+
         getgenv().SafeZone = state
 
-        local char = LocalPlayer.Character
+        local char = getCharacter()
 
         if char and char:FindFirstChild("Humanoid") then
             char.Humanoid.HipHeight = state and 20 or 2
@@ -268,18 +321,21 @@ Main:Toggle({
 })
 
 Main:Toggle({
-    Title = "Instant Clear Wave",
-    Desc = "Teleport to safe area",
+    Title = "Instant Wave",
+    Desc = "Teleport to hidden area",
     Default = false,
     Callback = function(state)
+
         getgenv().InstantWave = state
 
-        local char = LocalPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local root = getRoot()
 
-        if not root then return end
+        if not root then
+            return
+        end
 
         if state then
+
             savedCFrame = root.CFrame
 
             root.CFrame = CFrame.new(31,-67,-145)
@@ -287,7 +343,9 @@ Main:Toggle({
             task.wait(0.2)
 
             root.Anchored = true
+
         else
+
             root.Anchored = false
 
             if savedCFrame then
@@ -297,77 +355,21 @@ Main:Toggle({
     end
 })
 
--- =========================
--- UPGRADES
--- =========================
-
-Upgrade:Section({
-    Title = "Auto Upgrade",
-    Icon = "shopping-cart"
-})
-
-Upgrade:Toggle({
-    Title = "Auto Heal Upgrade",
-    Desc = "Automatically upgrade health",
-    Default = false,
-    Callback = function(state)
-        getgenv().AutoHeal = state
-
-        if state then
-            task.spawn(function()
-                while getgenv().AutoHeal do
-                    task.wait(1)
-
-                    pcall(function()
-                        ReplicatedStorage
-                            .UpgradeRemotes
-                            .PurchaseHealthUpgrade
-                            :FireServer()
-                    end)
-                end
-            end)
-        end
-    end
-})
-
-Upgrade:Toggle({
-    Title = "Auto Weapon Upgrade",
-    Desc = "Automatically upgrade weapon",
-    Default = false,
-    Callback = function(state)
-        getgenv().AutoWeapon = state
-
-        if state then
-            task.spawn(function()
-                while getgenv().AutoWeapon do
-                    task.wait(1)
-
-                    pcall(function()
-                        ReplicatedStorage
-                            .UpgradeRemotes
-                            .PurchaseWeaponUpgrade
-                            :FireServer()
-                    end)
-                end
-            end)
-        end
-    end
-})
-
--- =========================
--- SKILLS
--- =========================
+--// =========================
+--// SKILLS
+--// =========================
 
 Main:Section({
-    Title = "Auto Skills",
+    Title = "Skills",
     Icon = "zap"
 })
 
 Main:Toggle({
     Title = "Spam E",
-    Desc = "Auto use E skill",
+    Desc = "Auto use E",
     Default = false,
     Callback = function(state)
+
         getgenv().SkillE = state
 
         if state then
@@ -378,9 +380,10 @@ Main:Toggle({
 
 Main:Toggle({
     Title = "Spam R",
-    Desc = "Auto use R skill",
+    Desc = "Auto use R",
     Default = false,
     Callback = function(state)
+
         getgenv().SkillR = state
 
         if state then
@@ -391,13 +394,119 @@ Main:Toggle({
 
 Main:Toggle({
     Title = "Spam Q",
-    Desc = "Auto use Q skill",
+    Desc = "Auto use Q",
     Default = false,
     Callback = function(state)
+
         getgenv().SkillQ = state
 
         if state then
             spamKey(Enum.KeyCode.Q,"SkillQ")
+        end
     end
 })
 
+--// =========================
+--// UPGRADES
+--// =========================
+
+Upgrade:Section({
+    Title = "Auto Upgrade",
+    Icon = "shopping-cart"
+})
+
+Upgrade:Toggle({
+    Title = "Auto Heal Upgrade",
+    Desc = "Automatically buy HP upgrades",
+    Default = false,
+    Callback = function(state)
+
+        getgenv().AutoHeal = state
+
+        if state then
+
+            task.spawn(function()
+
+                while getgenv().AutoHeal do
+                    task.wait(1)
+
+                    pcall(function()
+
+                        ReplicatedStorage
+                        .UpgradeRemotes
+                        .PurchaseHealthUpgrade
+                        :FireServer()
+
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+Upgrade:Toggle({
+    Title = "Auto Weapon Upgrade",
+    Desc = "Automatically buy weapon upgrades",
+    Default = false,
+    Callback = function(state)
+
+        getgenv().AutoWeapon = state
+
+        if state then
+
+            task.spawn(function()
+
+                while getgenv().AutoWeapon do
+                    task.wait(1)
+
+                    pcall(function()
+
+                        ReplicatedStorage
+                        .UpgradeRemotes
+                        .PurchaseWeaponUpgrade
+                        :FireServer()
+
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+--// =========================
+--// MISC
+--// =========================
+
+Misc:Section({
+    Title = "Misc",
+    Icon = "settings"
+})
+
+Misc:Button({
+    Title = "Rejoin",
+    Callback = function()
+        game:GetService("TeleportService"):Teleport(game.PlaceId)
+    end
+})
+
+Misc:Toggle({
+    Title = "Auto Rejoin",
+    Desc = "Rejoin after kick/death",
+    Default = false,
+    Callback = function(state)
+        getgenv().AutoRejoin = state
+    end
+})
+
+--// Notification
+pcall(function()
+
+    game:GetService("StarterGui"):SetCore("SendNotification",{
+        Title = "DYHUB",
+        Text = "Loaded Successfully!",
+        Duration = 5
+    })
+
+end)
+
+warn("DYHUB Loaded")
