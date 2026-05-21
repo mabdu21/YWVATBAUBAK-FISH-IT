@@ -1,20 +1,21 @@
--- Powered by GPT 5 | v937
--- ======================
-local version = "4.7.0"
--- ======================
+-- Powered by GPT 5 | v114
+-- =========================
+local version = "Rework"
+local ver = "v011.4"
+-- =========================
+
+-- ====================== LOAD UI ======================
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 repeat task.wait() until game:IsLoaded()
 
 -- FPS Unlock
 if setfpscap then
     setfpscap(1000000)
-    game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = "dsc.gg/dyhub", Text = "FPS Unlocked!", Duration = 2, Button1 = "Okay"
-    })
+    WindUI:Notify({ Title = "Service", Content = "FPS Unlocked! | " .. ver, Duration = 3, Icon = "cpu" })
+    warn("FPS Unlocked!")
 else
-    game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = "dsc.gg/dyhub", Text = "Your exploit does not support setfpscap.", Duration = 2, Button1 = "Okay"
-    })
+    WindUI:Notify({ Title = "Not Working", Content = "Your exploit does not support setfpscap.", Duration = 3, Icon = "ban" })
 end
 
 -- Services (declare once at top)
@@ -29,9 +30,6 @@ local LocalPlayer      = Players.LocalPlayer
 local Character        = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local Humanoid         = Character:WaitForChild("Humanoid")
 local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
-
--- WindUI
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 -- ====================== VERSION CHECK ======================
 local FreeVersion    = "Free Version"
@@ -55,7 +53,7 @@ local Window = WindUI:CreateWindow({
     IconThemed = true,
     Icon = "rbxassetid://104487529937663",
     Author = "Violence District | " .. userversion,
-    Folder = "DYHUB_VD_config",
+    Folder = "DYHUB_VD",
     Size = UDim2.fromOffset(500, 400),
     Transparent = true,
     Theme = "Dark",
@@ -69,7 +67,7 @@ local Window = WindUI:CreateWindow({
 Window:SetToggleKey(Enum.KeyCode.K)
 
 pcall(function()
-    Window:Tag({ Title = version, Color = Color3.fromHex("#30ff6a") })
+    Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") })
 end)
 
 Window:EditOpenButton({
@@ -93,7 +91,7 @@ local Main2Divider = Window:Divider()
 local MainTab      = Window:Tab({ Title = "Main",         Icon = "rocket" })
 local EspTab       = Window:Tab({ Title = "Esp",          Icon = "eye" })
 local PlayerTab    = Window:Tab({ Title = "Player",       Icon = "user" })
-local Hitbox       = Window:Tab({ Title = "Hitbox",       Icon = "package" })
+--local Hitbox       = Window:Tab({ Title = "Hitbox",       Icon = "package" })
 local TeleportTab  = Window:Tab({ Title = "Teleport",     Icon = "map-pin" })
 local Main3Divider = Window:Divider()
 local Main3        = Window:Tab({ Title = "Settings",     Icon = "settings" })
