@@ -1,13 +1,11 @@
 --// =========================
---// DYHUB | SZA
+--// vyqyq | SZA
 --// =========================
 
 repeat task.wait() until game:IsLoaded()
 
 local version = "BETA"
-local ver =  "v009"
-
---// FPS Unlock
+local ver = "v009"
 
 --// Services
 local Players = game:GetService("Players")
@@ -20,12 +18,26 @@ local LP = Players.LocalPlayer
 --// UI
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
+--// FPS Unlock
 if setfpscap then
     setfpscap(1000000)
-    WindUI:Notify({ Title = "Service", Content = "FPS Unlocked! | " .. ver, Duration = 3, Icon = "cpu" })
-    warn("FPS Unlocked!")
+
+    WindUI:Notify({
+        Title = "Service",
+        Content = "FPS Unlocked! | "..ver,
+        Duration = 3,
+        Icon = "cpu"
+    })
+
 else
-    WindUI:Notify({ Title = "Not Working", Content = "Your exploit does not support setfpscap.", Duration = 3, Icon = "ban" })
+
+    WindUI:Notify({
+        Title = "Not Working",
+        Content = "Your exploit does not support setfpscap.",
+        Duration = 3,
+        Icon = "ban"
+    })
+
 end
 
 --// Window
@@ -59,12 +71,14 @@ pcall(function()
 end)
 
 Window:EditOpenButton({
-    Title = "DYHUB",
+    Title = "DYHUB - Open",
     Icon = "monitor",
-    CornerRadius = UDim.new(0,6),
+    CornerRadius = UDim.new(0, 6),
     StrokeThickness = 2,
-    Draggable = true
+    Color = ColorSequence.new(Color3.fromRGB(30, 30, 30), Color3.fromRGB(255, 255, 255)),
+    Draggable = true,
 })
+
 
 --// Tabs
 local Main = Window:Tab({
@@ -185,7 +199,9 @@ local function startKillAura()
 
         while getgenv().KillAura do
 
-            local char = getChar()
+            local char =
+                LP.Character
+                or LP.CharacterAdded:Wait()
 
             local hum =
                 char:FindFirstChildOfClass("Humanoid")
@@ -196,7 +212,19 @@ local function startKillAura()
                     char:FindFirstChildOfClass("Tool")
 
                 if not tool then
-                    tool = equipTool()
+
+                    for _,v in ipairs(LP.Backpack:GetChildren()) do
+
+                        if v:IsA("Tool") then
+
+                            hum:EquipTool(v)
+
+                            tool = v
+
+                            break
+
+                        end
+                    end
                 end
 
                 if tool then
@@ -211,10 +239,7 @@ local function startKillAura()
                             local hrp =
                                 z:FindFirstChild("HumanoidRootPart")
 
-                            local zh =
-                                z:FindFirstChildOfClass("Humanoid")
-
-                            if hrp and zh and zh.Health > 0 then
+                            if hrp then
 
                                 local id =
                                     tonumber(z.Name:match("%d+"))
@@ -225,11 +250,15 @@ local function startKillAura()
 
                                     pcall(function()
 
-                                        GunHit:FireServer(
-                                            tool.Name,
-                                            id,
-                                            hrp.Position
-                                        )
+                                        for i = 1,2 do
+
+                                            GunHit:FireServer(
+                                                tool.Name,
+                                                id,
+                                                hrp.Position
+                                            )
+
+                                        end
 
                                     end)
 
@@ -240,7 +269,7 @@ local function startKillAura()
                 end
             end
 
-            task.wait(0.05)
+            task.wait(0.03)
 
         end
 
@@ -304,7 +333,9 @@ Main:Toggle({
     Desc = "Equip weapon automatically",
     Default = false,
     Callback = function(v)
+
         getgenv().AutoEquip = v
+
     end
 })
 
