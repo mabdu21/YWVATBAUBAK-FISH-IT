@@ -1,7 +1,7 @@
 -- Powered by GPT 5 | v114
 -- =========================
 local version = "Rework"
-local ver = "v011.8"
+local ver = "v011.7"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -132,16 +132,15 @@ Window:SelectTab(1)
 
 -- ====================== ESP SYSTEM (UPGRADED) ======================
 -- Color config
-local COLOR_SURVIVOR   = Color3.fromRGB(0, 0, 255)
-local COLOR_MURDERER   = Color3.fromRGB(255, 0, 0)
-local COLOR_GENERATOR  = Color3.fromRGB(255, 255, 255)
+local COLOR_SURVIVOR       = Color3.fromRGB(0, 0, 255)
+local COLOR_MURDERER       = Color3.fromRGB(255, 0, 0)
+local COLOR_GENERATOR      = Color3.fromRGB(255, 255, 255)
 local COLOR_GENERATOR_DONE = Color3.fromRGB(0, 255, 0)
-local COLOR_GATE       = Color3.fromRGB(255, 255, 255)
-local COLOR_PALLET     = Color3.fromRGB(255, 255, 0)
-local COLOR_OUTLINE    = Color3.fromRGB(0, 0, 0)
-local COLOR_WINDOW     = Color3.fromRGB(175, 215, 230)
-local COLOR_HOOK       = Color3.fromRGB(255, 0, 0)
-local COLOR_PATIENT    = Color3.fromRGB(255, 0, 128) -- สีชมพูเข้ม/นีออนสำหรับ SCP Patient
+local COLOR_GATE           = Color3.fromRGB(255, 255, 255)
+local COLOR_PALLET         = Color3.fromRGB(255, 255, 0)
+local COLOR_OUTLINE        = Color3.fromRGB(0, 0, 0)
+local COLOR_WINDOW         = Color3.fromRGB(175, 215, 230)
+local COLOR_HOOK           = Color3.fromRGB(255, 0, 0)
 
 -- State flags
 local espEnabled        = false
@@ -152,34 +151,56 @@ local espGate           = false
 local espHook           = false
 local espPallet         = false
 local espWindowEnabled  = false
-local espPatient        = false -- ตัวแปรเปิด/ปิด ESP Patient
 local ShowName          = true
 local ShowDistance      = true
 local ShowHP            = true
 local ShowHighlight     = true
 local ShowPercent       = true
 
-local MAX_ESP_DISTANCE  = 1500 -- ระยะทางสูงสุดที่ ESP จะทำงาน
-
 -- ESP object pool (cache)
 local espObjects = {}
 
--- ── Optimised cache ──
+-- ── Optimised cache: scan workspace once, invalidate on DescendantAdded/Removing ──
 local _cachedMapFolders    = nil
 local _cachedGenFolders    = nil
-local _cacheVersion        = 0
+local _cacheVersion        = 0   -- bump to force re-scan
 
 local function _invalidateCache()
     _cachedMapFolders = nil
     _cachedGenFolders = nil
-    _cacheVersion     += 1
+    _cacheVersion    += 1
 end
 
+-- Auto-invalidate when workspace changes
 Workspace.DescendantAdded:Connect(_invalidateCache)
 Workspace.DescendantRemoving:Connect(_invalidateCache)
 
+-- Get every folder/model in workspace that contains named objects (lazy cache)
+local function getMapFolders()
+    if _cachedMapFolders then return _cachedMapFolders end
+
+    local folders = {}
+
+    -- Recursive: collect any Instance that has named game-objects as direct children
+    local function scanContainer(container, depth)
+        if depth > 6 then return end
+        for _, child in ipairs(container:GetChildren()) do
+            if child:IsA("Folder") or child:IsA("Model") then
+                table.insert(folders, child)
+                scanContainer(child, depth + 1)
+            end
+        end
+    end
+
+    scanContainer(Workspace, 0)
+    _cachedMapFolders = folders
+    return folders
+end
+
+-- Generator search: scan all workspace descendants (cached)
 local function getFolderGenerator()
     if _cachedGenFolders then return _cachedGenFolders end
+
     local list = {}
     for _, desc in ipairs(Workspace:GetDescendants()) do
         if desc.Name == "Generator" and desc:IsA("Model") then
@@ -199,13 +220,14 @@ local function removeESP(obj)
     espObjects[obj] = nil
 end
 
--- Create / update ESP
+-- Create / update ESP (lightweight: reuse existing instances)
 local function createESP(obj, baseColor)
     if not obj or not obj.Parent then return end
     if obj.Name == "Lobby" then return end
 
     local data = espObjects[obj]
     if data then
+        -- Just update color if already exists
         if data.highlight then
             data.highlight.FillColor    = baseColor
             data.highlight.OutlineColor = baseColor
@@ -308,9 +330,9 @@ local function generatorFinished(gen)
     return getGeneratorProgress(gen) >= 0.99 or gen:FindFirstChild("Finished") or gen:FindFirstChild("Repaired")
 end
 
--- ── Main ESP update ──
+-- ── Main ESP update (runs on a throttled heartbeat, NOT RenderStepped) ──
 local _espAccum = 0
-local ESP_INTERVAL = 0.4 -- ปรับความเร็วขึ้นเล็กน้อยเพื่อให้สลับเข้า/ออกระยะดึง ESP ทันที
+local ESP_INTERVAL = 0.5   -- 2 Hz – plenty for labels, no lag
 
 local function updateESP()
     if not espEnabled then return end
@@ -321,47 +343,37 @@ local function updateESP()
     for _, player in pairs(Players:GetPlayers()) do
         local char = player.Character
         if char and char ~= LocalPlayer.Character and char.Name ~= "Lobby" then
-            local part = char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart
-            if part then
-                local dist = (hrp.Position - part.Position).Magnitude
-                if dist <= MAX_ESP_DISTANCE then -- ตรวจสอบระยะทาง 1500 Studs
-                    local isMurderer = char:FindFirstChild("Weapon") ~= nil
-                    if isMurderer then
-                        if espMurder then createESP(char, COLOR_MURDERER)
-                        else removeESP(char) end
-                    else
-                        if espSurvivor then createESP(char, COLOR_SURVIVOR)
-                        else removeESP(char) end
-                    end
-                else
-                    removeESP(char) -- หากไกลกว่า 1500 ให้ลบ ESP ทันที
-                end
+            local isMurderer = char:FindFirstChild("Weapon") ~= nil
+            if isMurderer then
+                if espMurder then createESP(char, COLOR_MURDERER)
+                else removeESP(char) end
+            else
+                if espSurvivor then createESP(char, COLOR_SURVIVOR)
+                else removeESP(char) end
             end
         end
     end
 
-    -- ── World objects: Scan ทั่ว Workspace แบบไม่จำกัดโฟลเดอร์ ──
+    -- ── World objects: scan workspace descendants (uses cache) ──
+    -- We categorise by name for max flexibility (no hardcoded folder paths)
     local scanned = {}
     for _, desc in ipairs(Workspace:GetDescendants()) do
         if desc:IsA("Model") and not scanned[desc] then
             local n = desc.Name
-            local part = desc.PrimaryPart or desc:FindFirstChildWhichIsA("BasePart")
 
-            if part then
-                local dist = (hrp.Position - part.Position).Magnitude
-
-                -- เช็คว่าเป็นวัตถุประเภทไหน
-                if n == "Generator" then
-                    scanned[desc] = true
-                    if espGenerator and dist <= MAX_ESP_DISTANCE then
-                        local progress  = getGeneratorProgress(desc)
-                        local isFinished = generatorFinished(desc)
-                        local col = isFinished and COLOR_GENERATOR_DONE or getProgressColor(progress)
-                        createESP(desc, col)
-                        
-                        local data = espObjects[desc]
-                        if data then
-                            local dFloor = math.floor(dist)
+            if n == "Generator" then
+                scanned[desc] = true
+                if espGenerator then
+                    local progress  = getGeneratorProgress(desc)
+                    local isFinished = generatorFinished(desc)
+                    local col = isFinished and COLOR_GENERATOR_DONE or getProgressColor(progress)
+                    createESP(desc, col)
+                    -- Update percent label immediately
+                    local data = espObjects[desc]
+                    if data then
+                        local part = desc.PrimaryPart or desc:FindFirstChildWhichIsA("BasePart")
+                        if part then
+                            local dist = math.floor((hrp.Position - part.Position).Magnitude)
                             if ShowName and ShowPercent then
                                 data.nameLabel.Text    = n .. " | " .. math.floor(progress * 100) .. "%"
                                 data.nameLabel.Visible = true
@@ -372,7 +384,7 @@ local function updateESP()
                                 data.nameLabel.Visible = false
                             end
                             if ShowDistance then
-                                data.distLabel.Text    = "[ " .. dFloor .. " MM ]"
+                                data.distLabel.Text    = "[ " .. dist .. " MM ]"
                                 data.distLabel.Visible = true
                             else
                                 data.distLabel.Visible = false
@@ -381,47 +393,38 @@ local function updateESP()
                             data.nameLabel.TextColor3 = col
                             data.distLabel.TextColor3 = col
                         end
-                    else
-                        removeESP(desc)
                     end
-
-                elseif n == "Gate" then
-                    scanned[desc] = true
-                    if espGate and dist <= MAX_ESP_DISTANCE then createESP(desc, COLOR_GATE)
-                    else removeESP(desc) end
-
-                elseif n == "Hook" then
-                    scanned[desc] = true
-                    local mdl = desc:FindFirstChild("Model")
-                    if mdl then
-                        if espHook and dist <= MAX_ESP_DISTANCE then createESP(mdl, COLOR_HOOK)
-                        else removeESP(mdl) end
-                    end
-
-                elseif n == "Palletwrong" then
-                    scanned[desc] = true
-                    if espPallet and dist <= MAX_ESP_DISTANCE then createESP(desc, COLOR_PALLET)
-                    else removeESP(desc) end
-
-                elseif n == "Window" then
-                    scanned[desc] = true
-                    if espWindowEnabled and dist <= MAX_ESP_DISTANCE then createESP(desc, COLOR_WINDOW)
-                    else removeESP(desc) end
-
-                -- ระบบ ESP Patient ค้นหาแบบไดนามิก (scp, scp2, ..., scp10 ทั่วแผนที่)
-                elseif n:lower():find("scp") then
-                    scanned[desc] = true
-                    if espPatient and dist <= MAX_ESP_DISTANCE then 
-                        createESP(desc, COLOR_PATIENT)
-                    else 
-                        removeESP(desc) 
-                    end
+                else
+                    removeESP(desc)
                 end
+
+            elseif n == "Gate" then
+                scanned[desc] = true
+                if espGate then createESP(desc, COLOR_GATE)
+                else removeESP(desc) end
+
+            elseif n == "Hook" then
+                scanned[desc] = true
+                local mdl = desc:FindFirstChild("Model")
+                if mdl then
+                    if espHook then createESP(mdl, COLOR_HOOK)
+                    else removeESP(mdl) end
+                end
+
+            elseif n == "Palletwrong" then
+                scanned[desc] = true
+                if espPallet then createESP(desc, COLOR_PALLET)
+                else removeESP(desc) end
+
+            elseif n == "Window" then
+                scanned[desc] = true
+                if espWindowEnabled then createESP(desc, COLOR_WINDOW)
+                else removeESP(desc) end
             end
         end
     end
 
-    -- ── Update labels & Distance Check สำหรับดึงข้อมูลเข้า/ออกระยะ 1500 ทันที ──
+    -- ── Update labels for all tracked objects ──
     for obj, data in pairs(espObjects) do
         if not obj or not obj.Parent then
             removeESP(obj)
@@ -432,19 +435,11 @@ local function updateESP()
         local part = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
         if not part then continue end
 
-        local dist = math.floor((hrp.Position - part.Position).Magnitude)
-        
-        -- ดักเผื่อกรณีหลุดระยะ 1500 ให้เคลียร์ทิ้งทันทีป้องกันการบั๊กค้างบนหน้าจอ
-        if dist > MAX_ESP_DISTANCE then
-            removeESP(obj)
-            continue
-        end
-
         local humanoid = obj:FindFirstChildOfClass("Humanoid")
         local isPlayer = humanoid ~= nil
 
         -- Name
-        if not data.nameLabel.Text:find("|") then
+        if not data.nameLabel.Text:find("|") then   -- don't overwrite percent label for generators
             data.nameLabel.Visible = ShowName
         end
 
@@ -462,6 +457,7 @@ local function updateESP()
             end
             -- Distance
             if ShowDistance then
+                local dist = math.floor((hrp.Position - part.Position).Magnitude)
                 data.distLabel.Text    = "[ " .. dist .. " MM ]"
                 data.distLabel.Visible = true
             else
@@ -472,6 +468,7 @@ local function updateESP()
             data.hpLabel.Text    = ""
             data.hpLabel.Visible = false
             if ShowDistance then
+                local dist = math.floor((hrp.Position - part.Position).Magnitude)
                 data.distLabel.Text     = "[ " .. dist .. " MM ]"
                 data.distLabel.Visible  = true
                 data.distLabel.Position = UDim2.new(0, 0, 0.33, 0)
@@ -487,7 +484,7 @@ local function updateESP()
     end
 end
 
--- ── Heartbeat throttle ──
+-- ── Heartbeat throttle (no RenderStepped for world ESP = less lag) ──
 RunService.Heartbeat:Connect(function(dt)
     _espAccum += dt
     if _espAccum >= ESP_INTERVAL then
@@ -522,13 +519,13 @@ EspTab:Section({ Title = "Esp Object", Icon = "package" })
 EspTab:Toggle({ Title = "ESP Pallet", Value = false, Callback = function(v) espPallet        = v end })
 EspTab:Toggle({ Title = "ESP Hook",   Value = false, Callback = function(v) espHook          = v end })
 EspTab:Toggle({ Title = "ESP Window", Value = false, Callback = function(v) espWindowEnabled = v end })
-EspTab:Toggle({ Title = "ESP Patient", Value = false, Callback = function(v) espPatient       = v end }) -- เพิ่มปุ่มเปิดปิด ESP Patient ใหม่ตรงนี้!
 
 EspTab:Section({ Title = "Esp Settings", Icon = "settings" })
 EspTab:Toggle({ Title = "Show Name",      Value = ShowName,      Callback = function(v) ShowName      = v end })
 EspTab:Toggle({ Title = "Show Distance",  Value = ShowDistance,  Callback = function(v) ShowDistance  = v end })
 EspTab:Toggle({ Title = "Show Health",    Value = ShowHP,        Callback = function(v) ShowHP        = v end })
-EspTab:Toggle
+EspTab:Toggle({ Title = "Show Highlight", Value = ShowHighlight, Callback = function(v) ShowHighlight = v end })
+EspTab:Toggle({ Title = "Show Percent",   Value = ShowPercent,   Callback = function(v) ShowPercent   = v end })
 
 -- ====================== MAIN TAB ======================
 MainTab:Section({ Title = "Feature Gameplay", Icon = "target" })
