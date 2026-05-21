@@ -1,7 +1,7 @@
 -- Powered by GPT 5 | v114
 -- =========================
 local version = "Rework"
-local ver = "v011.7"
+local ver = "v011.8"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -141,10 +141,12 @@ local COLOR_PALLET         = Color3.fromRGB(255, 255, 0)
 local COLOR_OUTLINE        = Color3.fromRGB(0, 0, 0)
 local COLOR_WINDOW         = Color3.fromRGB(175, 215, 230)
 local COLOR_HOOK           = Color3.fromRGB(255, 0, 0)
+local COLOR_PATIENT        = Color3.fromRGB(255, 85, 255)
 
 -- State flags
 local espEnabled        = false
 local espSurvivor       = false
+local espPatient        = false
 local espMurder         = false
 local espGenerator      = false
 local espGate           = false
@@ -156,6 +158,8 @@ local ShowDistance      = true
 local ShowHP            = true
 local ShowHighlight     = true
 local ShowPercent       = true
+
+local ESP_MAX_DISTANCE  = 1500
 
 -- ESP object pool (cache)
 local espObjects = {}
@@ -209,6 +213,21 @@ local function getFolderGenerator()
     end
     _cachedGenFolders = list
     return list
+end
+
+local function isPatientModel(obj)
+    if not obj or not obj:IsA("Model") then
+        return false
+    end
+
+    local n = obj.Name:lower()
+
+    -- รองรับ scp / scp1 / scp2 / scp10
+    if n:match("^scp%d*$") then
+        return true
+    end
+
+    return false
 end
 
 -- Remove ESP from object
@@ -418,11 +437,22 @@ local function updateESP()
 
             elseif n == "Window" then
                 scanned[desc] = true
-                if espWindowEnabled then createESP(desc, COLOR_WINDOW)
-                else removeESP(desc) end
+            
+                if espWindowEnabled then
+                    createESP(desc, COLOR_WINDOW)
+                else
+                    removeESP(desc)
+                end
+            
+            elseif isPatientModel(desc) then
+                scanned[desc] = true
+            
+                if espPatient then
+                    createESP(desc, COLOR_PATIENT)
+                else
+                    removeESP(desc)
+                end
             end
-        end
-    end
 
     -- ── Update labels for all tracked objects ──
     for obj, data in pairs(espObjects) do
@@ -437,6 +467,29 @@ local function updateESP()
 
         local humanoid = obj:FindFirstChildOfClass("Humanoid")
         local isPlayer = humanoid ~= nil
+
+        local dist = (hrp.Position - part.Position).Magnitude
+
+        -- Max Distance
+        if dist > ESP_MAX_DISTANCE then
+            if data.highlight then
+                data.highlight.Enabled = false
+            end
+        
+            if data.bill then
+                data.bill.Enabled = false
+            end
+        
+            continue
+        else
+            if data.highlight then
+                data.highlight.Enabled = ShowHighlight
+            end
+        
+            if data.bill then
+                data.bill.Enabled = true
+            end
+        end
 
         -- Name
         if not data.nameLabel.Text:find("|") then   -- don't overwrite percent label for generators
@@ -519,6 +572,21 @@ EspTab:Section({ Title = "Esp Object", Icon = "package" })
 EspTab:Toggle({ Title = "ESP Pallet", Value = false, Callback = function(v) espPallet        = v end })
 EspTab:Toggle({ Title = "ESP Hook",   Value = false, Callback = function(v) espHook          = v end })
 EspTab:Toggle({ Title = "ESP Window", Value = false, Callback = function(v) espWindowEnabled = v end })
+EspTab:Toggle({
+    Title = "ESP Patient (NEW)",
+    Value = false,
+    Callback = function(v)
+        espPatient = v
+
+        if not v then
+            for obj in pairs(espObjects) do
+                if isPatientModel(obj) then
+                    removeESP(obj)
+                end
+            end
+        end
+    end
+})
 
 EspTab:Section({ Title = "Esp Settings", Icon = "settings" })
 EspTab:Toggle({ Title = "Show Name",      Value = ShowName,      Callback = function(v) ShowName      = v end })
@@ -1049,7 +1117,7 @@ SurTab:Toggle({
 
 local autoHealEnabled2 = false
 SurTab:Toggle({
-    Title = "Auto Heal SkillCheck v2 (STILL BUG)",
+    Title = "Auto Heal SkillCheck (STILL BUG)",
     Value = false,
     Callback = function(v)
         autoHealEnabled2 = v
