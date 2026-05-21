@@ -1,13 +1,13 @@
 -- Powered by GPT 5 | v114
 -- =========================
 local version = "Rework"
-local ver = "v011.6"
+local ver = "v011.7"
 -- =========================
+
+repeat task.wait() until game:IsLoaded()
 
 -- ====================== LOAD UI ======================
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
-
-repeat task.wait() until game:IsLoaded()
 
 -- FPS Unlock
 if setfpscap then
@@ -80,7 +80,39 @@ Window:EditOpenButton({
 })
 
 -- ====================== CONFIG ======================
-local Config = Window:Config()
+local ConfigData = {}
+local ConfigPath = "DYHUB_VD/config.json"
+
+local Config = {}
+
+function Config:Get(key, default)
+    return ConfigData[key] ~= nil and ConfigData[key] or default
+end
+
+function Config:Set(key, value)
+    ConfigData[key] = value
+end
+
+function Config:Save()
+    pcall(function()
+        local ok, data = pcall(function()
+            return game:GetService("HttpService"):JSONEncode(ConfigData)
+        end)
+        if ok then writefile(ConfigPath, data) end
+    end)
+end
+
+pcall(function()
+    if isfile and isfile(ConfigPath) then
+        local raw = readfile(ConfigPath)
+        local ok, data = pcall(function()
+            return game:GetService("HttpService"):JSONDecode(raw)
+        end)
+        if ok and type(data) == "table" then
+            ConfigData = data
+        end
+    end
+end)
 
 -- Tabs
 local InfoTab      = Window:Tab({ Title = "Information",  Icon = "info" })
