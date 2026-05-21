@@ -1,5 +1,5 @@
 --// =========================
---// DYHUB | SZA
+--// v2 | SZA
 --// =========================
 
 local version = "BETA"
@@ -190,69 +190,57 @@ local function spamKey(key,global)
     end)
 end
 
---// Kill Aura
-local function startKillAura()
-    task.spawn(function()
-        while getgenv().KillAura do
-            task.wait(0.03)
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-            pcall(function()
+local LP = Players.LocalPlayer
+local GR = ReplicatedStorage:WaitForChild("GunRemotes")
+local GH = GR:WaitForChild("GunHit")
 
-                local char = getCharacter()
-                local root = getRoot()
+task.spawn(function()
+    while getgenv().KillAura do
+        local char = LP.Character or LP.CharacterAdded:Wait()
+        local hum = char:FindFirstChildOfClass("Humanoid")
 
-                if not char or not root then
-                    return
-                end
+        if hum and hum.Health > 0 then
+            local tool = char:FindFirstChildOfClass("Tool")
 
-                local tool = equipTool()
-
-                if not tool then
-                    return
-                end
-
-                local zombies = workspace:FindFirstChild("Zombies_Local")
-
-                if not zombies then
-                    return
-                end
-
-                local hit = 0
-
-                for _,zombie in ipairs(zombies:GetChildren()) do
-
-                    if hit >= 12 then
+            if not tool then
+                for _,v in ipairs(LP.Backpack:GetChildren()) do
+                    if v:IsA("Tool") then
+                        hum:EquipTool(v)
+                        tool = v
                         break
                     end
+                end
+            end
 
-                    local zroot = zombie:FindFirstChild("HumanoidRootPart")
-                    local hum = zombie:FindFirstChildOfClass("Humanoid")
+            if tool then
+                local zombies = workspace:FindFirstChild("Zombies_Local")
 
-                    if zroot and hum and hum.Health > 0 then
+                if zombies then
+                    for _,z in ipairs(zombies:GetChildren()) do
+                        local hrp = z:FindFirstChild("HumanoidRootPart")
 
-                        local dist = (root.Position - zroot.Position).Magnitude
-
-                        if dist <= 150 then
-
-                            local id = tonumber(zombie.Name:match("%d+"))
+                        if hrp then
+                            local id = tonumber(z.Name:match("%d+"))
 
                             if id then
-
-                                gunRemote:FireServer(
+                                GH:FireServer(
                                     tool.Name,
                                     id,
-                                    zroot.Position
+                                    hrp.Position
                                 )
-
-                                hit += 1
                             end
                         end
                     end
                 end
-            end)
+            end
         end
-    end)
-end
+
+        task.wait(0.03)
+    end
+end)
 
 --// Auto Equip
 task.spawn(function()
