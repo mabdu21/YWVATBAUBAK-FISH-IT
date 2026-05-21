@@ -1,7 +1,7 @@
 -- Powered by GPT 5 | v114
 -- =========================
 local version = "Rework"
-local ver = "v011.4"
+local ver = "v011.6"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -91,7 +91,7 @@ local Main2Divider = Window:Divider()
 local MainTab      = Window:Tab({ Title = "Main",         Icon = "rocket" })
 local EspTab       = Window:Tab({ Title = "Esp",          Icon = "eye" })
 local PlayerTab    = Window:Tab({ Title = "Player",       Icon = "user" })
---local Hitbox       = Window:Tab({ Title = "Hitbox",       Icon = "package" })
+local Hitbox       = Window:Tab({ Title = "Hitbox",       Icon = "package" })
 local TeleportTab  = Window:Tab({ Title = "Teleport",     Icon = "map-pin" })
 local Main3Divider = Window:Divider()
 local Main3        = Window:Tab({ Title = "Settings",     Icon = "settings" })
