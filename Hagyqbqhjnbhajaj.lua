@@ -1,7 +1,7 @@
 -- Powered by dyumra | v341 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v013.67"
+local ver     = "v013.7"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -1118,263 +1118,10 @@ SurTab:Toggle({
 --]]
 
 -- Auto Parry
---// AUTO PARRY REWORK
-
-local Players = game:GetService("Players")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-
-local LP = Players.LocalPlayer
-local Character = LP.Character or LP.CharacterAdded:Wait()
-
---// SETTINGS
-local LastParry = 0
-local COOLDOWN = 0.02
-local MAX_DISTANCE = 15
-
-local REQUIRED_IMAGE = "rbxassetid://101288986880844"
-
---// ATTACK ANIMS
-local ATTACK_ANIMS = {
-
-    -- JASON
-    ["rbxassetid://139369275981139"] = true,
-    ["rbxassetid://110355011987939"] = true,
-
-    -- CURE
-    ["rbxassetid://135002183282873"] = true,
-    ["rbxassetid://121216847022485"] = true,
-
-    -- CHICKEN
-    ["rbxassetid://105374834496520"] = true,
-    ["rbxassetid://111920872708571"] = true,
-    ["rbxassetid://138720291317243"] = true,
-    ["rbxassetid://115244153053858"] = true,
-    ["rbxassetid://130593238885843"] = true,
-    ["rbxassetid://117070354890871"] = true,
-    ["rbxassetid://106871536134254"] = true,
-    ["rbxassetid://109402730355822"] = true,
-
-    -- KNIGHT
-    ["rbxassetid://118907603246885"] = true,
-    ["rbxassetid://78432063483146"] = true,
-    ["rbxassetid://77081789642514"] = true,
-    ["rbxassetid://80411309607666"] = true,
-
-    -- BLINDMAN
-    ["rbxassetid://113255068724446"] = true,
-    ["rbxassetid://74968262036854"] = true,
-    ["rbxassetid://82666958311998"] = true,
-
-    -- RUNNER
-    ["rbxassetid://129784271201071"] = true,
-    ["rbxassetid://132817836308238"] = true,
-
-    -- SPIRITGIRL
-    ["rbxassetid://112166042383605"] = true,
-    ["rbxassetid://122812055447896"] = true,
-    ["rbxassetid://78935059863801"] = true,
-
-    -- MICHAEL
-    ["rbxassetid://117042998468241"] = true,
-    ["rbxassetid://133963973694098"] = true,
-    ["rbxassetid://129918027564423"] = true,
-    ["rbxassetid://95934119190708"] = true,
-}
-
---// NOTIFY
-local function nt(title, content)
-    WindUI:Notify({
-        Title = title,
-        Content = content,
-        Duration = 5,
-        Icon = "info"
-    })
-end
-
---// CLICK BUTTON
-local function click_btn(btn)
-
-    if not btn then
-        return
-    end
-
-    pcall(function()
-
-        if firesignal then
-            firesignal(btn.MouseButton1Click)
-            firesignal(btn.Activated)
-        end
-    end)
-
-    pcall(function()
-        btn:Activate()
-    end)
-
-    pcall(function()
-
-        local pos = btn.AbsolutePosition
-        local size = btn.AbsoluteSize
-
-        local x = pos.X + (size.X / 2)
-        local y = pos.Y + (size.Y / 2)
-
-        VirtualInputManager:SendMouseButtonEvent(
-            x,
-            y,
-            0,
-            true,
-            game,
-            1
-        )
-
-        VirtualInputManager:SendMouseButtonEvent(
-            x,
-            y,
-            0,
-            false,
-            game,
-            1
-        )
-    end)
-end
-
---// GET GUI
-local function getGui()
-
-    local pg = LP:FindFirstChild("PlayerGui")
-    if not pg then
-        return
-    end
-
-    local survivor = pg:FindFirstChild("Survivor-mob")
-    if not survivor then
-        return
-    end
-
-    local controls = survivor:FindFirstChild("Controls")
-    if not controls then
-        return
-    end
-
-    return controls:FindFirstChild("Gui-mob")
-end
-
---// IMAGE CHECK
-local function validImage(guiMob)
-
-    local ok = false
-
-    pcall(function()
-
-        if tostring(guiMob.Image) == REQUIRED_IMAGE then
-            ok = true
-        end
-    end)
-
-    return ok
-end
-
---// DISTANCE CHECK
-local function nearEnemy(char)
-
-    local myRoot = Character and Character:FindFirstChild("HumanoidRootPart")
-    local enemyRoot = char and char:FindFirstChild("HumanoidRootPart")
-
-    if not myRoot or not enemyRoot then
-        return false
-    end
-
-    local dist = (
-        myRoot.Position - enemyRoot.Position
-    ).Magnitude
-
-    return dist <= MAX_DISTANCE
-end
-
---// PARRY
-local function doParry()
-
-    local guiMob = getGui()
-
-    if not guiMob then
-        return
-    end
-
-    if not validImage(guiMob) then
-        return
-    end
-
-    local now = tick()
-
-    if now - LastParry < COOLDOWN then
-        return
-    end
-
-    LastParry = now
-
-    click_btn(guiMob)
-end
-
---// HOOK CHARACTER
-local function hookCharacter(char)
-
-    local hum = char:FindFirstChildOfClass("Humanoid")
-
-    if not hum then
-        return
-    end
-
-    hum.AnimationPlayed:Connect(function(track)
-
-        if not autoparry then
-            return
-        end
-
-        if not nearEnemy(char) then
-            return
-        end
-
-        local anim = track.Animation
-
-        if not anim then
-            return
-        end
-
-        local animId = tostring(anim.AnimationId)
-
-        if ATTACK_ANIMS[animId] then
-
-            task.spawn(function()
-
-                doParry()
-
-            end)
-        end
-    end)
-end
-
---// PLAYER LOOP
-for _, plr in ipairs(Players:GetPlayers()) do
-
-    if plr ~= LP then
-
-        if plr.Character then
-            hookCharacter(plr.Character)
-        end
-
-        plr.CharacterAdded:Connect(hookCharacter)
-    end
-end
-
-LP.CharacterAdded:Connect(function(char)
-    Character = char
-end)
-
---// TOGGLE
 local autoparry = Config:Get("autoparry", false)
 
 SurTab:Toggle({
-    Title = "Auto Parry (MOBILE ONLY)",
+    Title = "Auto Parry (REWORK)",
     Desc  = "Automatically parries nearby killer attacks",
     Value = autoparry,
 
@@ -1385,12 +1132,252 @@ SurTab:Toggle({
         Config:Set("autoparry", v)
         Config:Save()
 
+        local Players = game:GetService("Players")
+        local VirtualInputManager = game:GetService("VirtualInputManager")
+
+        local LP = Players.LocalPlayer
+        local Character = LP.Character or LP.CharacterAdded:Wait()
+
+        local LastParry = 0
+        local COOLDOWN = 0.03
+        local MAX_DISTANCE = 17
+
+        local REQUIRED_IMAGE = "rbxassetid://101288986880844"
+
+        local ATTACK_ANIMS = {
+
+            -- JASON
+            ["rbxassetid://139369275981139"] = true,
+            ["rbxassetid://110355011987939"] = true,
+
+            -- CURE
+            ["rbxassetid://135002183282873"] = true,
+            ["rbxassetid://121216847022485"] = true,
+
+            -- CHICKEN
+            ["rbxassetid://105374834496520"] = true,
+            ["rbxassetid://111920872708571"] = true,
+            ["rbxassetid://138720291317243"] = true,
+            ["rbxassetid://115244153053858"] = true,
+            ["rbxassetid://130593238885843"] = true,
+            ["rbxassetid://117070354890871"] = true,
+            ["rbxassetid://106871536134254"] = true,
+            ["rbxassetid://109402730355822"] = true,
+
+            -- KNIGHT
+            ["rbxassetid://118907603246885"] = true,
+            ["rbxassetid://78432063483146"] = true,
+            ["rbxassetid://77081789642514"] = true,
+            ["rbxassetid://80411309607666"] = true,
+
+            -- BLINDMAN
+            ["rbxassetid://113255068724446"] = true,
+            ["rbxassetid://74968262036854"] = true,
+            ["rbxassetid://82666958311998"] = true,
+
+            -- RUNNER
+            ["rbxassetid://129784271201071"] = true,
+            ["rbxassetid://132817836308238"] = true,
+
+            -- SPIRITGIRL
+            ["rbxassetid://112166042383605"] = true,
+            ["rbxassetid://122812055447896"] = true,
+            ["rbxassetid://78935059863801"] = true,
+
+            -- MICHAEL
+            ["rbxassetid://117042998468241"] = true,
+            ["rbxassetid://133963973694098"] = true,
+            ["rbxassetid://129918027564423"] = true,
+            ["rbxassetid://95934119190708"] = true,
+        }
+
+        local function nt(title, content)
+            WindUI:Notify({
+                Title = title,
+                Content = content,
+                Duration = 5,
+                Icon = "sword"
+            })
+        end
+
+        local function click_btn(btn)
+
+            if not btn then
+                return
+            end
+
+            pcall(function()
+
+                if firesignal then
+                    firesignal(btn.MouseButton1Click)
+                    firesignal(btn.Activated)
+                end
+            end)
+
+            pcall(function()
+                btn:Activate()
+            end)
+
+            pcall(function()
+
+                local pos = btn.AbsolutePosition
+                local size = btn.AbsoluteSize
+
+                local x = pos.X + (size.X / 2)
+                local y = pos.Y + (size.Y / 2)
+
+                VirtualInputManager:SendMouseButtonEvent(
+                    x,
+                    y,
+                    0,
+                    true,
+                    game,
+                    1
+                )
+
+                VirtualInputManager:SendMouseButtonEvent(
+                    x,
+                    y,
+                    0,
+                    false,
+                    game,
+                    1
+                )
+            end)
+        end
+
+        local function getGui()
+
+            local pg = LP:FindFirstChild("PlayerGui")
+            if not pg then
+                return
+            end
+
+            local survivor = pg:FindFirstChild("Survivor-mob")
+            if not survivor then
+                return
+            end
+
+            local controls = survivor:FindFirstChild("Controls")
+            if not controls then
+                return
+            end
+
+            return controls:FindFirstChild("Gui-mob")
+        end
+
+        local function validImage(guiMob)
+
+            local ok = false
+
+            pcall(function()
+
+                if tostring(guiMob.Image) == REQUIRED_IMAGE then
+                    ok = true
+                end
+            end)
+
+            return ok
+        end
+
+        local function nearEnemy(char)
+
+            local myRoot = Character and Character:FindFirstChild("HumanoidRootPart")
+            local enemyRoot = char and char:FindFirstChild("HumanoidRootPart")
+
+            if not myRoot or not enemyRoot then
+                return false
+            end
+
+            local dist = (
+                myRoot.Position - enemyRoot.Position
+            ).Magnitude
+
+            return dist <= MAX_DISTANCE
+        end
+
+        local function doParry()
+
+            local guiMob = getGui()
+
+            if not guiMob then
+                return
+            end
+
+            if not validImage(guiMob) then
+                return
+            end
+
+            local now = tick()
+
+            if now - LastParry < COOLDOWN then
+                return
+            end
+
+            LastParry = now
+
+            click_btn(guiMob)
+        end
+
+        local function hookCharacter(char)
+
+            local hum = char:FindFirstChildOfClass("Humanoid")
+
+            if not hum then
+                return
+            end
+
+            hum.AnimationPlayed:Connect(function(track)
+
+                if not autoparry then
+                    return
+                end
+
+                if not nearEnemy(char) then
+                    return
+                end
+
+                local anim = track.Animation
+
+                if not anim then
+                    return
+                end
+
+                local animId = tostring(anim.AnimationId)
+
+                if ATTACK_ANIMS[animId] then
+
+                    task.spawn(function()
+
+                        doParry()
+
+                    end)
+                end
+            end)
+        end
+
         if autoparry then
 
             nt(
                 "Auto Parry (BETA)",
                 "Enabled"
             )
+
+            for _, plr in ipairs(Players:GetPlayers()) do
+
+                if plr ~= LP then
+
+                    if plr.Character then
+                        hookCharacter(plr.Character)
+                    end
+
+                    plr.CharacterAdded:Connect(hookCharacter)
+                end
+            end
+
+            LP.CharacterAdded:Connect(function(char)
+                Character = char
+            end)
 
         else
 
@@ -1401,6 +1388,7 @@ SurTab:Toggle({
         end
     end
 })
+
 
 -- ====================== GENERATOR HELPERS (SHARED) ======================
 
