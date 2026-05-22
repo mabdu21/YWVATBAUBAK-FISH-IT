@@ -1,7 +1,7 @@
 -- Powered by GPT 5 | v114
 -- =========================
 local version = "Rework"
-local ver = "v011.7"
+local ver = "v011.45"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -18,18 +18,18 @@ else
     WindUI:Notify({ Title = "Not Working", Content = "Your exploit does not support setfpscap.", Duration = 3, Icon = "ban" })
 end
 
--- Services (declare once at top)
-local RunService       = game:GetService("RunService")
-local Workspace        = game:GetService("Workspace")
-local Lighting         = game:GetService("Lighting")
-local ReplicatedStorage= game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
-local Players          = game:GetService("Players")
-local HttpService      = game:GetService("HttpService")
-local LocalPlayer      = Players.LocalPlayer
-local Character        = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local Humanoid         = Character:WaitForChild("Humanoid")
-local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+-- ====================== SERVICES ======================
+local RunService        = game:GetService("RunService")
+local Workspace         = game:GetService("Workspace")
+local Lighting          = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService  = game:GetService("UserInputService")
+local Players           = game:GetService("Players")
+local HttpService       = game:GetService("HttpService")
+local LocalPlayer       = Players.LocalPlayer
+local Character         = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid          = Character:WaitForChild("Humanoid")
+local HumanoidRootPart  = Character:WaitForChild("HumanoidRootPart")
 
 -- ====================== VERSION CHECK ======================
 local FreeVersion    = "Free Version"
@@ -79,52 +79,51 @@ Window:EditOpenButton({
     Draggable = true,
 })
 
--- ====================== CONFIG ======================
+-- ====================== CUSTOM CONFIG SYSTEM ======================
 local ConfigFolder = "DYHUB_VD"
-local ConfigPath   = ConfigFolder .. "/config.json"
 
-local Config = {}
-Config.__index = Config
+local CustomConfig = {}
+CustomConfig.__index = CustomConfig
 
-function Config.new()
-    local self = setmetatable({}, Config)
+function CustomConfig.new()
+    local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    -- สร้าง folder ถ้ายังไม่มี (สำคัญมาก! ถ้าไม่มีจะ save ไม่ได้)
+    self.ConfigPath = ConfigFolder .. "/config.json"
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
     self:Load()
     return self
 end
 
-function Config:Get(key, default)
+function CustomConfig:Set(key, value)
+    self.ConfigData[key] = value
+end
+
+function CustomConfig:Get(key, default)
     if self.ConfigData[key] ~= nil then return self.ConfigData[key] end
     return default
 end
 
-function Config:Set(key, value)
-    self.ConfigData[key] = value
-end
-
-function Config:Save()
-    local ok, err = pcall(function()
-        writefile(ConfigPath, HttpService:JSONEncode(self.ConfigData))
+function CustomConfig:Save()
+    local success, err = pcall(function()
+        writefile(self.ConfigPath, HttpService:JSONEncode(self.ConfigData))
     end)
-    if ok then
+    if success then
         warn("[DYHUB] Config saved!")
     else
-        warn("[DYHUB] Config save failed: " .. tostring(err))
+        warn("[DYHUB] Save failed:", err)
     end
 end
 
-function Config:Load()
-    if isfile(ConfigPath) then
-        local ok, result = pcall(function()
-            return HttpService:JSONDecode(readfile(ConfigPath))
+function CustomConfig:Load()
+    if isfile(self.ConfigPath) then
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(readfile(self.ConfigPath))
         end)
-        if ok and type(result) == "table" then
+        if success and type(result) == "table" then
             self.ConfigData = result
             print("[DYHUB] Config loaded!")
         else
-            warn("[DYHUB] Config load failed, using defaults")
+            warn("[DYHUB] Failed to load config, using defaults")
             self.ConfigData = {}
         end
     else
@@ -133,7 +132,7 @@ function Config:Load()
     end
 end
 
-function Config:AutoSave(interval)
+function CustomConfig:AutoSave(interval)
     if self._autoSaveThread then
         task.cancel(self._autoSaveThread)
         self._autoSaveThread = nil
@@ -149,104 +148,66 @@ function Config:AutoSave(interval)
     end
 end
 
-local Config = Config.new()
--- เริ่ม AutoSave ตามค่าที่บันทึกไว้ (default: เปิด, ทุก 15 วินาที)
+local Config = CustomConfig.new()
+
 if Config:Get("AutoSaveEnabled", true) then
     Config:AutoSave(Config:Get("AutoSaveDelay", 15))
 end
 
--- Tabs
-local InfoTab      = Window:Tab({ Title = "Information",  Icon = "info" })
-local Main1Divider = Window:Divider()
-local SurTab       = Window:Tab({ Title = "Survivor",     Icon = "user-check" })
-local killerTab    = Window:Tab({ Title = "Killer",       Icon = "swords" })
-local Main2Divider = Window:Divider()
-local MainTab      = Window:Tab({ Title = "Main",         Icon = "rocket" })
-local EspTab       = Window:Tab({ Title = "Esp",          Icon = "eye" })
-local PlayerTab    = Window:Tab({ Title = "Player",       Icon = "user" })
-local Hitbox       = Window:Tab({ Title = "Hitbox",       Icon = "package" })
-local TeleportTab  = Window:Tab({ Title = "Teleport",     Icon = "map-pin" })
-local Main3Divider = Window:Divider()
-local Main3        = Window:Tab({ Title = "Settings",     Icon = "settings" })
+-- ====================== TABS ======================
+local InfoTab      = Window:Tab({ Title = "Information", Icon = "info" })
+local _D1          = Window:Divider()
+local SurTab       = Window:Tab({ Title = "Survivor",    Icon = "user-check" })
+local killerTab    = Window:Tab({ Title = "Killer",      Icon = "swords" })
+local _D2          = Window:Divider()
+local MainTab      = Window:Tab({ Title = "Main",        Icon = "rocket" })
+local EspTab       = Window:Tab({ Title = "Esp",         Icon = "eye" })
+local PlayerTab    = Window:Tab({ Title = "Player",      Icon = "user" })
+local TeleportTab  = Window:Tab({ Title = "Teleport",    Icon = "map-pin" })
+local _D3          = Window:Divider()
+local Main3        = Window:Tab({ Title = "Settings",    Icon = "settings" })
 
 Window:SelectTab(1)
 
--- ====================== ESP SYSTEM (UPGRADED) ======================
--- Color config
+-- ====================== ESP SYSTEM ======================
 local COLOR_SURVIVOR       = Color3.fromRGB(0, 0, 255)
 local COLOR_MURDERER       = Color3.fromRGB(255, 0, 0)
-local COLOR_GENERATOR      = Color3.fromRGB(255, 255, 255)
 local COLOR_GENERATOR_DONE = Color3.fromRGB(0, 255, 0)
 local COLOR_GATE           = Color3.fromRGB(255, 255, 255)
 local COLOR_PALLET         = Color3.fromRGB(255, 255, 0)
 local COLOR_OUTLINE        = Color3.fromRGB(0, 0, 0)
 local COLOR_WINDOW         = Color3.fromRGB(175, 215, 230)
 local COLOR_HOOK           = Color3.fromRGB(255, 0, 0)
-local COLOR_PATIENT        = Color3.fromRGB(255, 165, 0)  -- Orange for Patient
+local COLOR_PATIENT        = Color3.fromRGB(255, 165, 0)
 
--- State flags
-local espEnabled        = false
-local espSurvivor       = false
-local espMurder         = false
-local espGenerator      = false
-local espGate           = false
-local espHook           = false
-local espPallet         = false
-local espWindowEnabled  = false
-local espPatient        = false
-local ShowName          = true
-local ShowDistance      = true
-local ShowHP            = true
-local ShowHighlight     = true
-local ShowPercent       = true
+local espEnabled       = Config:Get("espEnabled", false)
+local espSurvivor      = Config:Get("espSurvivor", false)
+local espMurder        = Config:Get("espMurder", false)
+local espGenerator     = Config:Get("espGenerator", false)
+local espGate          = Config:Get("espGate", false)
+local espHook          = Config:Get("espHook", false)
+local espPallet        = Config:Get("espPallet", false)
+local espWindowEnabled = Config:Get("espWindow", false)
+local espPatient       = Config:Get("espPatient", false)
+local ShowName         = Config:Get("ShowName", true)
+local ShowDistance     = Config:Get("ShowDistance", true)
+local ShowHP           = Config:Get("ShowHP", true)
+local ShowHighlight    = Config:Get("ShowHighlight", true)
+local ShowPercent      = Config:Get("ShowPercent", true)
 
--- Max distance for all object ESP (Players excluded)
-local ESP_MAX_DISTANCE  = 1500
-
--- ESP object pool (cache)
+local ESP_MAX_DISTANCE = 1500
 local espObjects = {}
 
--- ── Optimised cache: scan workspace once, invalidate on DescendantAdded/Removing ──
-local _cachedMapFolders    = nil
-local _cachedGenFolders    = nil
-local _cacheVersion        = 0   -- bump to force re-scan
+local _cachedGenFolders = nil
 
 local function _invalidateCache()
-    _cachedMapFolders = nil
     _cachedGenFolders = nil
-    _cacheVersion    += 1
 end
-
--- Auto-invalidate when workspace changes
 Workspace.DescendantAdded:Connect(_invalidateCache)
 Workspace.DescendantRemoving:Connect(_invalidateCache)
 
--- Get every folder/model in workspace that contains named objects (lazy cache)
-local function getMapFolders()
-    if _cachedMapFolders then return _cachedMapFolders end
-
-    local folders = {}
-
-    -- Recursive: collect any Instance that has named game-objects as direct children
-    local function scanContainer(container, depth)
-        if depth > 6 then return end
-        for _, child in ipairs(container:GetChildren()) do
-            if child:IsA("Folder") or child:IsA("Model") then
-                table.insert(folders, child)
-                scanContainer(child, depth + 1)
-            end
-        end
-    end
-
-    scanContainer(Workspace, 0)
-    _cachedMapFolders = folders
-    return folders
-end
-
--- Generator search: scan all workspace descendants (cached)
 local function getFolderGenerator()
     if _cachedGenFolders then return _cachedGenFolders end
-
     local list = {}
     for _, desc in ipairs(Workspace:GetDescendants()) do
         if desc.Name == "Generator" and desc:IsA("Model") then
@@ -257,7 +218,6 @@ local function getFolderGenerator()
     return list
 end
 
--- Remove ESP from object
 local function removeESP(obj)
     local data = espObjects[obj]
     if not data then return end
@@ -266,14 +226,11 @@ local function removeESP(obj)
     espObjects[obj] = nil
 end
 
--- Create / update ESP (lightweight: reuse existing instances)
 local function createESP(obj, baseColor)
     if not obj or not obj.Parent then return end
     if obj.Name == "Lobby" then return end
-
     local data = espObjects[obj]
     if data then
-        -- Just update color if already exists
         if data.highlight then
             data.highlight.FillColor    = baseColor
             data.highlight.OutlineColor = baseColor
@@ -285,19 +242,16 @@ local function createESP(obj, baseColor)
         data.color = baseColor
         return
     end
-
-    -- Highlight
     local highlight = Instance.new("Highlight")
-    highlight.Adornee            = obj
-    highlight.FillColor          = baseColor
-    highlight.FillTransparency   = 0.8
-    highlight.OutlineColor       = baseColor
+    highlight.Adornee             = obj
+    highlight.FillColor           = baseColor
+    highlight.FillTransparency    = 0.8
+    highlight.OutlineColor        = baseColor
     highlight.OutlineTransparency = 0.1
-    highlight.Enabled            = ShowHighlight
-    highlight.DepthMode          = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Enabled             = ShowHighlight
+    highlight.DepthMode           = Enum.HighlightDepthMode.AlwaysOnTop
     pcall(function() highlight.Parent = obj end)
 
-    -- BillboardGui
     local bill = Instance.new("BillboardGui")
     bill.Size        = UDim2.new(0, 200, 0, 50)
     bill.Adornee     = obj
@@ -305,28 +259,27 @@ local function createESP(obj, baseColor)
     pcall(function() bill.Parent = obj end)
 
     local frame = Instance.new("Frame")
-    frame.Size                 = UDim2.new(1, 0, 1, 0)
+    frame.Size                  = UDim2.new(1, 0, 1, 0)
     frame.BackgroundTransparency = 1
-    frame.Parent               = bill
+    frame.Parent                = bill
 
     local function makeLabel(ypos)
         local lbl = Instance.new("TextLabel")
-        lbl.Size                    = UDim2.new(1, 0, 0.33, 0)
-        lbl.Position                = UDim2.new(0, 0, ypos, 0)
-        lbl.BackgroundTransparency  = 1
-        lbl.Font                    = Enum.Font.SourceSansBold
-        lbl.TextSize                = 14
-        lbl.TextColor3              = baseColor
-        lbl.TextStrokeColor3        = COLOR_OUTLINE
-        lbl.TextStrokeTransparency  = 0
-        lbl.Text                    = ""
-        lbl.Parent                  = frame
+        lbl.Size                   = UDim2.new(1, 0, 0.33, 0)
+        lbl.Position               = UDim2.new(0, 0, ypos, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.Font                   = Enum.Font.SourceSansBold
+        lbl.TextSize               = 14
+        lbl.TextColor3             = baseColor
+        lbl.TextStrokeColor3       = COLOR_OUTLINE
+        lbl.TextStrokeTransparency = 0
+        lbl.Text                   = ""
+        lbl.Parent                 = frame
         return lbl
     end
 
     local nameLabel = makeLabel(0)
     nameLabel.Text = obj.Name
-
     local hpLabel   = makeLabel(0.33)
     local distLabel = makeLabel(0.66)
 
@@ -340,7 +293,6 @@ local function createESP(obj, baseColor)
     }
 end
 
--- Generator progress helpers
 local function getGeneratorProgress(gen)
     local progress = 0
     if gen:GetAttribute("Progress") then
@@ -352,8 +304,7 @@ local function getGeneratorProgress(gen)
             if child:IsA("NumberValue") or child:IsA("IntValue") then
                 local n = child.Name:lower()
                 if n:find("progress") or n:find("repair") or n:find("percent") then
-                    progress = child.Value
-                    break
+                    progress = child.Value; break
                 end
             end
         end
@@ -365,10 +316,10 @@ end
 local function getProgressColor(p)
     if p < 0.5 then
         local t = p / 0.5
-        return Color3.fromRGB(math.floor(255 - (255 - 153) * t), 255, math.floor(255 - (255 - 153) * t))
+        return Color3.fromRGB(math.floor(255 - (255-153)*t), 255, math.floor(255 - (255-153)*t))
     else
         local t = (p - 0.5) / 0.5
-        return Color3.fromRGB(math.floor(153 * (1 - t)), 255, math.floor(153 * (1 - t)))
+        return Color3.fromRGB(math.floor(153*(1-t)), 255, math.floor(153*(1-t)))
     end
 end
 
@@ -376,32 +327,28 @@ local function generatorFinished(gen)
     return getGeneratorProgress(gen) >= 0.99 or gen:FindFirstChild("Finished") or gen:FindFirstChild("Repaired")
 end
 
--- ── Main ESP update (runs on a throttled heartbeat, NOT RenderStepped) ──
-local _espAccum = 0
-local ESP_INTERVAL = 0.5   -- 2 Hz – plenty for labels, no lag
+local _espAccum   = 0
+local ESP_INTERVAL = 0.5
 
 local function updateESP()
     if not espEnabled then return end
     local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    -- ── Players ──
+    -- Players
     for _, player in pairs(Players:GetPlayers()) do
         local char = player.Character
         if char and char ~= LocalPlayer.Character and char.Name ~= "Lobby" then
             local isMurderer = char:FindFirstChild("Weapon") ~= nil
             if isMurderer then
-                if espMurder then createESP(char, COLOR_MURDERER)
-                else removeESP(char) end
+                if espMurder then createESP(char, COLOR_MURDERER) else removeESP(char) end
             else
-                if espSurvivor then createESP(char, COLOR_SURVIVOR)
-                else removeESP(char) end
+                if espSurvivor then createESP(char, COLOR_SURVIVOR) else removeESP(char) end
             end
         end
     end
 
-    -- ── World objects: scan workspace descendants (uses cache) ──
-    -- We categorise by name for max flexibility (no hardcoded folder paths)
+    -- World objects
     local scanned = {}
     for _, desc in ipairs(Workspace:GetDescendants()) do
         if desc:IsA("Model") and not scanned[desc] then
@@ -410,11 +357,10 @@ local function updateESP()
             if n == "Generator" then
                 scanned[desc] = true
                 if espGenerator then
-                    local progress  = getGeneratorProgress(desc)
+                    local progress   = getGeneratorProgress(desc)
                     local isFinished = generatorFinished(desc)
                     local col = isFinished and COLOR_GENERATOR_DONE or getProgressColor(progress)
                     createESP(desc, col)
-                    -- Update percent label immediately
                     local data = espObjects[desc]
                     if data then
                         local part = desc.PrimaryPart or desc:FindFirstChildWhichIsA("BasePart")
@@ -429,13 +375,9 @@ local function updateESP()
                             else
                                 data.nameLabel.Visible = false
                             end
-                            if ShowDistance then
-                                data.distLabel.Text    = "[ " .. dist .. " MM ]"
-                                data.distLabel.Visible = true
-                            else
-                                data.distLabel.Visible = false
-                            end
-                            data.hpLabel.Visible = false
+                            data.distLabel.Text    = ShowDistance and ("[ " .. dist .. " MM ]") or ""
+                            data.distLabel.Visible = ShowDistance
+                            data.hpLabel.Visible   = false
                             data.nameLabel.TextColor3 = col
                             data.distLabel.TextColor3 = col
                         end
@@ -446,53 +388,40 @@ local function updateESP()
 
             elseif n == "Gate" then
                 scanned[desc] = true
-                if espGate then createESP(desc, COLOR_GATE)
-                else removeESP(desc) end
+                if espGate then createESP(desc, COLOR_GATE) else removeESP(desc) end
 
             elseif n == "Hook" then
                 scanned[desc] = true
                 local mdl = desc:FindFirstChild("Model")
                 if mdl then
-                    if espHook then createESP(mdl, COLOR_HOOK)
-                    else removeESP(mdl) end
+                    if espHook then createESP(mdl, COLOR_HOOK) else removeESP(mdl) end
                 end
 
             elseif n == "Palletwrong" then
                 scanned[desc] = true
-                if espPallet then createESP(desc, COLOR_PALLET)
-                else removeESP(desc) end
+                if espPallet then createESP(desc, COLOR_PALLET) else removeESP(desc) end
 
             elseif n == "Window" then
                 scanned[desc] = true
-                if espWindowEnabled then createESP(desc, COLOR_WINDOW)
-                else removeESP(desc) end
+                if espWindowEnabled then createESP(desc, COLOR_WINDOW) else removeESP(desc) end
             end
 
-            -- ── Patient ESP: search workspace.map["1"].scp, scp2..scp10 without hardcoded folder ──
-            -- We match any Model whose name matches "scp" followed by optional number
+            -- Patient
             if not scanned[desc] and desc:IsA("Model") and n:match("^scp%d*$") then
                 scanned[desc] = true
                 local part = desc.PrimaryPart or desc:FindFirstChildWhichIsA("BasePart")
                 local dist = part and math.floor((hrp.Position - part.Position).Magnitude) or math.huge
-                if espPatient then
-                    if dist <= ESP_MAX_DISTANCE then
-                        createESP(desc, COLOR_PATIENT)
-                        local data = espObjects[desc]
-                        if data and part then
-                            data.nameLabel.Text    = "Patient"
-                            data.nameLabel.Visible = true
-                            data.nameLabel.TextColor3 = COLOR_PATIENT
-                            if ShowDistance then
-                                data.distLabel.Text    = "[ " .. dist .. " MM ]"
-                                data.distLabel.Visible = true
-                                data.distLabel.TextColor3 = COLOR_PATIENT
-                            else
-                                data.distLabel.Visible = false
-                            end
-                            data.hpLabel.Visible = false
-                        end
-                    else
-                        removeESP(desc)
+                if espPatient and dist <= ESP_MAX_DISTANCE then
+                    createESP(desc, COLOR_PATIENT)
+                    local data = espObjects[desc]
+                    if data and part then
+                        data.nameLabel.Text       = "Patient"
+                        data.nameLabel.Visible    = true
+                        data.nameLabel.TextColor3 = COLOR_PATIENT
+                        data.distLabel.Text       = ShowDistance and ("[ " .. dist .. " MM ]") or ""
+                        data.distLabel.Visible    = ShowDistance
+                        data.distLabel.TextColor3 = COLOR_PATIENT
+                        data.hpLabel.Visible      = false
                     end
                 else
                     removeESP(desc)
@@ -501,44 +430,32 @@ local function updateESP()
         end
     end
 
-    -- ── Update labels for all tracked objects ──
+    -- Update labels
     for obj, data in pairs(espObjects) do
-        if not obj or not obj.Parent then
-            removeESP(obj)
-            continue
-        end
+        if not obj or not obj.Parent then removeESP(obj); continue end
         if obj.Name == "Lobby" then continue end
-
         local part = obj:FindFirstChild("HumanoidRootPart") or obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
         if not part then continue end
-
         local humanoid = obj:FindFirstChildOfClass("Humanoid")
         local isPlayer = humanoid ~= nil
         local dist     = math.floor((hrp.Position - part.Position).Magnitude)
 
-        -- ── MaxDistance: hide non-player objects beyond 1500 studs ──
-        if not isPlayer then
-            local isPatient = obj.Name:match("^scp%d*$") ~= nil
-            if dist > ESP_MAX_DISTANCE then
-                if data.bill then data.bill.Enabled = false end
-                if data.highlight then data.highlight.Enabled = false end
-                continue
-            else
-                if data.bill then data.bill.Enabled = true end
-                -- highlight re-enabled below via ShowHighlight
-            end
+        if not isPlayer and dist > ESP_MAX_DISTANCE then
+            if data.bill then data.bill.Enabled = false end
+            if data.highlight then data.highlight.Enabled = false end
+            continue
+        elseif not isPlayer then
+            if data.bill then data.bill.Enabled = true end
         end
 
-        -- Name
-        if not data.nameLabel.Text:find("|") then   -- don't overwrite percent label for generators
+        if not data.nameLabel.Text:find("|") then
             data.nameLabel.Visible = ShowName
         end
 
         if isPlayer then
-            -- HP
             if ShowHP and humanoid then
-                data.hpLabel.Text    = "[ " .. math.floor(humanoid.Health) .. " HP ]"
-                data.hpLabel.Visible = true
+                data.hpLabel.Text     = "[ " .. math.floor(humanoid.Health) .. " HP ]"
+                data.hpLabel.Visible  = true
                 data.hpLabel.Position = UDim2.new(0, 0, 0.33, 0)
                 data.distLabel.Position = UDim2.new(0, 0, 0.66, 0)
             else
@@ -546,14 +463,8 @@ local function updateESP()
                 data.hpLabel.Visible = false
                 data.distLabel.Position = UDim2.new(0, 0, 0.33, 0)
             end
-            -- Distance
-            if ShowDistance then
-                data.distLabel.Text    = "[ " .. dist .. " MM ]"
-                data.distLabel.Visible = true
-            else
-                data.distLabel.Text    = ""
-                data.distLabel.Visible = false
-            end
+            data.distLabel.Text    = ShowDistance and ("[ " .. dist .. " MM ]") or ""
+            data.distLabel.Visible = ShowDistance
         else
             data.hpLabel.Text    = ""
             data.hpLabel.Visible = false
@@ -573,7 +484,6 @@ local function updateESP()
     end
 end
 
--- ── Heartbeat throttle (no RenderStepped for world ESP = less lag) ──
 RunService.Heartbeat:Connect(function(dt)
     _espAccum += dt
     if _espAccum >= ESP_INTERVAL then
@@ -582,40 +492,63 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
--- Clean up on player leave
 Players.PlayerRemoving:Connect(function(player)
     if player.Character then removeESP(player.Character) end
 end)
 
 -- ====================== ESP UI ======================
 EspTab:Section({ Title = "Feature Esp", Icon = "eye" })
-EspTab:Toggle({ Title = "Enable ESP", Value = false, Callback = function(v)
-    espEnabled = v
-    if not espEnabled then
-        for obj in pairs(espObjects) do removeESP(obj) end
-    end
+EspTab:Toggle({ Title = "Enable ESP", Value = espEnabled, Callback = function(v)
+    espEnabled = v; Config:Set("espEnabled", v); Config:Save()
+    if not espEnabled then for obj in pairs(espObjects) do removeESP(obj) end end
 end })
 
 EspTab:Section({ Title = "Esp Role", Icon = "user" })
-EspTab:Toggle({ Title = "ESP Survivor", Value = false, Callback = function(v) espSurvivor = v end })
-EspTab:Toggle({ Title = "ESP Killer",   Value = false, Callback = function(v) espMurder   = v end })
+EspTab:Toggle({ Title = "ESP Survivor", Value = espSurvivor, Callback = function(v)
+    espSurvivor = v; Config:Set("espSurvivor", v); Config:Save()
+end })
+EspTab:Toggle({ Title = "ESP Killer", Value = espMurder, Callback = function(v)
+    espMurder = v; Config:Set("espMurder", v); Config:Save()
+end })
 
 EspTab:Section({ Title = "Esp Engine", Icon = "biceps-flexed" })
-EspTab:Toggle({ Title = "ESP Generator", Value = false, Callback = function(v) espGenerator = v end })
-EspTab:Toggle({ Title = "ESP Gate",      Value = false, Callback = function(v) espGate      = v end })
+EspTab:Toggle({ Title = "ESP Generator", Value = espGenerator, Callback = function(v)
+    espGenerator = v; Config:Set("espGenerator", v); Config:Save()
+end })
+EspTab:Toggle({ Title = "ESP Gate", Value = espGate, Callback = function(v)
+    espGate = v; Config:Set("espGate", v); Config:Save()
+end })
 
 EspTab:Section({ Title = "Esp Object", Icon = "package" })
-EspTab:Toggle({ Title = "ESP Pallet",   Value = false, Callback = function(v) espPallet        = v end })
-EspTab:Toggle({ Title = "ESP Hook",     Value = false, Callback = function(v) espHook          = v end })
-EspTab:Toggle({ Title = "ESP Window",   Value = false, Callback = function(v) espWindowEnabled = v end })
-EspTab:Toggle({ Title = "ESP Patient",  Value = false, Callback = function(v) espPatient       = v end })
+EspTab:Toggle({ Title = "ESP Pallet", Value = espPallet, Callback = function(v)
+    espPallet = v; Config:Set("espPallet", v); Config:Save()
+end })
+EspTab:Toggle({ Title = "ESP Hook", Value = espHook, Callback = function(v)
+    espHook = v; Config:Set("espHook", v); Config:Save()
+end })
+EspTab:Toggle({ Title = "ESP Window", Value = espWindowEnabled, Callback = function(v)
+    espWindowEnabled = v; Config:Set("espWindow", v); Config:Save()
+end })
+EspTab:Toggle({ Title = "ESP Patient", Value = espPatient, Callback = function(v)
+    espPatient = v; Config:Set("espPatient", v); Config:Save()
+end })
 
 EspTab:Section({ Title = "Esp Settings", Icon = "settings" })
-EspTab:Toggle({ Title = "Show Name",      Value = ShowName,      Callback = function(v) ShowName      = v end })
-EspTab:Toggle({ Title = "Show Distance",  Value = ShowDistance,  Callback = function(v) ShowDistance  = v end })
-EspTab:Toggle({ Title = "Show Health",    Value = ShowHP,        Callback = function(v) ShowHP        = v end })
-EspTab:Toggle({ Title = "Show Highlight", Value = ShowHighlight, Callback = function(v) ShowHighlight = v end })
-EspTab:Toggle({ Title = "Show Percent",   Value = ShowPercent,   Callback = function(v) ShowPercent   = v end })
+EspTab:Toggle({ Title = "Show Name", Value = ShowName, Callback = function(v)
+    ShowName = v; Config:Set("ShowName", v); Config:Save()
+end })
+EspTab:Toggle({ Title = "Show Distance", Value = ShowDistance, Callback = function(v)
+    ShowDistance = v; Config:Set("ShowDistance", v); Config:Save()
+end })
+EspTab:Toggle({ Title = "Show Health", Value = ShowHP, Callback = function(v)
+    ShowHP = v; Config:Set("ShowHP", v); Config:Save()
+end })
+EspTab:Toggle({ Title = "Show Highlight", Value = ShowHighlight, Callback = function(v)
+    ShowHighlight = v; Config:Set("ShowHighlight", v); Config:Save()
+end })
+EspTab:Toggle({ Title = "Show Percent", Value = ShowPercent, Callback = function(v)
+    ShowPercent = v; Config:Set("ShowPercent", v); Config:Save()
+end })
 
 -- ====================== MAIN TAB ======================
 MainTab:Section({ Title = "Feature Gameplay", Icon = "target" })
@@ -628,30 +561,20 @@ MainTab:Button({
 })
 
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-local CrosshairEnabled = false
-local Crosshair
+local CrosshairEnabled = Config:Get("CrosshairEnabled", false)
 
 local function CreateCrosshair()
     if PlayerGui:FindFirstChild("CrosshairGUI") then return end
     local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "CrosshairGUI"
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.IgnoreGuiInset = true
-    ScreenGui.Parent = PlayerGui
+    ScreenGui.Name = "CrosshairGUI"; ScreenGui.ResetOnSpawn = false
+    ScreenGui.IgnoreGuiInset = true; ScreenGui.Parent = PlayerGui
     local Frame = Instance.new("Frame")
-    Frame.Name = "Crosshair"
-    Frame.Size = UDim2.new(0, 5, 0, 5)
-    Frame.AnchorPoint = Vector2.new(0.5, 0.5)
-    Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
-    Frame.BackgroundColor3 = Color3.new(1, 1, 1)
-    Frame.BackgroundTransparency = 0.3
-    Frame.BorderSizePixel = 0
-    Frame.ZIndex = 999
-    Frame.Parent = ScreenGui
+    Frame.Name = "Crosshair"; Frame.Size = UDim2.new(0, 5, 0, 5)
+    Frame.AnchorPoint = Vector2.new(0.5, 0.5); Frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    Frame.BackgroundColor3 = Color3.new(1, 1, 1); Frame.BackgroundTransparency = 0.3
+    Frame.BorderSizePixel = 0; Frame.ZIndex = 999; Frame.Parent = ScreenGui
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(1, 0)
-    corner.Parent = Frame
-    Crosshair = Frame
+    corner.CornerRadius = UDim.new(1, 0); corner.Parent = Frame
     Frame:GetPropertyChangedSignal("Visible"):Connect(function()
         if CrosshairEnabled and not Frame.Visible then Frame.Visible = true end
     end)
@@ -663,29 +586,26 @@ local function RemoveCrosshair()
 end
 
 PlayerGui.ChildRemoved:Connect(function(child)
-    if child.Name == "CrosshairGUI" and CrosshairEnabled then
-        task.defer(CreateCrosshair)
-    end
+    if child.Name == "CrosshairGUI" and CrosshairEnabled then task.defer(CreateCrosshair) end
 end)
 
+if CrosshairEnabled then CreateCrosshair() end
+
 MainTab:Toggle({
-    Title = "Enable Cursor (Recommended)",
-    Value = false,
+    Title = "Enable Cursor (Recommended)", Value = CrosshairEnabled,
     Callback = function(state)
-        CrosshairEnabled = state
+        CrosshairEnabled = state; Config:Set("CrosshairEnabled", state); Config:Save()
         if state then CreateCrosshair() else RemoveCrosshair() end
     end
 })
 
 -- Bypass Gate
-local bypassGateEnabled = false
+local bypassGateEnabled = Config:Get("bypassGateEnabled", false)
 
 local function gatherGates()
     local gates = {}
     for _, desc in ipairs(Workspace:GetDescendants()) do
-        if desc.Name == "Gate" and desc:IsA("Model") then
-            table.insert(gates, desc)
-        end
+        if desc.Name == "Gate" and desc:IsA("Model") then table.insert(gates, desc) end
     end
     return gates
 end
@@ -713,47 +633,45 @@ local function setGateState(enabled)
     end
 end
 
+if bypassGateEnabled then setGateState(true) end
+
 MainTab:Section({ Title = "Feature Bypass", Icon = "lock-open" })
 MainTab:Toggle({
-    Title = "Bypass Gate (Open Gate)",
-    Value = false,
+    Title = "Bypass Gate (Open Gate)", Value = bypassGateEnabled,
     Callback = function(state)
-        bypassGateEnabled = state
+        bypassGateEnabled = state; Config:Set("bypassGateEnabled", state); Config:Save()
         setGateState(state)
     end
 })
 
 -- Visual
-local fullBrightEnabled = false
-local noFogEnabled      = false
+local fullBrightEnabled = Config:Get("fullBrightEnabled", false)
+local noFogEnabled      = Config:Get("noFogEnabled", false)
 
 MainTab:Section({ Title = "Feature Visual", Icon = "lightbulb" })
 MainTab:Toggle({
-    Title = "Full Bright",
-    Value = false,
+    Title = "Full Bright", Value = fullBrightEnabled,
     Callback = function(v)
-        fullBrightEnabled = v
+        fullBrightEnabled = v; Config:Set("fullBrightEnabled", v); Config:Save()
         if v then
             task.spawn(function()
                 while fullBrightEnabled do
                     if Lighting.Brightness ~= 2 then Lighting.Brightness = 2 end
                     if Lighting.ClockTime  ~= 14 then Lighting.ClockTime  = 14 end
-                    if Lighting.Ambient    ~= Color3.fromRGB(255,255,255) then Lighting.Ambient = Color3.fromRGB(255,255,255) end
+                    if Lighting.Ambient ~= Color3.fromRGB(255,255,255) then Lighting.Ambient = Color3.fromRGB(255,255,255) end
                     task.wait(0.5)
                 end
             end)
         else
-            Lighting.Brightness = 1
-            Lighting.ClockTime  = 12
-            Lighting.Ambient    = Color3.fromRGB(128,128,128)
+            Lighting.Brightness = 1; Lighting.ClockTime = 12
+            Lighting.Ambient = Color3.fromRGB(128,128,128)
         end
     end
 })
 MainTab:Toggle({
-    Title = "No Fog",
-    Value = false,
+    Title = "No Fog", Value = noFogEnabled,
     Callback = function(v)
-        noFogEnabled = v
+        noFogEnabled = v; Config:Set("noFogEnabled", v); Config:Save()
         if v then
             task.spawn(function()
                 while noFogEnabled do
@@ -770,15 +688,14 @@ MainTab:Toggle({
 })
 
 MainTab:Section({ Title = "Misc", Icon = "settings" })
-local AntiAFK = false
+local AntiAFK_main = Config:Get("AntiAFK_main", false)
 MainTab:Toggle({
-    Title = "Anti AFK",
-    Value = true,
+    Title = "Anti AFK", Value = AntiAFK_main,
     Callback = function(state)
-        AntiAFK = state
+        AntiAFK_main = state; Config:Set("AntiAFK_main", state); Config:Save()
         task.spawn(function()
             local vu = game:GetService("VirtualUser")
-            while AntiAFK do
+            while AntiAFK_main do
                 vu:Button2Down(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
                 task.wait(math.random(150, 270))
                 vu:Button2Up(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
@@ -793,8 +710,7 @@ SurTab:Section({ Title = "Feature Survivor", Icon = "user" })
 
 local autoShoot = false
 SurTab:Toggle({
-    Title = "Auto Shoot (STILL BUG)",
-    Value = false,
+    Title = "Auto Shoot (STILL BUG)", Value = false,
     Callback = function(v)
         autoShoot = v
         if autoShoot then
@@ -822,8 +738,7 @@ SurTab:Toggle({
 
 local autoparry = false
 SurTab:Toggle({
-    Title = "Auto Parry (STILL BUG)",
-    Value = false,
+    Title = "Auto Parry (STILL BUG)", Value = false,
     Callback = function(v)
         autoparry = v
         if autoparry then
@@ -849,10 +764,8 @@ SurTab:Toggle({
     end
 })
 
--- Generator Section
 SurTab:Section({ Title = "Feature Generator", Icon = "zap" })
 
--- Helper: find closest generator point
 local function getClosestGeneratorPoint(root, maxDist)
     local gens = getFolderGenerator()
     local bestGen, bestPt, bestDist = nil, nil, maxDist or 10
@@ -861,31 +774,24 @@ local function getClosestGeneratorPoint(root, maxDist)
             local pt = gen:FindFirstChild("GeneratorPoint" .. i)
             if pt then
                 local d = (root.Position - pt.Position).Magnitude
-                if d < bestDist then
-                    bestDist = d
-                    bestGen  = gen
-                    bestPt   = pt
-                end
+                if d < bestDist then bestDist = d; bestGen = gen; bestPt = pt end
             end
         end
     end
     return bestGen, bestPt, bestDist
 end
 
--- Auto SkillCheck Perfect
 local autoGeneratorEnabledtest = false
 SurTab:Toggle({
-    Title = "Auto SkillCheck (Perfect)",
-    Value = false,
+    Title = "Auto SkillCheck (Perfect)", Value = false,
     Callback = function(v)
         autoGeneratorEnabledtest = v
         if autoGeneratorEnabledtest then
             task.spawn(function()
-                local playerGui  = LocalPlayer:WaitForChild("PlayerGui")
+                local playerGui    = LocalPlayer:WaitForChild("PlayerGui")
                 local skillRemote  = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Generator"):WaitForChild("SkillCheckResultEvent")
                 local repairRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Generator"):WaitForChild("RepairEvent")
                 local lastGenPoint, lastGenModel = nil, nil
-
                 while autoGeneratorEnabledtest do
                     local char = LocalPlayer.Character
                     local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -893,14 +799,10 @@ SurTab:Toggle({
                     if root and hum then
                         local isMoving = hum.MoveDirection.Magnitude > 0.05
                         local genModel, genPoint = getClosestGeneratorPoint(root)
-                        if not lastGenPoint and genPoint then
-                            lastGenModel = genModel
-                            lastGenPoint = genPoint
-                        end
+                        if not lastGenPoint and genPoint then lastGenModel = genModel; lastGenPoint = genPoint end
                         if isMoving and lastGenPoint then
                             repairRemote:FireServer(lastGenPoint, false)
-                            task.wait(0.2)
-                            lastGenPoint = nil; lastGenModel = nil
+                            task.wait(0.2); lastGenPoint = nil; lastGenModel = nil
                         end
                         local gui = playerGui:FindFirstChild("SkillCheckPromptGui")
                         if gui then
@@ -921,11 +823,9 @@ SurTab:Toggle({
     end
 })
 
--- Auto SkillCheck Not Perfect
 local autoGeneratorEnabled = false
 SurTab:Toggle({
-    Title = "Auto SkillCheck (Not Perfect)",
-    Value = false,
+    Title = "Auto SkillCheck (Not Perfect)", Value = false,
     Callback = function(v)
         autoGeneratorEnabled = v
         if autoGeneratorEnabled then
@@ -934,7 +834,6 @@ SurTab:Toggle({
                 local skillRemote  = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Generator"):WaitForChild("SkillCheckResultEvent")
                 local repairRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Generator"):WaitForChild("RepairEvent")
                 local lastGenPoint, lastGenModel = nil, nil
-
                 while autoGeneratorEnabled do
                     local char = LocalPlayer.Character
                     local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -942,14 +841,10 @@ SurTab:Toggle({
                     if root and hum then
                         local isMoving = hum.MoveDirection.Magnitude > 0.05
                         local genModel, genPoint = getClosestGeneratorPoint(root)
-                        if not lastGenPoint and genPoint then
-                            lastGenModel = genModel
-                            lastGenPoint = genPoint
-                        end
+                        if not lastGenPoint and genPoint then lastGenModel = genModel; lastGenPoint = genPoint end
                         if isMoving and lastGenPoint then
                             repairRemote:FireServer(lastGenPoint, false)
-                            task.wait(0.2)
-                            lastGenPoint = nil; lastGenModel = nil
+                            task.wait(0.2); lastGenPoint = nil; lastGenModel = nil
                         end
                         local gui = playerGui:FindFirstChild("SkillCheckPromptGui")
                         if gui then
@@ -970,11 +865,9 @@ SurTab:Toggle({
     end
 })
 
--- ── Auto Generator (Auto Repair / Teleport to gen) ──
 local autoGenRepairEnabled = false
 SurTab:Toggle({
-    Title = "Auto Generator (Teleport + Repair)",
-    Value = false,
+    Title = "Auto Generator (Teleport + Repair)", Value = false,
     Callback = function(v)
         autoGenRepairEnabled = v
         if autoGenRepairEnabled then
@@ -984,7 +877,6 @@ SurTab:Toggle({
                     local char = LocalPlayer.Character
                     local root = char and char:FindFirstChild("HumanoidRootPart")
                     if root then
-                        -- Find unfinished generator
                         local gens = getFolderGenerator()
                         local target, targetPt = nil, nil
                         local minDist = math.huge
@@ -994,17 +886,12 @@ SurTab:Toggle({
                                     local pt = gen:FindFirstChild("GeneratorPoint" .. i)
                                     if pt then
                                         local d = (root.Position - pt.Position).Magnitude
-                                        if d < minDist then
-                                            minDist = d
-                                            target  = gen
-                                            targetPt = pt
-                                        end
+                                        if d < minDist then minDist = d; target = gen; targetPt = pt end
                                     end
                                 end
                             end
                         end
                         if target and targetPt then
-                            -- Teleport close to gen
                             root.CFrame = CFrame.new(targetPt.Position + Vector3.new(0, 2, 0))
                             task.wait(0.1)
                             repairRemote:FireServer(targetPt, true)
@@ -1021,8 +908,7 @@ SurTab:Section({ Title = "Feature Exit", Icon = "door-open" })
 
 local autoLeverEnabled = false
 SurTab:Toggle({
-    Title = "Auto Lever (No Hold)",
-    Value = false,
+    Title = "Auto Lever (No Hold)", Value = false,
     Callback = function(v)
         autoLeverEnabled = v
         if autoLeverEnabled then
@@ -1032,7 +918,6 @@ SurTab:Toggle({
                 local _tc = UserInputService.TouchStarted:Connect(function() isTouching = true end)
                 local _te = UserInputService.TouchEnded:Connect(function() isTouching = false end)
                 local lastPos = nil
-
                 while autoLeverEnabled do
                     local char     = LocalPlayer.Character
                     local root     = char and char:FindFirstChild("HumanoidRootPart")
@@ -1045,13 +930,12 @@ SurTab:Toggle({
                                 if main then
                                     local d = (root.Position - main.Position).Magnitude
                                     if not shortestDist or d < shortestDist then
-                                        shortestDist = d
-                                        closestMain  = main
+                                        shortestDist = d; closestMain = main
                                     end
                                 end
                             end
                         end
-                        local moved = lastPos and (root.Position - lastPos).Magnitude > 0.5
+                        local moved   = lastPos and (root.Position - lastPos).Magnitude > 0.5
                         local tryMove = false
                         if UserInputService.KeyboardEnabled then
                             for _, key in ipairs({ Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D, Enum.KeyCode.Space }) do
@@ -1101,8 +985,7 @@ end
 
 local autoHealEnabled = false
 SurTab:Toggle({
-    Title = "Auto Heal SkillCheck (STILL BUG)",
-    Value = false,
+    Title = "Auto Heal SkillCheck (STILL BUG)", Value = false,
     Callback = function(v)
         autoHealEnabled = v
         if autoHealEnabled then
@@ -1139,8 +1022,7 @@ SurTab:Toggle({
 
 local autoHealEnabled2 = false
 SurTab:Toggle({
-    Title = "Auto Heal SkillCheck v2 (STILL BUG)",
-    Value = false,
+    Title = "Auto Heal SkillCheck v2 (STILL BUG)", Value = false,
     Callback = function(v)
         autoHealEnabled2 = v
         if autoHealEnabled2 then
@@ -1177,7 +1059,6 @@ SurTab:Toggle({
 
 SurTab:Section({ Title = "Feature Cheat", Icon = "bug" })
 
--- Fling
 SurTab:Button({
     Title = "Fling Killer (Spam if doesn't fling)",
     Callback = function()
@@ -1187,7 +1068,6 @@ SurTab:Button({
                 table.insert(Targets, plr.Name)
             end
         end
-
         local AllBool = false
         local function GetPlayer(Name)
             Name = Name:lower()
@@ -1199,85 +1079,86 @@ SurTab:Button({
             end
             for _, x in next, Players:GetPlayers() do
                 if x ~= LocalPlayer then
-                    if x.Name:lower():match("^" .. Name) or x.DisplayName:lower():match("^" .. Name) then return x end
+                    if x.Name:lower():match("^"..Name) or x.DisplayName:lower():match("^"..Name) then return x end
                 end
             end
         end
-        local function Message(_T, _t, t) game:GetService("StarterGui"):SetCore("SendNotification", { Title = _T, Text = _t, Duration = t }) end
+        local function Message(_T, _t, t)
+            game:GetService("StarterGui"):SetCore("SendNotification", { Title=_T, Text=_t, Duration=t })
+        end
         local function SkidFling(TargetPlayer)
-            local Character = LocalPlayer.Character
-            local Humanoid  = Character and Character:FindFirstChildOfClass("Humanoid")
-            local RootPart  = Humanoid and Humanoid.RootPart
-            local TCharacter = TargetPlayer.Character
-            local THumanoid  = TCharacter and TCharacter:FindFirstChildOfClass("Humanoid")
-            local TRootPart  = TCharacter and TCharacter:FindFirstChild("HumanoidRootPart")
-            local THead      = TCharacter and TCharacter:FindFirstChild("Head")
-            local Accessory  = TCharacter and TCharacter:FindFirstChildOfClass("Accessory")
-            local Handle     = Accessory and Accessory:FindFirstChild("Handle")
-            if not (Character and Humanoid and RootPart) then return Message("Error", "Script Failed", 5) end
-            if RootPart.Velocity.Magnitude < 50 then getgenv().OldPos = RootPart.CFrame end
-            if THumanoid and THumanoid.Sit and not AllBool then return Message("Error", "Target is sitting", 5) end
+            local Char  = LocalPlayer.Character
+            local Hum   = Char and Char:FindFirstChildOfClass("Humanoid")
+            local Root  = Hum and Hum.RootPart
+            local TC    = TargetPlayer.Character
+            local TH    = TC and TC:FindFirstChildOfClass("Humanoid")
+            local TR    = TC and TC:FindFirstChild("HumanoidRootPart")
+            local THead = TC and TC:FindFirstChild("Head")
+            local Acc   = TC and TC:FindFirstChildOfClass("Accessory")
+            local Hand  = Acc and Acc:FindFirstChild("Handle")
+            if not (Char and Hum and Root) then return Message("Error","Script Failed",5) end
+            if Root.Velocity.Magnitude < 50 then getgenv().OldPos = Root.CFrame end
+            if TH and TH.Sit and not AllBool then return Message("Error","Target is sitting",5) end
             if THead then Workspace.CurrentCamera.CameraSubject = THead
-            elseif Handle then Workspace.CurrentCamera.CameraSubject = Handle
-            elseif THumanoid then Workspace.CurrentCamera.CameraSubject = THumanoid end
-            if not TCharacter:FindFirstChildWhichIsA("BasePart") then return end
-            local FPos = function(BasePart, Pos, Ang)
-                RootPart.CFrame = CFrame.new(BasePart.Position) * Pos * Ang
-                Character:SetPrimaryPartCFrame(CFrame.new(BasePart.Position) * Pos * Ang)
-                RootPart.Velocity    = Vector3.new(9e7, 9e7 * 10, 9e7)
-                RootPart.RotVelocity = Vector3.new(9e8, 9e8, 9e8)
+            elseif Hand then Workspace.CurrentCamera.CameraSubject = Hand
+            elseif TH then Workspace.CurrentCamera.CameraSubject = TH end
+            if not TC:FindFirstChildWhichIsA("BasePart") then return end
+            local FPos = function(BP, Pos, Ang)
+                Root.CFrame = CFrame.new(BP.Position)*Pos*Ang
+                Char:SetPrimaryPartCFrame(CFrame.new(BP.Position)*Pos*Ang)
+                Root.Velocity = Vector3.new(9e7,9e7*10,9e7)
+                Root.RotVelocity = Vector3.new(9e8,9e8,9e8)
             end
-            local SFBasePart = function(BasePart)
+            local SFBasePart = function(BP)
                 local Time, Angle = tick(), 0
                 repeat
-                    if RootPart and THumanoid then
-                        if BasePart.Velocity.Magnitude < 50 then
+                    if Root and TH then
+                        if BP.Velocity.Magnitude < 50 then
                             Angle += 100
-                            FPos(BasePart, CFrame.new(0, 1.5, 0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle), 0, 0))
+                            FPos(BP, CFrame.new(0,1.5,0)+TH.MoveDirection*BP.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
                             task.wait()
-                            FPos(BasePart, CFrame.new(0, -1.5, 0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle), 0, 0))
+                            FPos(BP, CFrame.new(0,-1.5,0)+TH.MoveDirection*BP.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
                             task.wait()
                         else
-                            FPos(BasePart, CFrame.new(0, 1.5, TRootPart.Velocity.Magnitude / 1.25), CFrame.Angles(math.rad(90), 0, 0))
+                            FPos(BP, CFrame.new(0,1.5,TR.Velocity.Magnitude/1.25), CFrame.Angles(math.rad(90),0,0))
                             task.wait()
                         end
                     else break end
-                until BasePart.Velocity.Magnitude > 500 or BasePart.Parent ~= TargetPlayer.Character or THumanoid.Sit or Humanoid.Health <= 0 or tick() > Time + 2
+                until BP.Velocity.Magnitude>500 or BP.Parent~=TargetPlayer.Character or TH.Sit or Hum.Health<=0 or tick()>Time+2
             end
-            Workspace.FallenPartsDestroyHeight = 0 / 0
+            Workspace.FallenPartsDestroyHeight = 0/0
             local BV = Instance.new("BodyVelocity")
-            BV.Name = "DYHUB-YES"; BV.Parent = RootPart
-            BV.Velocity = Vector3.new(9e9, 9e9, 9e9)
-            BV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
-            if TRootPart and THead then
-                if (TRootPart.CFrame.p - THead.CFrame.p).Magnitude > 5 then SFBasePart(THead) else SFBasePart(TRootPart) end
-            elseif TRootPart then SFBasePart(TRootPart)
+            BV.Name="DYHUB-YES"; BV.Parent=Root
+            BV.Velocity=Vector3.new(9e9,9e9,9e9); BV.MaxForce=Vector3.new(math.huge,math.huge,math.huge)
+            Hum:SetStateEnabled(Enum.HumanoidStateType.Seated,false)
+            if TR and THead then
+                if (TR.CFrame.p-THead.CFrame.p).Magnitude>5 then SFBasePart(THead) else SFBasePart(TR) end
+            elseif TR then SFBasePart(TR)
             elseif THead then SFBasePart(THead)
-            elseif Handle then SFBasePart(Handle)
-            else return Message("Error", "Target missing everything", 5) end
+            elseif Hand then SFBasePart(Hand)
+            else return Message("Error","Target missing everything",5) end
             BV:Destroy()
-            Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
-            Workspace.CurrentCamera.CameraSubject = Humanoid
+            Hum:SetStateEnabled(Enum.HumanoidStateType.Seated,true)
+            Workspace.CurrentCamera.CameraSubject = Hum
             repeat
-                RootPart.CFrame = getgenv().OldPos * CFrame.new(0, 0.5, 0)
-                Character:SetPrimaryPartCFrame(getgenv().OldPos * CFrame.new(0, 0.5, 0))
-                Humanoid:ChangeState("GettingUp")
-                for _, x in ipairs(Character:GetChildren()) do
-                    if x:IsA("BasePart") then x.Velocity = Vector3.new(); x.RotVelocity = Vector3.new() end
+                Root.CFrame = getgenv().OldPos*CFrame.new(0,0.5,0)
+                Char:SetPrimaryPartCFrame(getgenv().OldPos*CFrame.new(0,0.5,0))
+                Hum:ChangeState("GettingUp")
+                for _,x in ipairs(Char:GetChildren()) do
+                    if x:IsA("BasePart") then x.Velocity=Vector3.new(); x.RotVelocity=Vector3.new() end
                 end
                 task.wait()
-            until (RootPart.Position - getgenv().OldPos.p).Magnitude < 25
+            until (Root.Position-getgenv().OldPos.p).Magnitude<25
             Workspace.FallenPartsDestroyHeight = getgenv().FPDH
         end
-        if not getgenv().Welcome then Message("DYHUB | FLING", "THANK FOR USING", 6) end
+        if not getgenv().Welcome then Message("DYHUB | FLING","THANK FOR USING",6) end
         getgenv().Welcome = true
-        if AllBool then for _, x in next, Players:GetPlayers() do SkidFling(x) end end
-        for _, x in next, Targets do
+        if AllBool then for _,x in next, Players:GetPlayers() do SkidFling(x) end end
+        for _,x in next, Targets do
             local TPlayer = GetPlayer(x)
-            if TPlayer and TPlayer ~= LocalPlayer then
-                if TPlayer.UserId ~= 4340578793 then SkidFling(TPlayer)
-                else Message("ERROR", "CANT FLING OWNER", 8) end
+            if TPlayer and TPlayer~=LocalPlayer then
+                if TPlayer.UserId~=4340578793 then SkidFling(TPlayer)
+                else Message("ERROR","CANT FLING OWNER",8) end
             end
         end
     end
@@ -1301,25 +1182,24 @@ SurTab:Button({
 local DYHUB_AimbotEnabled        = false
 local DYHUB_Aimbot28Enabled      = false
 local DYHUB_LockedTarget         = nil
-local DYHUB_CloseDistance        = 10
 local DYHUB_PredictionTime       = 0.14
 local DYHUB_MIN_DISTANCE         = 1
 local DYHUB_MAX_DISTANCE         = 250
-local DYHUB_MIN_PITCH            = -1
-local DYHUB_MAX_PITCH            = 30
+local DYHUB_MIN_PITCH            = Config:Get("DYHUB_MIN_PITCH", -1)
+local DYHUB_MAX_PITCH            = Config:Get("DYHUB_MAX_PITCH", 30)
 local DYHUB_LOW_HP_IGNORE        = 20
-local DYHUB_ToughWall            = true
+local DYHUB_ToughWall            = Config:Get("DYHUB_ToughWall", true)
 local DYHUB_AimbotToggleGUIVisible   = false
 local DYHUB_Aimbot28ToggleGUIVisible = false
-local DYHUB_crosshair, DYHUB_mobileButton, DYHUB_mobileButton28, DYHUB_guiFolder
+local DYHUB_mobileButton, DYHUB_mobileButton28, DYHUB_guiFolder
 
 local DYHUB_Settings = {
     Aimbot = {
-        DragUI = false,
+        DragUI                 = false,
         MobileButtonPosition   = UDim2.new(1, -40, 1, -40),
         MobileButton28Position = UDim2.new(1, -140, 1, -40),
-        SetKeybindLock   = "Z",
-        SetKeybindLock28 = "X"
+        SetKeybindLock         = Config:Get("AimbotKey", "Z"),
+        SetKeybindLock28       = Config:Get("AimbotKey28", "X"),
     }
 }
 
@@ -1331,7 +1211,6 @@ killerTab:Paragraph({
     Desc  = "• Aimbot is currently in BETA.\n• There is a chance of missing.\n• Aimbot will not support people at high places.",
     Image = "rbxassetid://104487529937663",
     ImageSize = 50,
-    Locked = false
 })
 
 killerTab:Toggle({
@@ -1343,7 +1222,7 @@ killerTab:Toggle({
         end
         DYHUB_AimbotEnabled = state
         if DYHUB_mobileButton then
-            DYHUB_mobileButton.BackgroundColor3 = DYHUB_AimbotEnabled and Color3.fromRGB(60,255,60) or Color3.fromRGB(255,60,60)
+            DYHUB_mobileButton.BackgroundColor3 = state and Color3.fromRGB(60,255,60) or Color3.fromRGB(255,60,60)
         end
     end
 })
@@ -1357,45 +1236,34 @@ killerTab:Toggle({
         end
         DYHUB_Aimbot28Enabled = state
         if DYHUB_mobileButton28 then
-            DYHUB_mobileButton28.BackgroundColor3 = DYHUB_Aimbot28Enabled and Color3.fromRGB(60,255,60) or Color3.fromRGB(255,60,60)
+            DYHUB_mobileButton28.BackgroundColor3 = state and Color3.fromRGB(60,255,60) or Color3.fromRGB(255,60,60)
         end
     end
 })
 
 killerTab:Section({ Title = "Killer: The Veil Setting", Icon = "settings" })
-killerTab:Input({ Title = "Set Pitch Min", Default = tostring(DYHUB_MIN_PITCH), Placeholder = "Ex: -1", Callback = function(v) local n = tonumber(v) if n then DYHUB_MIN_PITCH = n end end })
-killerTab:Input({ Title = "Set Pitch Max", Default = tostring(DYHUB_MAX_PITCH), Placeholder = "Ex: 30",  Callback = function(v) local n = tonumber(v) if n then DYHUB_MAX_PITCH = n end end })
-killerTab:Toggle({ Title = "Tough Wall (The Veil)", Value = true, Callback = function(v) DYHUB_ToughWall = v end })
-killerTab:Input({ Title = "Set Keybind Aimbot (PC)", Default = DYHUB_Settings.Aimbot.SetKeybindLock, Placeholder = "Ex: Z", Callback = function(v) if #v == 1 then DYHUB_Settings.Aimbot.SetKeybindLock = v:upper() end end })
-killerTab:Input({ Title = "Set Keybind Aimbot Charge (PC)", Default = DYHUB_Settings.Aimbot.SetKeybindLock28, Placeholder = "Ex: X", Callback = function(v) if #v == 1 then DYHUB_Settings.Aimbot.SetKeybindLock28 = v:upper() end end })
+killerTab:Input({ Title = "Set Pitch Min", Default = tostring(DYHUB_MIN_PITCH), Placeholder = "Ex: -1",
+    Callback = function(v) local n = tonumber(v) if n then DYHUB_MIN_PITCH = n; Config:Set("DYHUB_MIN_PITCH", n); Config:Save() end end })
+killerTab:Input({ Title = "Set Pitch Max", Default = tostring(DYHUB_MAX_PITCH), Placeholder = "Ex: 30",
+    Callback = function(v) local n = tonumber(v) if n then DYHUB_MAX_PITCH = n; Config:Set("DYHUB_MAX_PITCH", n); Config:Save() end end })
+killerTab:Toggle({ Title = "Tough Wall (The Veil)", Value = DYHUB_ToughWall,
+    Callback = function(v) DYHUB_ToughWall = v; Config:Set("DYHUB_ToughWall", v); Config:Save() end })
+killerTab:Input({ Title = "Set Keybind Aimbot (PC)", Default = DYHUB_Settings.Aimbot.SetKeybindLock, Placeholder = "Ex: Z",
+    Callback = function(v) if #v==1 then DYHUB_Settings.Aimbot.SetKeybindLock=v:upper(); Config:Set("AimbotKey",v:upper()); Config:Save() end end })
+killerTab:Input({ Title = "Set Keybind Aimbot Charge (PC)", Default = DYHUB_Settings.Aimbot.SetKeybindLock28, Placeholder = "Ex: X",
+    Callback = function(v) if #v==1 then DYHUB_Settings.Aimbot.SetKeybindLock28=v:upper(); Config:Set("AimbotKey28",v:upper()); Config:Save() end end })
 
 killerTab:Section({ Title = "Killer: The Veil GUI", Icon = "settings" })
-killerTab:Toggle({
-    Title = "Enable Aimbot (Toggle GUI)", Default = DYHUB_AimbotToggleGUIVisible,
-    Callback = function(v)
-        DYHUB_AimbotToggleGUIVisible = v
-        if DYHUB_mobileButton then DYHUB_mobileButton.Visible = v end
-    end
-})
-killerTab:Toggle({
-    Title = "Enable Aimbot Charge (Toggle GUI)", Default = DYHUB_Aimbot28ToggleGUIVisible,
-    Callback = function(v)
-        DYHUB_Aimbot28ToggleGUIVisible = v
-        if DYHUB_mobileButton28 then DYHUB_mobileButton28.Visible = v end
-    end
-})
-killerTab:Toggle({
-    Title = "Custom Position Drag (Toggle GUI)", Default = DYHUB_Settings.Aimbot.DragUI,
-    Callback = function(state)
-        DYHUB_Settings.Aimbot.DragUI = state
-        -- drag logic handled in DYHUB_EnableDrag below
-    end
-})
+killerTab:Toggle({ Title = "Enable Aimbot (Toggle GUI)", Default = false,
+    Callback = function(v) DYHUB_AimbotToggleGUIVisible=v; if DYHUB_mobileButton then DYHUB_mobileButton.Visible=v end end })
+killerTab:Toggle({ Title = "Enable Aimbot Charge (Toggle GUI)", Default = false,
+    Callback = function(v) DYHUB_Aimbot28ToggleGUIVisible=v; if DYHUB_mobileButton28 then DYHUB_mobileButton28.Visible=v end end })
+killerTab:Toggle({ Title = "Custom Position Drag (Toggle GUI)", Default = false,
+    Callback = function(state) DYHUB_Settings.Aimbot.DragUI = state; DYHUB_EnableDrag(state) end })
 
--- Helper functions
+-- Aimbot helpers
 local function DYHUB_GetLocalRoot()
-    local c = LocalPlayer.Character
-    return c and c:FindFirstChild("HumanoidRootPart")
+    local c = LocalPlayer.Character; return c and c:FindFirstChild("HumanoidRootPart")
 end
 local function DYHUB_HP_OK(plr)
     local hum = plr.Character and plr.Character:FindFirstChild("Humanoid")
@@ -1419,16 +1287,12 @@ local function DYHUB_GetClosestInScreen()
     return closest
 end
 local function DYHUB_GetClosestByDistance()
-    local root = DYHUB_GetLocalRoot()
-    if not root then return nil end
+    local root = DYHUB_GetLocalRoot(); if not root then return nil end
     local closest, distMin = nil, math.huge
     for _, plr in pairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer and plr.Character and DYHUB_HP_OK(plr) then
             local r = plr.Character:FindFirstChild("HumanoidRootPart")
-            if r then
-                local d = (root.Position - r.Position).Magnitude
-                if d < distMin then distMin = d; closest = plr end
-            end
+            if r then local d=(root.Position-r.Position).Magnitude; if d<distMin then distMin=d; closest=plr end end
         end
     end
     return closest, distMin
@@ -1441,37 +1305,31 @@ local function DYHUB_CanSeeTarget(target)
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Blacklist
     params.FilterDescendantsInstances = { LocalPlayer.Character or {}, target.Character }
-    local result = Workspace:Raycast(root.Position + Vector3.new(0, 2, 0), head.Position - root.Position, params)
+    local result = Workspace:Raycast(root.Position + Vector3.new(0,2,0), head.Position - root.Position, params)
     return not result
 end
 local function DYHUB_GetAutoPitchMax(dist)
-    if dist >= 190 then return 45.5
-    elseif dist >= 150 then return 40.5
-    elseif dist >= 90  then return 36.5
-    else return 30.5 end
+    if dist>=190 then return 45.5 elseif dist>=150 then return 40.5 elseif dist>=90 then return 36.5 else return 30.5 end
 end
-
--- Aim functions
 local function DYHUB_AimAt_Normal(target)
     if not target.Character then return end
     local head = target.Character:FindFirstChild("Head")
     local hrp  = target.Character:FindFirstChild("HumanoidRootPart")
     local lr   = DYHUB_GetLocalRoot()
     if not head or not hrp or not lr then return end
-    local pred    = head.Position + (hrp.Velocity * DYHUB_PredictionTime)
-    local dist    = (lr.Position - pred).Magnitude
+    local pred     = head.Position + (hrp.Velocity * DYHUB_PredictionTime)
+    local dist     = (lr.Position - pred).Magnitude
     local pitchMax = DYHUB_GetAutoPitchMax(dist)
-    local alpha   = math.clamp((dist - DYHUB_MIN_DISTANCE) / (DYHUB_MAX_DISTANCE - DYHUB_MIN_DISTANCE), 0, 1)
-    local pitch   = DYHUB_MIN_PITCH + (pitchMax - DYHUB_MIN_PITCH) * alpha
-    local dir     = (pred - Camera.CFrame.Position).Unit
-    local yaw     = math.atan2(dir.X, dir.Z)
-    local pr      = math.rad(pitch)
-    local look    = Vector3.new(math.sin(yaw)*math.cos(pr), math.sin(pr), math.cos(yaw)*math.cos(pr))
-    Camera.CFrame = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + look)
+    local alpha    = math.clamp((dist-DYHUB_MIN_DISTANCE)/(DYHUB_MAX_DISTANCE-DYHUB_MIN_DISTANCE), 0, 1)
+    local pitch    = DYHUB_MIN_PITCH + (pitchMax-DYHUB_MIN_PITCH)*alpha
+    local dir      = (pred - Camera.CFrame.Position).Unit
+    local yaw      = math.atan2(dir.X, dir.Z)
+    local pr       = math.rad(pitch)
+    local look     = Vector3.new(math.sin(yaw)*math.cos(pr), math.sin(pr), math.cos(yaw)*math.cos(pr))
+    Camera.CFrame  = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + look)
 end
-
 local function DYHUB_GetPitchByDistance(d)
-    local t = { {1,0.09},{10,0.9},{20,1.9},{30,2.9},{40,3.9},{50,4.9},{60,5.9},{70,6.9},{80,7.9},{90,8.9},{100,10.9},{110,11.9},{120,12.9},{130,13.9},{140,14.9},{150,15.9},{160,16.9},{170,17.9},{180,18.9},{190,20.3},{200,22.3} }
+    local t = {{1,0.09},{10,0.9},{20,1.9},{30,2.9},{40,3.9},{50,4.9},{60,5.9},{70,6.9},{80,7.9},{90,8.9},{100,10.9},{110,11.9},{120,12.9},{130,13.9},{140,14.9},{150,15.9},{160,16.9},{170,17.9},{180,18.9},{190,20.3},{200,22.3}}
     for _, v in ipairs(t) do if d < v[1] then return v[2] end end
     return 23.3
 end
@@ -1491,7 +1349,6 @@ local function DYHUB_AimAt_28(target)
     Camera.CFrame = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + look)
 end
 
--- Keybind
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp or input.UserInputType ~= Enum.UserInputType.Keyboard then return end
     local key = input.KeyCode.Name
@@ -1517,9 +1374,8 @@ UserInputService.InputBegan:Connect(function(input, gp)
     end
 end)
 
--- Mobile buttons
+-- Drag system
 local DYHUB_DragConnNormal, DYHUB_DragConn28, DYHUB_DragMoveConn, DYHUB_DragMoveConn28
-
 local function DYHUB_ClearDragConnections()
     if DYHUB_DragConnNormal  then DYHUB_DragConnNormal:Disconnect();  DYHUB_DragConnNormal  = nil end
     if DYHUB_DragConn28      then DYHUB_DragConn28:Disconnect();      DYHUB_DragConn28      = nil end
@@ -1534,10 +1390,10 @@ function DYHUB_EnableDrag(state)
         if DYHUB_mobileButton28 then DYHUB_Settings.Aimbot.MobileButton28Position = DYHUB_mobileButton28.Position end
         return
     end
-    local function makeDrag(btn, settingKey, connStore, moveConnStore)
+    local function makeDrag(btn, settingKey)
         if not btn then return end
         local dragging, startPos, startInput = false, nil, nil
-        connStore = btn.InputBegan:Connect(function(input)
+        btn.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                 dragging = true; startInput = input.Position; startPos = btn.Position
                 local ce; ce = input.Changed:Connect(function()
@@ -1547,15 +1403,15 @@ function DYHUB_EnableDrag(state)
                 end)
             end
         end)
-        moveConnStore = UserInputService.InputChanged:Connect(function(input)
+        UserInputService.InputChanged:Connect(function(input)
             if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
                 local delta = input.Position - startInput
-                btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+                btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset+delta.X, startPos.Y.Scale, startPos.Y.Offset+delta.Y)
             end
         end)
     end
-    makeDrag(DYHUB_mobileButton,   "MobileButtonPosition",   DYHUB_DragConnNormal, DYHUB_DragMoveConn)
-    makeDrag(DYHUB_mobileButton28, "MobileButton28Position", DYHUB_DragConn28,     DYHUB_DragMoveConn28)
+    makeDrag(DYHUB_mobileButton,   "MobileButtonPosition")
+    makeDrag(DYHUB_mobileButton28, "MobileButton28Position")
 end
 
 local function DYHUB_EnsureGUIFolder()
@@ -1570,30 +1426,20 @@ end
 local function DYHUB_CreateMobileButtons()
     if DYHUB_mobileButton   then pcall(function() DYHUB_mobileButton:Destroy() end) end
     if DYHUB_mobileButton28 then pcall(function() DYHUB_mobileButton28:Destroy() end) end
-
     local function makeBtn(text, pos, isEnabled)
         local btn = Instance.new("TextButton")
-        btn.Size = UDim2.new(0, 90, 0, 90)
-        btn.Position = pos
-        btn.AnchorPoint = Vector2.new(1, 1)
+        btn.Size = UDim2.new(0,90,0,90); btn.Position = pos
+        btn.AnchorPoint = Vector2.new(1,1)
         btn.BackgroundColor3 = isEnabled and Color3.fromRGB(60,255,60) or Color3.fromRGB(255,60,60)
-        btn.Text = text
-        btn.TextSize = 36
-        btn.Font = Enum.Font.GothamBold
-        btn.TextColor3 = Color3.new(1,1,1)
-        btn.Visible = false
-        btn.Parent = DYHUB_guiFolder
-        local c = Instance.new("UICorner")
-        c.CornerRadius = UDim.new(0, 45)
-        c.Parent = btn
+        btn.Text = text; btn.TextSize = 36; btn.Font = Enum.Font.GothamBold
+        btn.TextColor3 = Color3.new(1,1,1); btn.Visible = false; btn.Parent = DYHUB_guiFolder
+        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0,45); c.Parent = btn
         return btn
     end
-
     DYHUB_mobileButton   = makeBtn("🗡️", DYHUB_Settings.Aimbot.MobileButtonPosition, DYHUB_AimbotEnabled)
     DYHUB_mobileButton28 = makeBtn("⚔️", DYHUB_Settings.Aimbot.MobileButton28Position, DYHUB_Aimbot28Enabled)
     DYHUB_mobileButton.Visible   = DYHUB_AimbotToggleGUIVisible
     DYHUB_mobileButton28.Visible = DYHUB_Aimbot28ToggleGUIVisible
-
     DYHUB_mobileButton.MouseButton1Click:Connect(function()
         DYHUB_AimbotEnabled = not DYHUB_AimbotEnabled
         if DYHUB_AimbotEnabled and DYHUB_Aimbot28Enabled then
@@ -1610,14 +1456,12 @@ local function DYHUB_CreateMobileButtons()
         end
         DYHUB_mobileButton28.BackgroundColor3 = DYHUB_Aimbot28Enabled and Color3.fromRGB(60,255,60) or Color3.fromRGB(255,60,60)
     end)
-
     DYHUB_EnableDrag(DYHUB_Settings.Aimbot.DragUI)
 end
 
 task.spawn(function()
     DYHUB_EnsureGUIFolder()
     DYHUB_CreateMobileButtons()
-    -- Keep GUI alive
     while task.wait(3) do
         DYHUB_EnsureGUIFolder()
         local gui = PlayerGui:FindFirstChild("DYHUB_AimbotGUI")
@@ -1625,39 +1469,36 @@ task.spawn(function()
     end
 end)
 
--- Aimbot loop
 RunService.RenderStepped:Connect(function()
     if DYHUB_AimbotEnabled then
         DYHUB_LockedTarget = DYHUB_GetClosestInScreen()
-        if DYHUB_LockedTarget and DYHUB_CanSeeTarget(DYHUB_LockedTarget) then
-            DYHUB_AimAt_Normal(DYHUB_LockedTarget)
-        end
+        if DYHUB_LockedTarget and DYHUB_CanSeeTarget(DYHUB_LockedTarget) then DYHUB_AimAt_Normal(DYHUB_LockedTarget) end
     elseif DYHUB_Aimbot28Enabled then
         DYHUB_LockedTarget = DYHUB_GetClosestByDistance()
-        if DYHUB_LockedTarget and DYHUB_CanSeeTarget(DYHUB_LockedTarget) then
-            DYHUB_AimAt_28(DYHUB_LockedTarget)
-        end
+        if DYHUB_LockedTarget and DYHUB_CanSeeTarget(DYHUB_LockedTarget) then DYHUB_AimAt_28(DYHUB_LockedTarget) end
     end
 end)
 
--- The Masked
+-- ── The Masked ──
 killerTab:Section({ Title = "Killer: The Masked", Icon = "venetian-mask" })
 killerTab:Paragraph({
     Title = "Information: The Masked",
     Desc  = "• Richard (No Abilities)\n• Tony (One Shot, No hold)\n• Brandon (Speed Boost)\n• Jake (Lunge Range)\n• Richter (Removes terror radius)\n• Graham (Faster Vault)\n• Alex (Chainsaw, One Shot)",
     Image = "rbxassetid://104487529937663",
     ImageSize = 50,
-    Locked = false
 })
 
-local Killer = { TheMasked = { Mask = {"Richard","Tony","Brandon","Jake","Richter","Graham","Alex"} } }
-local selectedMasks = {}
+local MaskedList    = {"Richard","Tony","Brandon","Jake","Richter","Graham","Alex"}
+local selectedMasks = Config:Get("selectedMasks", "Richard")
 
 killerTab:Dropdown({
-    Title  = "Select Mask",
-    Values = Killer.TheMasked.Mask,
-    Multi  = false,
-    Callback = function(values) selectedMasks = values end
+    Title    = "Select Mask",
+    Values   = MaskedList,
+    Multi    = false,
+    Value    = selectedMasks,
+    Callback = function(value)
+        selectedMasks = value; Config:Set("selectedMasks", value); Config:Save()
+    end
 })
 killerTab:Button({
     Title = "Choose Mask (Selected)",
@@ -1668,36 +1509,31 @@ killerTab:Button({
 killerTab:Button({
     Title = "Random Mask (Legit Mode)",
     Callback = function()
-        local masks = {"Richard","Tony","Brandon","Jake","Richter","Graham","Alex"}
-        ReplicatedStorage.Remotes.Killers.Masked.Activatepower:FireServer(masks[math.random(#masks)])
+        ReplicatedStorage.Remotes.Killers.Masked.Activatepower:FireServer(MaskedList[math.random(#MaskedList)])
     end
 })
 
--- The Stalker
+-- ── The Stalker ──
 killerTab:Section({ Title = "Killer: The Stalker", Icon = "eye-off" })
-
 local Stalker = false
 killerTab:Toggle({
-    Title = "Start Stalker (Raycast / Remote)",
-    Value = false,
+    Title = "Start Stalker (Raycast / Remote)", Value = false,
     Callback = function(v)
         Stalker = v
         task.spawn(function()
             while Stalker do
                 task.wait(0.2)
-                local lp   = LocalPlayer
-                local char = lp.Character
+                local char = LocalPlayer.Character
                 local root = char and char:FindFirstChild("HumanoidRootPart")
                 if not root then continue end
-                local weapon = char:FindFirstChild("Weapon")
-                if not weapon then continue end
+                if not char:FindFirstChild("Weapon") then continue end
                 for _, plr in ipairs(Players:GetPlayers()) do
-                    if plr ~= lp and plr.Character then
-                        local hrp      = plr.Character:FindFirstChild("HumanoidRootPart")
-                        local humanoid = plr.Character:FindFirstChild("Humanoid")
-                        if hrp and humanoid then
+                    if plr ~= LocalPlayer and plr.Character then
+                        local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                        local hum = plr.Character:FindFirstChild("Humanoid")
+                        if hrp and hum then
                             local dist = (root.Position - hrp.Position).Magnitude
-                            if dist >= 30 and dist <= 70 and humanoid.Health > 20 then
+                            if dist >= 30 and dist <= 70 and hum.Health > 20 then
                                 ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Killers"):WaitForChild("Stalker"):WaitForChild("StartStalking"):FireServer(plr)
                             end
                         end
@@ -1708,12 +1544,12 @@ killerTab:Toggle({
     end
 })
 
+-- ── Feature Killer ──
 killerTab:Section({ Title = "Feature Killer", Icon = "swords" })
 
 local killallEnabled = false
 killerTab:Toggle({
-    Title = "Kill All (Warning: Get Ban)",
-    Value = false,
+    Title = "Kill All (Warning: Get Ban)", Value = false,
     Callback = function(v)
         killallEnabled = v
         if killallEnabled then
@@ -1730,25 +1566,19 @@ killerTab:Toggle({
                             if plr ~= LocalPlayer and plr.Character then
                                 local tr = plr.Character:FindFirstChild("HumanoidRootPart")
                                 local hm = plr.Character:FindFirstChildOfClass("Humanoid")
-                                if tr and hm then table.insert(targets, { root = tr, humanoid = hm }) end
+                                if tr and hm then table.insert(targets, {root=tr, humanoid=hm}) end
                             end
                         end
                         for _, entry in ipairs(targets) do
                             if not killallEnabled then break end
                             if entry.humanoid.Health > 20 then
-                                pcall(function()
-                                    root.CFrame = entry.root.CFrame * CFrame.new(0, 0, 2)
-                                    remote:FireServer()
-                                end)
+                                pcall(function() root.CFrame = entry.root.CFrame * CFrame.new(0,0,2); remote:FireServer() end)
                                 task.wait(0.15)
                             end
                         end
                         local allLow = true
-                        for _, entry in ipairs(targets) do
-                            if entry.humanoid.Health > 20 then allLow = false; break end
-                        end
-                        if allLow and startCFrame then root.CFrame = startCFrame; task.wait(1)
-                        else task.wait(0.2) end
+                        for _, entry in ipairs(targets) do if entry.humanoid.Health > 20 then allLow = false; break end end
+                        if allLow and startCFrame then root.CFrame = startCFrame; task.wait(1) else task.wait(0.2) end
                     else task.wait(0.2) end
                 end
             end)
@@ -1758,8 +1588,7 @@ killerTab:Toggle({
 
 local Autocarry = false
 killerTab:Toggle({
-    Title = "Auto Carry (Nearby Survivor / 2.5s)",
-    Value = false,
+    Title = "Auto Carry (Nearby Survivor / 2.5s)", Value = false,
     Callback = function(v)
         Autocarry = v
         task.spawn(function()
@@ -1771,9 +1600,9 @@ killerTab:Toggle({
                 local candidates = {}
                 for _, plr in pairs(Players:GetPlayers()) do
                     if plr ~= LocalPlayer and plr.Character then
-                        local hum = plr.Character:FindFirstChild("Humanoid")
+                        local hum  = plr.Character:FindFirstChild("Humanoid")
                         local oHrp = plr.Character:FindFirstChild("HumanoidRootPart")
-                        if hum and oHrp and hum.Health == 20 and (hrp.Position - oHrp.Position).Magnitude <= 10 then
+                        if hum and oHrp and hum.Health == 20 and (hrp.Position-oHrp.Position).Magnitude <= 10 then
                             table.insert(candidates, plr)
                         end
                     end
@@ -1794,8 +1623,7 @@ killerTab:Toggle({
 
 local AutoHook = false
 killerTab:Toggle({
-    Title = "Auto Hook (Nearby Hook / 2.5s)",
-    Value = false,
+    Title = "Auto Hook (Nearby Hook / 2.5s)", Value = false,
     Callback = function(v)
         AutoHook = v
         task.spawn(function()
@@ -1809,13 +1637,12 @@ killerTab:Toggle({
                     if target ~= LocalPlayer and target.Character then
                         local hum  = target.Character:FindFirstChild("Humanoid")
                         local thrp = target.Character:FindFirstChild("HumanoidRootPart")
-                        if hum and thrp and hum.Health == 20 and (hrp.Position - thrp.Position).Magnitude <= 10 then
+                        if hum and thrp and hum.Health == 20 and (hrp.Position-thrp.Position).Magnitude <= 10 then
                             table.insert(candidates, target)
                         end
                     end
                 end
                 if #candidates ~= 1 then continue end
-                -- find nearest hook anywhere in workspace
                 local nearestHook, nearestDist = nil, 10
                 for _, desc in ipairs(Workspace:GetDescendants()) do
                     if desc.Name == "HookPoint" then
@@ -1831,15 +1658,16 @@ killerTab:Toggle({
     end
 })
 
+-- ── Feature Fun ──
 killerTab:Section({ Title = "Feature Fun", Icon = "crown" })
 
-local GrabKey = "C"
+local GrabKey = Config:Get("GrabKey", "C")
 killerTab:Input({
-    Title = "Set Keybind Grab (PC ONLY)",
-    Default = GrabKey,
-    Placeholder = "Grab (Ex: C)",
+    Title = "Set Keybind Grab (PC ONLY)", Default = GrabKey, Placeholder = "Grab (Ex: C)",
     Callback = function(text)
-        if typeof(text) == "string" and #text > 0 then GrabKey = text:upper() end
+        if typeof(text)=="string" and #text>0 then
+            GrabKey = text:upper(); Config:Set("GrabKey", GrabKey); Config:Save()
+        end
     end
 })
 
@@ -1852,7 +1680,7 @@ local function DoGrab()
         if target ~= LocalPlayer and target.Character then
             local hum  = target.Character:FindFirstChild("Humanoid")
             local thrp = target.Character:FindFirstChild("HumanoidRootPart")
-            if hum and thrp and (hrp.Position - thrp.Position).Magnitude <= 20 and hum.Health ~= 20 then
+            if hum and thrp and (hrp.Position-thrp.Position).Magnitude <= 20 and hum.Health ~= 20 then
                 table.insert(candidates, target)
             end
         end
@@ -1870,8 +1698,7 @@ end)
 
 local nocooldownskillEnabled = false
 killerTab:Toggle({
-    Title = "Auto Attack (No Animation)",
-    Value = false,
+    Title = "Auto Attack (No Animation)", Value = false,
     Callback = function(v)
         nocooldownskillEnabled = v
         if nocooldownskillEnabled then
@@ -1887,8 +1714,8 @@ killerTab:Toggle({
                                 local tr = plr.Character:FindFirstChild("HumanoidRootPart")
                                 local hm = plr.Character:FindFirstChildOfClass("Humanoid")
                                 if tr and hm then
-                                    local d = (root.Position - tr.Position).Magnitude
-                                    if d <= closestDist and hm.Health > 20 then closestDist = d; closest = plr.Character end
+                                    local d = (root.Position-tr.Position).Magnitude
+                                    if d<=closestDist and hm.Health>20 then closestDist=d; closest=plr.Character end
                                 end
                             end
                         end
@@ -1901,12 +1728,12 @@ killerTab:Toggle({
     end
 })
 
+-- ── Feature Cheat ──
 killerTab:Section({ Title = "Feature Cheat", Icon = "bug" })
 
 local noFlashlightEnabled = false
 killerTab:Toggle({
-    Title = "No Flashlight",
-    Value = false,
+    Title = "No Flashlight", Value = false,
     Callback = function(state) noFlashlightEnabled = state end
 })
 task.spawn(function()
@@ -1925,17 +1752,14 @@ end)
 
 local destroyPalletwrong = false
 killerTab:Toggle({
-    Title = "Remove Palletwrong (All)",
-    Value = false,
+    Title = "Remove Palletwrong (All)", Value = false,
     Callback = function(v)
         destroyPalletwrong = v
         if destroyPalletwrong then
             task.spawn(function()
                 while destroyPalletwrong do
                     for _, desc in ipairs(Workspace:GetDescendants()) do
-                        if desc:IsA("Model") and desc.Name == "Palletwrong" then
-                            desc:Destroy()
-                        end
+                        if desc:IsA("Model") and desc.Name == "Palletwrong" then desc:Destroy() end
                     end
                     task.wait(0.69)
                 end
@@ -1950,7 +1774,7 @@ killerTab:Button({
         local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
         local humanoid  = character:FindFirstChildOfClass("Humanoid")
         if humanoid then
-            Camera.CameraType = Enum.CameraType.Custom
+            Camera.CameraType    = Enum.CameraType.Custom
             Camera.CameraSubject = humanoid
             LocalPlayer.CameraMinZoomDistance = 0.5
             LocalPlayer.CameraMaxZoomDistance = 400
@@ -1962,11 +1786,20 @@ killerTab:Button({
 })
 
 -- ====================== PLAYER TAB ======================
-local speedEnabled, flyNoclipSpeed = false, 3
+local speedEnabled   = false
+local flyNoclipSpeed = Config:Get("flyNoclipSpeed", 5)
+local NoClipEnabled  = Config:Get("NoClipEnabled", false)
 local speedConnection, noclipConnection
 
 PlayerTab:Section({ Title = "Feature Player", Icon = "rabbit" })
-PlayerTab:Slider({ Title = "Set Speed (Legit = 3)", Value = { Min = 1, Max = 999, Default = 5 }, Step = 1, Callback = function(val) flyNoclipSpeed = val end })
+PlayerTab:Slider({
+    Title = "Set Speed (Legit = 3)",
+    Value = { Min = 1, Max = 999, Default = flyNoclipSpeed },
+    Step  = 1,
+    Callback = function(val)
+        flyNoclipSpeed = val; Config:Set("flyNoclipSpeed", val); Config:Save()
+    end
+})
 PlayerTab:Toggle({
     Title = "Enable Speed", Value = false,
     Callback = function(v)
@@ -1987,8 +1820,9 @@ PlayerTab:Toggle({
 
 PlayerTab:Section({ Title = "Feature Power", Icon = "flame" })
 PlayerTab:Toggle({
-    Title = "No Clip", Value = false,
+    Title = "No Clip", Value = NoClipEnabled,
     Callback = function(state)
+        NoClipEnabled = state; Config:Set("NoClipEnabled", state); Config:Save()
         if state then
             noclipConnection = RunService.Stepped:Connect(function()
                 local char = LocalPlayer.Character
@@ -2028,73 +1862,7 @@ PlayerTab:Toggle({
     Callback = function(v) NoFallEnabled = v end
 })
 
--- ====================== HITBOX TAB ======================
-local transparency = 0.95
-local hitboxSize   = 10
-local hitboxEnabled    = false
-local hitboxConnection
-
-Hitbox:Paragraph({
-    Title = "Hitbox System (Patched)",
-    Desc  = "• Universal Killer Support\n• Precision Slash Modules\n• Optimized Range Handler",
-    Image = "rbxassetid://104487529937663",
-    ImageSize = 45,
-    Locked = false
-})
-
-Hitbox:Section({ Title = "Feature Hitbox", Icon = "package" })
-Hitbox:Input({
-    Title = "Set Transparency (Visible)", Value = tostring(transparency), Placeholder = "Ex: 0.95",
-    Callback = function(text)
-        local num = tonumber(text)
-        if num then transparency = math.clamp(num, 0, 1) else warn("Invalid number!") end
-    end
-})
-Hitbox:Input({
-    Title = "Set Hitbox (Size)", Value = tostring(hitboxSize), Placeholder = "Ex: 10",
-    Callback = function(text)
-        local num = tonumber(text)
-        if num then hitboxSize = num else warn("Invalid number!") end
-    end
-})
-Hitbox:Toggle({
-    Title = "Enable Hitbox", Value = false,
-    Callback = function(v)
-        hitboxEnabled = v
-        if hitboxConnection then hitboxConnection:Disconnect(); hitboxConnection = nil end
-        if hitboxEnabled then
-            hitboxConnection = RunService.RenderStepped:Connect(function()
-                for _, player in ipairs(Players:GetPlayers()) do
-                    if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                        local part = player.Character.HumanoidRootPart
-                        pcall(function()
-                            part.Size        = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-                            part.Transparency = transparency
-                            part.BrickColor  = BrickColor.new("Really red")
-                            part.Material    = Enum.Material.Neon
-                            part.CanCollide  = false
-                        end)
-                    end
-                end
-            end)
-        else
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                    local part = player.Character.HumanoidRootPart
-                    pcall(function()
-                        part.Size        = Vector3.new(2, 2, 1)
-                        part.Transparency = 1
-                        part.Material    = Enum.Material.Plastic
-                    end)
-                end
-            end
-        end
-    end
-})
-
 -- ====================== TELEPORT TAB ======================
-local TELEPORT_OFFSET = 10
-
 local function getCFrame(obj)
     if obj:IsA("BasePart") then return obj.CFrame
     elseif obj:IsA("Model") then
@@ -2115,24 +1883,23 @@ local function getAllGenerators()
 end
 
 TeleportTab:Section({ Title = "Teleport: Place", Icon = "map" })
-local Place
+local SelectedPlace
 TeleportTab:Dropdown({
-    Title = "Select Place",
-    Values = {"Lobby", "Game"},
-    Callback = function(v) Place = v end
+    Title = "Select Place", Values = {"Lobby", "Game"},
+    Callback = function(v) SelectedPlace = v end
 })
 TeleportTab:Button({
     Title = "Teleport",
     Callback = function()
-        if Place == "Lobby" then
+        if SelectedPlace == "Lobby" then
             local spawn = Workspace:FindFirstChild("SpawnLocation")
             if spawn and LocalPlayer.Character then
                 LocalPlayer.Character:PivotTo(spawn.CFrame + Vector3.new(0, 1, 0))
             end
-        elseif Place == "Game" then
+        elseif SelectedPlace == "Game" then
             for _, p in ipairs(Players:GetPlayers()) do
                 if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Weapon") then
-                    LocalPlayer.Character:PivotTo(p.Character.PrimaryPart.CFrame * CFrame.new(0, 0, 200))
+                    LocalPlayer.Character:PivotTo(p.Character.PrimaryPart.CFrame * CFrame.new(0,0,200))
                     break
                 end
             end
@@ -2164,7 +1931,6 @@ TeleportTab:Button({
         if GenTarget then LocalPlayer.Character:PivotTo(getCFrame(GenTarget)) end
     end
 })
-
 TeleportTab:Button({
     Title = "Refresh Generator",
     Callback = function()
@@ -2190,7 +1956,7 @@ TeleportTab:Button({
     end
 })
 
--- ====================== SETTINGS TAB (Main3) ======================
+-- ====================== SETTINGS TAB ======================
 Main3:Section({ Title = "Save Config", Icon = "save" })
 
 Main3:Button({
@@ -2206,31 +1972,20 @@ local AutoSaveEnabled = Config:Get("AutoSaveEnabled", true)
 local AutoSaveDelay   = Config:Get("AutoSaveDelay", 15)
 
 Main3:Toggle({
-    Title = "Auto Save Config",
-    Value = AutoSaveEnabled,
+    Title = "Auto Save Config", Value = AutoSaveEnabled,
     Desc  = "Automatically saves your config at the set interval.",
     Callback = function(state)
-        AutoSaveEnabled = state
-        Config:Set("AutoSaveEnabled", state)
-        Config:Save()
-        if state then
-            Config:AutoSave(AutoSaveDelay)
-        else
-            Config:AutoSave(0)  -- 0 = หยุด loop
-        end
+        AutoSaveEnabled = state; Config:Set("AutoSaveEnabled", state); Config:Save()
+        if state then Config:AutoSave(AutoSaveDelay) else Config:AutoSave(0) end
     end
 })
 
 Main3:Input({
-    Title       = "Delay Save Config",
-    Default     = tostring(AutoSaveDelay),
-    Placeholder = "Default: 15",
-    Callback    = function(text)
+    Title = "Delay Save Config", Default = tostring(AutoSaveDelay), Placeholder = "Default: 15",
+    Callback = function(text)
         local num = tonumber(text)
         if num and num >= 1 then
-            AutoSaveDelay = num
-            Config:Set("AutoSaveDelay", num)
-            Config:Save()
+            AutoSaveDelay = num; Config:Set("AutoSaveDelay", num); Config:Save()
             if AutoSaveEnabled then Config:AutoSave(num) end
         else
             warn("[DYHUB] Invalid delay value!")
@@ -2241,8 +1996,7 @@ Main3:Input({
 Main3:Section({ Title = "Server Status", Icon = "server" })
 
 Main3:Button({
-    Title = "Serverhop",
-    Desc  = "Teleports you to a different random server of this game.",
+    Title = "Serverhop", Desc = "Teleports you to a different random server of this game.",
     Callback = function()
         local TeleportService = game:GetService("TeleportService")
         local servers = {}
@@ -2267,17 +2021,13 @@ Main3:Button({
 })
 
 Main3:Button({
-    Title = "Rejoin",
-    Desc  = "Rejoins the current game server.",
+    Title = "Rejoin", Desc = "Rejoins the current game server.",
     Callback = function()
         WindUI:Notify({ Title = "Rejoin", Content = "Rejoining server...", Duration = 2, Icon = "refresh-cw" })
         task.wait(1)
         game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer)
     end
 })
-
--- Start auto save on load
-RestartAutoSave()
 
 -- ====================== INFORMATION TAB ======================
 local Info = InfoTab
@@ -2289,9 +2039,7 @@ ui.Creator.Request = function(requestData)
     local success, result = pcall(function()
         if HttpService.RequestAsync then
             local response = HttpService:RequestAsync({
-                Url    = requestData.Url,
-                Method = requestData.Method or "GET",
-                Headers = requestData.Headers or {}
+                Url = requestData.Url, Method = requestData.Method or "GET", Headers = requestData.Headers or {}
             })
             return { Body = response.Body, StatusCode = response.StatusCode, Success = response.Success }
         else
@@ -2299,8 +2047,7 @@ ui.Creator.Request = function(requestData)
             return { Body = body, StatusCode = 200, Success = true }
         end
     end)
-    if success then return result
-    else error("HTTP Request failed: " .. tostring(result)) end
+    if success then return result else error("HTTP Request failed: " .. tostring(result)) end
 end
 
 local InviteCode = "jWNDPNMmyB"
@@ -2313,7 +2060,6 @@ local function LoadDiscordInfo()
             Headers = { ["User-Agent"] = "RobloxBot/1.0", ["Accept"] = "application/json" }
         }).Body)
     end)
-
     if success and result and result.guild then
         local DiscordInfo = Info:Paragraph({
             Title = result.guild.name,
@@ -2322,7 +2068,6 @@ local function LoadDiscordInfo()
             Image = "https://cdn.discordapp.com/icons/" .. result.guild.id .. "/" .. result.guild.icon .. ".png?size=1024",
             ImageSize = 42,
         })
-
         Info:Button({
             Title = "Update Info",
             Callback = function()
@@ -2340,7 +2085,6 @@ local function LoadDiscordInfo()
                 end
             end
         })
-
         Info:Button({
             Title = "Copy Discord Invite",
             Callback = function()
@@ -2350,11 +2094,8 @@ local function LoadDiscordInfo()
         })
     else
         Info:Paragraph({
-            Title = "Error fetching Discord Info",
-            Desc  = "Unable to load Discord information.",
-            Image = "triangle-alert",
-            ImageSize = 26,
-            Color = "Red",
+            Title = "Error fetching Discord Info", Desc = "Unable to load Discord information.",
+            Image = "triangle-alert", ImageSize = 26, Color = "Red",
         })
     end
 end
@@ -2365,40 +2106,29 @@ Info:Divider()
 Info:Section({ Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 
+Info:Paragraph({ Title = "Main Owner", Desc = "@dyumraisgoodguy#8888", Image = "rbxassetid://119789418015420", ImageSize = 30 })
 Info:Paragraph({
-    Title = "Main Owner",
-    Desc  = "@dyumraisgoodguy#8888",
-    Image = "rbxassetid://119789418015420",
-    ImageSize = 30,
-    Locked = false,
+    Title = "Social", Desc = "Copy link social media for follow!",
+    Image = "rbxassetid://104487529937663", ImageSize = 30,
+    Buttons = {{ Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://guns.lol/DYHUB") end }}
+})
+Info:Paragraph({
+    Title = "Discord", Desc = "Join our discord for more scripts!",
+    Image = "rbxassetid://104487529937663", ImageSize = 30,
+    Buttons = {{ Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://discord.gg/jWNDPNMmyB") end }}
 })
 
-Info:Paragraph({
-    Title = "Social",
-    Desc  = "Copy link social media for follow!",
-    Image = "rbxassetid://104487529937663",
-    ImageSize = 30,
-    Locked = false,
-    Buttons = {{
-        Icon  = "copy",
-        Title = "Copy Link",
-        Callback = function()
-            setclipboard("https://guns.lol/DYHUB")
+-- ====================== AUTO RESTORE ON LOAD ======================
+if NoClipEnabled then
+    noclipConnection = RunService.Stepped:Connect(function()
+        local char = LocalPlayer.Character
+        if char then
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then part.CanCollide = false end
+            end
         end
-    }}
-})
+    end)
+end
 
-Info:Paragraph({
-    Title = "Discord",
-    Desc  = "Join our discord for more scripts!",
-    Image = "rbxassetid://104487529937663",
-    ImageSize = 30,
-    Locked = false,
-    Buttons = {{
-        Icon  = "copy",
-        Title = "Copy Link",
-        Callback = function()
-            setclipboard("https://discord.gg/jWNDPNMmyB")
-        end
-    }}
-})
+print("[DYHUB] " .. version .. " " .. ver .. " loaded successfully!")
+print("[DYHUB] Config system active | Auto saving every " .. tostring(AutoSaveDelay) .. " seconds")
