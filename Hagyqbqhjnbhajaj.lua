@@ -1,7 +1,7 @@
 -- Powered by dyumra | v345 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v013.8"
+local ver     = "v013.81"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -199,7 +199,7 @@ local LP                = Players.LocalPlayer
 
 -- ── State ──────────────────────────────────────────────────────────────────────────
 _G.AutoParry        = Config:Get("autoparry",        false)
-_G.AutoParryMode    = Config:Get("autoparrymode",    {"Smart"})   -- "Fast" | "Smart" | "Predict"
+_G.AutoParryMode    = Config:Get("autoparrymode",    {"Fast"})   -- "Fast" | "Smart" | "Predict"
 _G.AutoParryRange   = Config:Get("autoparryrange",   15)        -- studs
 
 local LastParry     = 0
