@@ -1,7 +1,7 @@
 -- Powered by GPT 5 | v114 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v013.2"
+local ver     = "v013.4"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -695,7 +695,7 @@ EspTab:Toggle({
 EspTab:Slider({
     Title = "ESP Distance",
     Desc  = "Maximum distance to show ESP objects (0–5000)",
-    Value = { Min = 0, Max = 5000, Default = ESP_MAX_DISTANCE },
+    Value = { Min = 0, Max = 5000, Value = ESP_MAX_DISTANCE },
     Step  = 50,
     Callback = function(val)
         ESP_MAX_DISTANCE = val
@@ -1029,98 +1029,6 @@ MainTab:Toggle({
     end
 })
 
--- ====================== GENERATOR HELPERS (SHARED) ======================
-local GeneratorRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Generator")
-local skillRemote      = GeneratorRemotes:WaitForChild("SkillCheckResultEvent")
-local repairRemote     = GeneratorRemotes:WaitForChild("RepairEvent")
-
-local currentRepairPoint = nil
-local currentRepairModel = nil
-local cancelWalkCooldown = false
-local cancelXCooldown    = false
-
-local function getClosestGeneratorPoint(root, maxDist)
-    local gens = getFolderGenerator()
-    local bestGen, bestPt, bestDist = nil, nil, maxDist or 999
-    for _, gen in ipairs(gens) do
-        if not generatorFinished(gen) then
-            for i = 1, 4 do
-                local pt = gen:FindFirstChild("GeneratorPoint" .. i)
-                if pt then
-                    local d = (root.Position - pt.Position).Magnitude
-                    if d < bestDist then bestDist = d; bestGen = gen; bestPt = pt end
-                end
-            end
-        end
-    end
-    return bestGen, bestPt, bestDist
-end
-
-local function findNearestWeaponPlayer(root, maxDist)
-    local nearest, nearestDist = nil, maxDist or 12.5
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj ~= LocalPlayer.Character then
-            local hasWeapon = obj:FindFirstChild("weapon", true)
-            local hrp_      = obj:FindFirstChild("HumanoidRootPart")
-            if hasWeapon and hrp_ then
-                local dist = (root.Position - hrp_.Position).Magnitude
-                if dist < nearestDist then nearestDist = dist; nearest = obj end
-            end
-        end
-    end
-    return nearest, nearestDist
-end
-
-local function teleportToBestGenerator()
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    local gen, pt = getClosestGeneratorPoint(root)
-    if gen and pt then
-        currentRepairModel = gen
-        currentRepairPoint = pt
-        root.CFrame = CFrame.new(pt.Position + Vector3.new(0, 2, 0))
-        task.wait(0.15)
-        repairRemote:FireServer(pt, true)
-    end
-end
-
--- Cancel when walking
-task.spawn(function()
-    while true do
-        task.wait(0.08)
-        local char = LocalPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        local hum  = char and char:FindFirstChild("Humanoid")
-        if root and hum and currentRepairPoint then
-            local dist   = (root.Position - currentRepairPoint.Position).Magnitude
-            local moving = hum.MoveDirection.Magnitude > 0.05
-            if dist <= 7 and moving then
-                if not cancelWalkCooldown then
-                    cancelWalkCooldown = true
-                    repairRemote:FireServer(currentRepairPoint, false)
-                    task.wait(0.08)
-                    repairRemote:FireServer(currentRepairPoint, false)
-                end
-            elseif dist > 7 then
-                cancelWalkCooldown = false
-            end
-        else
-            cancelWalkCooldown = false
-        end
-    end
-end)
-
-UserInputService.InputBegan:Connect(function(input, gpe)
-    if gpe then return end
-    if input.KeyCode == Enum.KeyCode.X then
-        if currentRepairPoint and not cancelXCooldown then
-            cancelXCooldown = true
-            repairRemote:FireServer(currentRepairPoint, false)
-            task.delay(0.4, function() cancelXCooldown = false end)
-        end
-    end
-end)
 
 -- ====================== SURVIVOR TAB ======================
 SurTab:Section({ Title = "Feature Survivor", Icon = "user" })
@@ -1193,36 +1101,200 @@ SurTab:Toggle({
     end
 })
 
+-- ====================== GENERATOR HELPERS (SHARED) ======================
+
+local UserInputService = game:GetService("UserInputService")
+
+local GeneratorRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Generator")
+local skillRemote      = GeneratorRemotes:WaitForChild("SkillCheckResultEvent")
+local repairRemote     = GeneratorRemotes:WaitForChild("RepairEvent")
+
+local currentRepairPoint = nil
+local currentRepairModel = nil
+local cancelWalkCooldown = false
+local cancelXCooldown    = false
+
+local function getClosestGeneratorPoint(root, maxDist)
+    local gens = getFolderGenerator()
+    local bestGen, bestPt, bestDist = nil, nil, maxDist or 999
+
+    for _, gen in ipairs(gens) do
+        if not generatorFinished(gen) then
+            for i = 1, 4 do
+                local pt = gen:FindFirstChild("GeneratorPoint" .. i)
+
+                if pt then
+                    local d = (root.Position - pt.Position).Magnitude
+
+                    if d < bestDist then
+                        bestDist = d
+                        bestGen = gen
+                        bestPt = pt
+                    end
+                end
+            end
+        end
+    end
+
+    return bestGen, bestPt, bestDist
+end
+
+local function findNearestWeaponPlayer(root, maxDist)
+    local nearest, nearestDist = nil, maxDist or 12.5
+
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj ~= LocalPlayer.Character then
+            local hasWeapon = obj:FindFirstChild("weapon", true)
+            local hrp_ = obj:FindFirstChild("HumanoidRootPart")
+
+            if hasWeapon and hrp_ then
+                local dist = (root.Position - hrp_.Position).Magnitude
+
+                if dist < nearestDist then
+                    nearestDist = dist
+                    nearest = obj
+                end
+            end
+        end
+    end
+
+    return nearest, nearestDist
+end
+
+local function teleportToBestGenerator()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+
+    if not root then return end
+
+    local gen, pt = getClosestGeneratorPoint(root)
+
+    if gen and pt then
+        currentRepairModel = gen
+        currentRepairPoint = pt
+
+        root.CFrame = CFrame.new(pt.Position + Vector3.new(0, 2, 0))
+
+        task.wait(0.15)
+
+        repairRemote:FireServer(pt, true)
+    end
+end
+
+-- Cancel when walking (PC only)
+if not UserInputService.TouchEnabled then
+    task.spawn(function()
+        while true do
+            task.wait(0.08)
+
+            local char = LocalPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local hum  = char and char:FindFirstChild("Humanoid")
+
+            if root and hum and currentRepairPoint then
+                local dist   = (root.Position - currentRepairPoint.Position).Magnitude
+                local moving = hum.MoveDirection.Magnitude > 0.05
+
+                if dist <= 7 and moving then
+                    if not cancelWalkCooldown then
+                        cancelWalkCooldown = true
+
+                        repairRemote:FireServer(currentRepairPoint, false)
+
+                        task.wait(0.08)
+
+                        repairRemote:FireServer(currentRepairPoint, false)
+                    end
+                elseif dist > 7 then
+                    cancelWalkCooldown = false
+                end
+            else
+                cancelWalkCooldown = false
+            end
+        end
+    end)
+end
+
+-- Cancel with X
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+
+    if input.KeyCode == Enum.KeyCode.X then
+        if currentRepairPoint and not cancelXCooldown then
+            cancelXCooldown = true
+
+            repairRemote:FireServer(currentRepairPoint, false)
+
+            WindUI:Notify({
+                Title = "Generator",
+                Content = "Repair canceled",
+                Duration = 3,
+                Icon = "triangle-alert"
+            })
+
+            task.delay(0.4, function()
+                cancelXCooldown = false
+            end)
+        end
+    end
+end)
+
 -- ── Generator Section ──
-SurTab:Section({ Title = "Feature Generator", Icon = "zap" })
+SurTab:Section({
+    Title = "Feature Generator",
+    Icon = "zap"
+})
+
 local AutoSkillPerfect = Config:Get("AutoSkillPerfect", false)
 local AutoSkillNeutral = Config:Get("AutoSkillNeutral", false)
-local AutoGenRepair    = Config:Get("AutoGenRepair",    false)
+local AutoGenRepair    = Config:Get("AutoGenRepair", false)
 
 -- Auto Perfect
 SurTab:Toggle({
     Title = "Auto SkillCheck (Perfect)",
     Desc  = "Automatically hits perfect generator skill checks",
     Value = AutoSkillPerfect,
+
     Callback = function(v)
-        AutoSkillPerfect = v; Config:Set("AutoSkillPerfect", v); Config:Save()
+        AutoSkillPerfect = v
+
+        Config:Set("AutoSkillPerfect", v)
+        Config:Save()
+
         if v then
             task.spawn(function()
                 local pGui = LocalPlayer:WaitForChild("PlayerGui")
+
                 while AutoSkillPerfect do
                     task.wait(0.1)
+
                     local char = LocalPlayer.Character
                     local root = char and char:FindFirstChild("HumanoidRootPart")
+
                     if root then
                         local gen, pt = getClosestGeneratorPoint(root)
-                        if gen and pt then currentRepairModel = gen; currentRepairPoint = pt end
+
+                        if gen and pt then
+                            currentRepairModel = gen
+                            currentRepairPoint = pt
+                        end
+
                         local gui = pGui:FindFirstChild("SkillCheckPromptGui")
+
                         if gui then
                             local check = gui:FindFirstChild("Check")
+
                             if check and check.Visible and currentRepairPoint then
                                 local dist = (root.Position - currentRepairPoint.Position).Magnitude
+
                                 if dist <= 6 then
-                                    skillRemote:FireServer("success", 1, currentRepairModel, currentRepairPoint)
+                                    skillRemote:FireServer(
+                                        "success",
+                                        1,
+                                        currentRepairModel,
+                                        currentRepairPoint
+                                    )
+
                                     check.Visible = false
                                 end
                             end
@@ -1239,25 +1311,47 @@ SurTab:Toggle({
     Title = "Auto SkillCheck (Not Perfect)",
     Desc  = "Automatically hits neutral skill checks",
     Value = AutoSkillNeutral,
+
     Callback = function(v)
-        AutoSkillNeutral = v; Config:Set("AutoSkillNeutral", v); Config:Save()
+        AutoSkillNeutral = v
+
+        Config:Set("AutoSkillNeutral", v)
+        Config:Save()
+
         if v then
             task.spawn(function()
                 local pGui = LocalPlayer:WaitForChild("PlayerGui")
+
                 while AutoSkillNeutral do
                     task.wait(0.1)
+
                     local char = LocalPlayer.Character
                     local root = char and char:FindFirstChild("HumanoidRootPart")
+
                     if root then
                         local gen, pt = getClosestGeneratorPoint(root)
-                        if gen and pt then currentRepairModel = gen; currentRepairPoint = pt end
+
+                        if gen and pt then
+                            currentRepairModel = gen
+                            currentRepairPoint = pt
+                        end
+
                         local gui = pGui:FindFirstChild("SkillCheckPromptGui")
+
                         if gui then
                             local check = gui:FindFirstChild("Check")
+
                             if check and check.Visible and currentRepairPoint then
                                 local dist = (root.Position - currentRepairPoint.Position).Magnitude
+
                                 if dist <= 6 then
-                                    skillRemote:FireServer("neutral", 0, currentRepairModel, currentRepairPoint)
+                                    skillRemote:FireServer(
+                                        "neutral",
+                                        0,
+                                        currentRepairModel,
+                                        currentRepairPoint
+                                    )
+
                                     check.Visible = false
                                 end
                             end
@@ -1274,19 +1368,36 @@ SurTab:Toggle({
     Title = "Auto Generator (Teleport + Repair)",
     Desc  = "Teleports and repairs generators automatically",
     Value = AutoGenRepair,
+
     Callback = function(v)
-        AutoGenRepair = v; Config:Set("AutoGenRepair", v); Config:Save()
+        AutoGenRepair = v
+
+        Config:Set("AutoGenRepair", v)
+        Config:Save()
+
         if v then
+            WindUI:Notify({
+                Title = "Generator",
+                Content = "Press X to cancel repair",
+                Duration = 5,
+                Icon = "triangle-alert"
+            })
+
             task.spawn(function()
                 while AutoGenRepair do
                     task.wait(0.3)
+
                     local char = LocalPlayer.Character
                     local root = char and char:FindFirstChild("HumanoidRootPart")
+
                     if root then
                         local killer = findNearestWeaponPlayer(root, 12.5)
+
                         if killer and currentRepairPoint then
                             repairRemote:FireServer(currentRepairPoint, false)
+
                             task.wait(0.2)
+
                             teleportToBestGenerator()
                         else
                             if not currentRepairPoint
@@ -1545,7 +1656,7 @@ killerTab:Paragraph({
 })
 
 killerTab:Toggle({
-    Title = "Enable Aimbot (The Veil)", Desc = "Automatically locks aim onto nearby survivors", Default = false,
+    Title = "Enable Aimbot (The Veil)", Desc = "Automatically locks aim onto nearby survivors", Value = false,
     Callback = function(state)
         if state and DYHUB_Aimbot28Enabled then
             DYHUB_Aimbot28Enabled = false
@@ -1559,7 +1670,7 @@ killerTab:Toggle({
 })
 
 killerTab:Toggle({
-    Title = "Enable Aimbot Charge (The Veil)", Desc = "Charge-based aimbot optimized for The Veil", Default = false,
+    Title = "Enable Aimbot Charge (The Veil)", Desc = "Charge-based aimbot optimized for The Veil", Value = false,
     Callback = function(state)
         if state and DYHUB_AimbotEnabled then
             DYHUB_AimbotEnabled = false
@@ -1574,14 +1685,14 @@ killerTab:Toggle({
 
 killerTab:Section({ Title = "Killer: The Veil Setting", Icon = "settings" })
 killerTab:Input({
-    Title = "Set Pitch Min", Default = tostring(DYHUB_MIN_PITCH), Placeholder = "Default: -1",
+    Title = "Set Pitch Min", Value = tostring(DYHUB_MIN_PITCH), Placeholder = "Default: -1",
     Callback = function(v)
         local n = tonumber(v)
         if n then DYHUB_MIN_PITCH = n; Config:Set("DYHUB_MIN_PITCH", n); Config:Save() end
     end
 })
 killerTab:Input({
-    Title = "Set Pitch Max", Default = tostring(DYHUB_MAX_PITCH), Placeholder = "Default: 30",
+    Title = "Set Pitch Max", Value = tostring(DYHUB_MAX_PITCH), Placeholder = "Default: 30",
     Callback = function(v)
         local n = tonumber(v)
         if n then DYHUB_MAX_PITCH = n; Config:Set("DYHUB_MAX_PITCH", n); Config:Save() end
@@ -1592,7 +1703,7 @@ killerTab:Toggle({
     Callback = function(v) DYHUB_ToughWall = v; Config:Set("DYHUB_ToughWall", v); Config:Save() end
 })
 killerTab:Input({
-    Title = "Set Keybind Aimbot (PC)", Default = DYHUB_Settings.Aimbot.SetKeybindLock, Placeholder = "Default: Z",
+    Title = "Set Keybind Aimbot (PC)", Value = DYHUB_Settings.Aimbot.SetKeybindLock, Placeholder = "Default: Z",
     Callback = function(v)
         if #v == 1 then
             DYHUB_Settings.Aimbot.SetKeybindLock = v:upper()
@@ -1601,7 +1712,7 @@ killerTab:Input({
     end
 })
 killerTab:Input({
-    Title = "Set Keybind Aimbot Charge (PC)", Default = DYHUB_Settings.Aimbot.SetKeybindLock28, Placeholder = "Default: X",
+    Title = "Set Keybind Aimbot Charge (PC)", Value = DYHUB_Settings.Aimbot.SetKeybindLock28, Placeholder = "Default: X",
     Callback = function(v)
         if #v == 1 then
             DYHUB_Settings.Aimbot.SetKeybindLock28 = v:upper()
@@ -1612,21 +1723,21 @@ killerTab:Input({
 
 killerTab:Section({ Title = "Killer: The Veil GUI", Icon = "settings" })
 killerTab:Toggle({
-    Title = "Enable Aimbot (Toggle GUI)", Desc = "Shows a mobile toggle button for aimbot", Default = false,
+    Title = "Enable Aimbot (Toggle GUI)", Desc = "Shows a mobile toggle button for aimbot", Value = false,
     Callback = function(v)
         DYHUB_AimbotToggleGUIVisible = v
         if DYHUB_mobileButton then DYHUB_mobileButton.Visible = v end
     end
 })
 killerTab:Toggle({
-    Title = "Enable Aimbot Charge (Toggle GUI)", Desc = "Shows a mobile toggle button for aimbot charge", Default = false,
+    Title = "Enable Aimbot Charge (Toggle GUI)", Desc = "Shows a mobile toggle button for aimbot charge", Value = false,
     Callback = function(v)
         DYHUB_Aimbot28ToggleGUIVisible = v
         if DYHUB_mobileButton28 then DYHUB_mobileButton28.Visible = v end
     end
 })
 killerTab:Toggle({
-    Title = "Custom Position Drag (Toggle GUI)", Desc = "Allows dragging the mobile aimbot buttons", Default = false,
+    Title = "Custom Position Drag (Toggle GUI)", Desc = "Allows dragging the mobile aimbot buttons", Value = false,
     Callback = function(state)
         DYHUB_Settings.Aimbot.DragUI = state
         DYHUB_EnableDrag(state)
@@ -2073,7 +2184,7 @@ killerTab:Toggle({
 killerTab:Section({ Title = "Feature Fun", Icon = "crown" })
 local GrabKey = Config:Get("GrabKey", "C")
 killerTab:Input({
-    Title = "Set Keybind Grab (PC ONLY)", Default = GrabKey, Placeholder = "Grab (Ex: C)",
+    Title = "Set Keybind Grab (PC ONLY)", Value = GrabKey, Placeholder = "Grab (Default: C)",
     Callback = function(text)
         if type(text) == "string" and #text > 0 then
             GrabKey = text:upper(); Config:Set("GrabKey", GrabKey); Config:Save()
@@ -2211,7 +2322,7 @@ local speedConnection, noclipConnection
 PlayerTab:Section({ Title = "Feature Player", Icon = "rabbit" })
 PlayerTab:Slider({
     Title = "Set Speed (Legit = 3)",
-    Value = { Min = 1, Max = 677, Default = flyNoclipSpeed },
+    Value = { Min = 1, Max = 677, Value = flyNoclipSpeed },
     Step  = 1,
     Callback = function(val)
         flyNoclipSpeed = val; Config:Set("flyNoclipSpeed", val); Config:Save()
@@ -2406,7 +2517,7 @@ Main3:Toggle({
     end
 })
 Main3:Input({
-    Title = "Delay Save Config", Default = tostring(AutoSaveDelay), Placeholder = "Default: 15",
+    Title = "Delay Save Config", Value = tostring(AutoSaveDelay), Placeholder = "Default: 15",
     Callback = function(text)
         local num = tonumber(text)
         if num and num >= 1 then
