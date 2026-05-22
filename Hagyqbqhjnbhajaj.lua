@@ -1,7 +1,7 @@
 -- Powered by GPT 5 | v114 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v013"
+local ver     = "v013.2"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
