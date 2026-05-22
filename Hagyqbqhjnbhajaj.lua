@@ -1,4 +1,4 @@
--- Powered by dyumra | v341 (Reworked)
+-- Powered by dyumra | v345 (Reworked)
 -- =========================
 local version = "Rework"
 local ver     = "v013.75"
@@ -181,6 +181,194 @@ local _D3         = Window:Divider()
 local Main3       = Window:Tab({ Title = "Settings",    Icon = "settings" })
 
 Window:SelectTab(1)
+
+-- =====================================================================================
+-- auto parry
+-- =====================================================================================
+
+local Players=game:GetService("Players")
+local Vim=game:GetService("VirtualInputManager")
+local LP=Players.LocalPlayer
+
+_G.AutoParry=Config:Get("autoparry",false)
+
+local LastParry=0
+local Hooked={}
+local REQUIRED_IMAGE="rbxassetid://101288986880844"
+
+local ATTACK_ANIMS={
+["rbxassetid://139369275981139"]=true,
+["rbxassetid://110355011987939"]=true,
+["rbxassetid://135002183282873"]=true,
+["rbxassetid://121216847022485"]=true,
+["rbxassetid://105374834496520"]=true,
+["rbxassetid://111920872708571"]=true,
+["rbxassetid://118907603246885"]=true,
+["rbxassetid://78432063483146"]=true,
+["rbxassetid://113255068724446"]=true,
+["rbxassetid://74968262036854"]=true,
+["rbxassetid://129784271201071"]=true,
+["rbxassetid://132817836308238"]=true,
+["rbxassetid://112166042383605"]=true,
+["rbxassetid://122812055447896"]=true,
+["rbxassetid://117042998468241"]=true,
+["rbxassetid://133963973694098"]=true
+}
+
+local function nt(t,c)
+WindUI:Notify({
+Title=t,
+Content=c,
+Duration=5,
+Icon="triangle-alert"
+})
+end
+
+local function getGui()
+local pg=LP:FindFirstChild("PlayerGui")
+if not pg then return end
+local s=pg:FindFirstChild("Survivor-mob")
+if not s then return end
+local c=s:FindFirstChild("Controls")
+if not c then return end
+return c:FindFirstChild("Gui-mob")
+end
+
+local function click(btn)
+if not btn then return end
+
+pcall(function()
+firesignal(btn.MouseButton1Click)
+firesignal(btn.Activated)
+end)
+
+pcall(function()
+btn:Activate()
+end)
+
+pcall(function()
+local p=btn.AbsolutePosition
+local s=btn.AbsoluteSize
+local x=p.X+s.X/2
+local y=p.Y+s.Y/2
+Vim:SendMouseButtonEvent(x,y,0,true,game,1)
+Vim:SendMouseButtonEvent(x,y,0,false,game,1)
+end)
+end
+
+local function canParry(char)
+local my=LP.Character
+if not my then return end
+
+local myRoot=my:FindFirstChild("HumanoidRootPart")
+local enemyRoot=char:FindFirstChild("HumanoidRootPart")
+
+if not myRoot or not enemyRoot then
+return
+end
+
+local vel=enemyRoot.AssemblyLinearVelocity
+local predict=enemyRoot.Position+(vel*0.13)
+local dist=(myRoot.Position-predict).Magnitude
+
+if dist<=7 then
+return true
+end
+
+if dist<=12 then
+local dir=(myRoot.Position-enemyRoot.Position).Unit
+local dot=enemyRoot.CFrame.LookVector:Dot(dir)
+
+if dot>0.3 then
+return true
+end
+end
+
+if dist<=20 and vel.Magnitude>=10 then
+return true
+end
+end
+
+local function doParry()
+local gui=getGui()
+if not gui then return end
+if tostring(gui.Image)~=REQUIRED_IMAGE then return end
+
+local now=os.clock()
+
+if now-LastParry<0.01 then
+return
+end
+
+LastParry=now
+click(gui)
+end
+
+local function hookChar(char)
+if Hooked[char] then return end
+Hooked[char]=true
+
+local hum=char:FindFirstChildOfClass("Humanoid")
+if not hum then return end
+
+hum.AnimationPlayed:Connect(function(track)
+
+if not _G.AutoParry then
+return
+end
+
+local anim=track.Animation
+if not anim then return end
+
+local id=tostring(anim.AnimationId)
+
+if not ATTACK_ANIMS[id] then
+return
+end
+
+if not canParry(char) then
+return
+end
+
+doParry()
+end)
+end
+
+local function hookPlayer(plr)
+if plr==LP then return end
+
+local function charAdded(char)
+Hooked[char]=nil
+task.wait(0.3)
+hookChar(char)
+end
+
+if plr.Character then
+charAdded(plr.Character)
+end
+
+plr.CharacterAdded:Connect(charAdded)
+end
+
+for _,plr in pairs(Players:GetPlayers()) do
+hookPlayer(plr)
+end
+
+Players.PlayerAdded:Connect(hookPlayer)
+
+SurTab:Toggle({
+Title="Auto Parry (PREDICTION)",
+Desc="Automatically parries nearby killer attacks",
+Value=_G.AutoParry,
+
+Callback=function(al PlG.AutoParry=v
+
+Config:Set("autoparry",v)
+Config:Save()
+
+nt("Auto Parry (BETA)",v and "Enabled" or "Disabled")
+end
+})
 
 -- =====================================================================================
 --  ESP SYSTEM  (รองรับ Respawn / Map Reload / Spawn ใหม่ / ไม่ Leak)
@@ -1116,407 +1304,6 @@ SurTab:Toggle({
     end
 })
 --]]
-
--- Auto Parry
-local Players = game:GetService("Players")
-local VirtualInputManager =
-    game:GetService("VirtualInputManager")
-
-local LP = Players.LocalPlayer
-
---// GLOBAL STATE
-_G.AutoParry =
-    Config:Get("autoparry", false)
-
---// SETTINGS
-local LastParry = 0
-
-local COOLDOWN = 0.012
-
-local CLOSE_DISTANCE = 6
-local MEDIUM_DISTANCE = 12
-local LONG_DISTANCE = 20
-
-local REQUIRED_IMAGE =
-    "rbxassetid://101288986880844"
-
---// CACHE
-local HookedPlayers = {}
-local HookedCharacters = {}
-
---// ATTACK ANIMS
-local ATTACK_ANIMS = {
-
-    -- JASON
-    ["rbxassetid://139369275981139"] = true,
-    ["rbxassetid://110355011987939"] = true,
-
-    -- CURE
-    ["rbxassetid://135002183282873"] = true,
-    ["rbxassetid://121216847022485"] = true,
-
-    -- CHICKEN
-    ["rbxassetid://105374834496520"] = true,
-    ["rbxassetid://111920872708571"] = true,
-    ["rbxassetid://138720291317243"] = true,
-    ["rbxassetid://115244153053858"] = true,
-    ["rbxassetid://130593238885843"] = true,
-    ["rbxassetid://117070354890871"] = true,
-    ["rbxassetid://106871536134254"] = true,
-    ["rbxassetid://109402730355822"] = true,
-
-    -- KNIGHT
-    ["rbxassetid://118907603246885"] = true,
-    ["rbxassetid://78432063483146"] = true,
-    ["rbxassetid://77081789642514"] = true,
-    ["rbxassetid://80411309607666"] = true,
-
-    -- BLINDMAN
-    ["rbxassetid://113255068724446"] = true,
-    ["rbxassetid://74968262036854"] = true,
-    ["rbxassetid://82666958311998"] = true,
-
-    -- RUNNER
-    ["rbxassetid://129784271201071"] = true,
-    ["rbxassetid://132817836308238"] = true,
-
-    -- SPIRITGIRL
-    ["rbxassetid://112166042383605"] = true,
-    ["rbxassetid://122812055447896"] = true,
-    ["rbxassetid://78935059863801"] = true,
-
-    -- MICHAEL
-    ["rbxassetid://117042998468241"] = true,
-    ["rbxassetid://133963973694098"] = true,
-    ["rbxassetid://129918027564423"] = true,
-    ["rbxassetid://95934119190708"] = true,
-}
-
---// NOTIFY
-local function nt(title, content)
-
-    WindUI:Notify({
-        Title = title,
-        Content = content,
-        Duration = 5,
-        Icon = "triangle-alert"
-    })
-end
-
---// FAST CLICK
-local function click_btn(btn)
-
-    if not btn then
-        return
-    end
-
-    pcall(function()
-
-        if firesignal then
-            firesignal(btn.MouseButton1Click)
-            firesignal(btn.Activated)
-        end
-    end)
-
-    pcall(function()
-        btn:Activate()
-    end)
-
-    pcall(function()
-
-        local pos = btn.AbsolutePosition
-        local size = btn.AbsoluteSize
-
-        local x = pos.X + (size.X / 2)
-        local y = pos.Y + (size.Y / 2)
-
-        VirtualInputManager:SendMouseButtonEvent(
-            x,
-            y,
-            0,
-            true,
-            game,
-            1
-        )
-
-        VirtualInputManager:SendMouseButtonEvent(
-            x,
-            y,
-            0,
-            false,
-            game,
-            1
-        )
-    end)
-end
-
---// GET GUI
-local function getGui()
-
-    local pg =
-        LP:FindFirstChild("PlayerGui")
-
-    if not pg then
-        return
-    end
-
-    local survivor =
-        pg:FindFirstChild("Survivor-mob")
-
-    if not survivor then
-        return
-    end
-
-    local controls =
-        survivor:FindFirstChild("Controls")
-
-    if not controls then
-        return
-    end
-
-    return controls:FindFirstChild(
-        "Gui-mob"
-    )
-end
-
---// VALID IMAGE
-local function validImage(guiMob)
-
-    local ok = false
-
-    pcall(function()
-
-        if tostring(guiMob.Image)
-        == REQUIRED_IMAGE then
-
-            ok = true
-        end
-    end)
-
-    return ok
-end
-
---// FUTURE PREDICTION
-local function canPredictAttack(enemyChar)
-
-    local myChar = LP.Character
-
-    if not myChar then
-        return false
-    end
-
-    local myRoot =
-        myChar:FindFirstChild(
-            "HumanoidRootPart"
-        )
-
-    local enemyRoot =
-        enemyChar:FindFirstChild(
-            "HumanoidRootPart"
-        )
-
-    if not myRoot or not enemyRoot then
-        return false
-    end
-
-    local velocity =
-        enemyRoot.AssemblyLinearVelocity
-
-    -- FUTURE POS
-    local predictPos =
-        enemyRoot.Position +
-        (velocity * 0.13)
-
-    local dist =
-        (myRoot.Position - predictPos)
-        .Magnitude
-
-    -- CLOSE RANGE
-    if dist <= CLOSE_DISTANCE then
-        return true
-    end
-
-    -- MEDIUM RANGE
-    if dist <= MEDIUM_DISTANCE then
-
-        local dir =
-            (myRoot.Position
-            - enemyRoot.Position)
-            .Unit
-
-        local dot =
-            enemyRoot.CFrame
-            .LookVector:Dot(dir)
-
-        if dot > 0.35 then
-            return true
-        end
-    end
-
-    -- LONG RANGE LUNGE
-    if dist <= LONG_DISTANCE
-    and velocity.Magnitude >= 12 then
-
-        return true
-    end
-
-    return false
-end
-
---// PARRY
-local function doParry()
-
-    local guiMob = getGui()
-
-    if not guiMob then
-        return
-    end
-
-    if not validImage(guiMob) then
-        return
-    end
-
-    local now = os.clock()
-
-    if now - LastParry < COOLDOWN then
-        return
-    end
-
-    LastParry = now
-
-    click_btn(guiMob)
-end
-
---// HOOK CHARACTER
-local function hookCharacter(char)
-
-    if HookedCharacters[char] then
-        return
-    end
-
-    HookedCharacters[char] = true
-
-    local hum =
-        char:WaitForChild(
-            "Humanoid",
-            10
-        )
-
-    if not hum then
-        return
-    end
-
-    hum.AnimationPlayed:Connect(function(track)
-
-        if not _G.AutoParry then
-            return
-        end
-
-        local anim = track.Animation
-
-        if not anim then
-            return
-        end
-
-        local animId =
-            tostring(anim.AnimationId)
-
-        -- ATTACK CHECK
-        if not ATTACK_ANIMS[animId] then
-            return
-        end
-
-        -- FUTURE CHECK
-        if not canPredictAttack(char) then
-            return
-        end
-
-        -- PERFECT PARRY
-        task.spawn(function()
-
-            doParry()
-
-        end)
-    end)
-end
-
---// HOOK PLAYER
-local function hookPlayer(plr)
-
-    if plr == LP then
-        return
-    end
-
-    if HookedPlayers[plr] then
-        return
-    end
-
-    HookedPlayers[plr] = true
-
-    local function setupCharacter(char)
-
-        hookCharacter(char)
-    end
-
-    if plr.Character then
-        setupCharacter(plr.Character)
-    end
-
-    plr.CharacterAdded:Connect(
-        setupCharacter
-    )
-end
-
---// INITIAL HOOK
-for _, plr in ipairs(
-    Players:GetPlayers()
-) do
-
-    hookPlayer(plr)
-end
-
---// NEW PLAYERS
-Players.PlayerAdded:Connect(
-    hookPlayer
-)
-
---// TOGGLE
-SurTab:Toggle({
-
-    Title = "Auto Parry (PREDICTION)",
-
-    Desc =
-    "Automatically parries nearby killer attacks",
-
-    Value = _G.AutoParry,
-
-    Callback = function(v)
-
-        _G.AutoParry = v
-
-        Config:Set(
-            "autoparry",
-            v
-        )
-
-        Config:Save()
-
-        if v then
-
-            nt(
-                "Auto Parry (BETA)",
-                "Enabled"
-            )
-
-        else
-
-            nt(
-                "Auto Parry (BETA)",
-                "Disabled"
-            )
-        end
-    end
-})
 
 
 -- ====================== GENERATOR HELPERS (SHARED) ======================
