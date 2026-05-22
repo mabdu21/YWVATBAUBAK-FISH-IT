@@ -1,7 +1,7 @@
 -- Powered by dyumra | v341 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v013.5"
+local ver     = "v013.55"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -383,12 +383,11 @@ local function updateESP()
         local isMurderer = pChar:FindFirstChild("Weapon") ~= nil
 
         if isMurderer then
-            if dist > ESP_MAX_DISTANCE then
             if espMurder then createESP(pChar, COLOR_MURDERER)
             else             removeESP(pChar)
             end
         else
-            if espSurvivor then if dist > ESP_MAX_DISTANCE then createESP(pChar, COLOR_SURVIVOR)
+            if espSurvivor then createESP(pChar, COLOR_SURVIVOR)
             else               removeESP(pChar)
             end
         end
@@ -1151,7 +1150,7 @@ local function findNearestWeaponPlayer(root, maxDist)
 
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("Model") and obj ~= LocalPlayer.Character then
-            local hasWeapon = obj:FindFirstChild("weapon", true)
+            local hasWeapon = obj:FindFirstChild("Weapon", true)
             local hrp_      = obj:FindFirstChild("HumanoidRootPart")
 
             if hasWeapon and hrp_ then
