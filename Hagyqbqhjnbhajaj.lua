@@ -1739,7 +1739,7 @@ local DYHUB_Settings = {
         MobileButtonPosition   = UDim2.new(1, -40, 1, -40),
         MobileButton28Position = UDim2.new(1, -140, 1, -40),
         SetKeybindLock         = Config:Get("AimbotKey", "Z"),
-        SetKeybindLock28       = Config:Get("AimbotKey28", "X"),
+        SetKeybindLock28       = Config:Get("AimbotKey28", "V"),
     }
 }
 
@@ -1808,7 +1808,7 @@ killerTab:Input({
     end
 })
 killerTab:Input({
-    Title = "Set Keybind Aimbot Charge (PC)", Value = DYHUB_Settings.Aimbot.SetKeybindLock28, Placeholder = "Default: X",
+    Title = "Set Keybind Aimbot Charge (PC)", Value = DYHUB_Settings.Aimbot.SetKeybindLock28, Placeholder = "Default: V",
     Callback = function(v)
         if #v == 1 then
             DYHUB_Settings.Aimbot.SetKeybindLock28 = v:upper()
