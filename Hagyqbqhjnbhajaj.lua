@@ -1,7 +1,7 @@
 -- Powered by dyumra | v341 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v013.63"
+local ver     = "v013.64"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -2672,7 +2672,7 @@ Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/22/2026 | CL: " .. ver,
-    Desc  = "- [ Rework ] Full ESP Core Rebuilt\n- [ New ] ESP Distance (0-5000)\n- [ New ] ESP Pallet for SCP-049\n- [ Fixed ] ESP Render Gate, Hook, Pallet, Window\n- [ Fixed ] ESP Distance with Survivor, Killer\n- [ Fixed ] ESP Distance Check for all object types\n- [ Fixed ] Duplicate ESP / Memory Leak\n- [ Fixed ] Character Respawn ESP refresh\n- [ Improved ] Config Save / Load stability\n- [ Improved ] Service caching\n- [ Removed ] Hitbox size Rebuilt\n- [ Optimized ] FullBright / NoFog",
+    Desc  = "- [ Rework ] Full ESP Core Rebuilt\n- [ New ] ESP Distance (0-5000)\n- [ New ] ESP Patient for SCP-049\n- [ Fixed ] ESP Render Gate, Hook, Pallet, Window\n- [ Fixed ] ESP Distance with Survivor, Killer\n- [ Fixed ] ESP Distance Check for all object types\n- [ Fixed ] Duplicate ESP / Memory Leak\n- [ Fixed ] Character Respawn ESP refresh\n- [ Improved ] Config Save / Load stability\n- [ Improved ] Service caching\n- [ Removed ] Hitbox size Rebuilt\n- [ Optimized ] FullBright / NoFog",
 })
 Info:Divider()
 
