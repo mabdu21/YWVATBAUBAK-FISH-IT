@@ -1,7 +1,7 @@
--- Powered by GPT 5 | v114 (Reworked)
+-- Powered by dyumra | v341 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v013.45"
+local ver     = "v013.5"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -212,7 +212,7 @@ local ShowDistance     = Config:Get("ShowDistance",     true)
 local ShowHP           = Config:Get("ShowHP",           true)
 local ShowHighlight    = Config:Get("ShowHighlight",    true)
 local ShowPercent      = Config:Get("ShowPercent",      true)
-local ESP_MAX_DISTANCE = Config:Get("ESP_MAX_DISTANCE", 1500)  -- ← Distance Slider
+local ESP_MAX_DISTANCE = Config:Get("ESP_MAX_DISTANCE", 1500) 
 
 -- ── Table เก็บ ESP ทั้งหมด ──
 -- key = Instance (char / model)
@@ -383,11 +383,12 @@ local function updateESP()
         local isMurderer = pChar:FindFirstChild("Weapon") ~= nil
 
         if isMurderer then
+            if dist > ESP_MAX_DISTANCE then
             if espMurder then createESP(pChar, COLOR_MURDERER)
             else             removeESP(pChar)
             end
         else
-            if espSurvivor then createESP(pChar, COLOR_SURVIVOR)
+            if espSurvivor then if dist > ESP_MAX_DISTANCE then createESP(pChar, COLOR_SURVIVOR)
             else               removeESP(pChar)
             end
         end
@@ -692,15 +693,14 @@ EspTab:Toggle({
 })
 
 -- ── ESP Distance Slider ──
-EspTab:Slider({
-    Title = "ESP Distance",
-    Desc  = "Maximum distance to show ESP objects (0–5000)",
-    Value = { Min = 0, Max = 5000, Value = ESP_MAX_DISTANCE },
-    Step  = 50,
-    Callback = function(val)
-        ESP_MAX_DISTANCE = val
-        Config:Set("ESP_MAX_DISTANCE", val)
-        Config:Save()
+EspTab:Input({
+    Title = "Set ESP Distance (Maximum distance)",
+    Default = tostring(ESP_MAX_DISTANCE),
+    Placeholder = "Default: 1500",
+    Callback = function(text)
+        local num = tonumber(text)
+        if num then ESP_MAX_DISTANCE = num; Config:Set("ESP_MAX_DISTANCE", num); Config:Save()
+        else warn("Entered an incorrect number!") end
     end
 })
 
@@ -2623,7 +2623,7 @@ Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/22/2026",
-    Desc  = "- [ Rework v013 ] Full ESP Core Rebuilt\n- [ New ] ESP Distance Slider (0-5000)\n- [ Fixed ] ESP Gate, Hook, Pallet, Window, Patient\n- [ Fixed ] ESP Distance Check for all object types\n- [ Fixed ] Duplicate ESP / Memory Leak\n- [ Fixed ] Character Respawn ESP refresh\n- [ Optimized ] FullBright / NoFog now use Connection not while loop\n- [ Optimized ] AntiAFK now uses task.spawn properly\n- [ Fixed ] Speed Toggle uses correct character reference\n- [ Fixed ] Grab keybind pcall protected\n- [ Improved ] Config Save/Load stability\n- [ Improved ] Service caching",
+    Desc  = "- [ Rework ] Full ESP Core Rebuilt\n- [ New ] ESP Distance (0-5000)\n- [ Fixed ] ESP Gate, Hook, Pallet, Window, Patient\n- [ Fixed ] ESP Distance Check for all object types\n- [ Fixed ] Duplicate ESP / Memory Leak\n- [ Fixed ] Character Respawn ESP refresh\n- [ Optimized ] FullBright / NoFog now use Connection not while loop\n- [ Optimized ] AntiAFK now uses task.spawn properly\n- [ Fixed ] Speed Toggle uses correct character reference\n- [ Fixed ] Grab keybind pcall protected\n- [ Improved ] Config Save/Load stability\n- [ Improved ] Service caching",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
