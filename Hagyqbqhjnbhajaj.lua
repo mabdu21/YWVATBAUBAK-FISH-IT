@@ -1,7 +1,7 @@
 -- Powered by dyumra | v341 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v013.62"
+local ver     = "v013.63"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -2671,10 +2671,8 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 05/22/2026",
-    Desc  = "- [ Rework ] Full ESP Core Rebuilt\n- [ New ] ESP Distance (0-5000)\n- [ Fixed ] ESP Gate, Hook, Pallet, Window, Patient\n- [ Fixed ] ESP Distance Check for all object types\n- [ Fixed ] Duplicate ESP / Memory Leak\n- [ Fixed ] Character Respawn ESP refresh\n- [ Optimized ] FullBright / NoFog now use Connection not while loop\n- [ Optimized ] AntiAFK now uses task.spawn properly\n- [ Fixed ] Speed Toggle uses correct character reference\n- [ Fixed ] Grab keybind pcall protected\n- [ Improved ] Config Save/Load stability\n- [ Improved ] Service caching",
-    Image = "rbxassetid://104487529937663",
-    ImageSize = 30,
+    Title = "Update: 05/22/2026 | CL: " .. ver,
+    Desc  = "- [ Rework ] Full ESP Core Rebuilt\n- [ New ] ESP Distance (0-5000)\n- [ New ] ESP Pallet for SCP-049\n- [ Fixed ] ESP Render Gate, Hook, Pallet, Window\n- [ Fixed ] ESP Distance with Survivor, Killer\n- [ Fixed ] ESP Distance Check for all object types\n- [ Fixed ] Duplicate ESP / Memory Leak\n- [ Fixed ] Character Respawn ESP refresh\n- [ Improved ] Config Save / Load stability\n- [ Improved ] Service caching\n- [ Removed ] Hitbox size Rebuilt\n- [ Optimized ] FullBright / NoFog",
 })
 Info:Divider()
 
