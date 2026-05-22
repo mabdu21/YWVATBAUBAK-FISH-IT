@@ -1,7 +1,7 @@
 -- Powered by GPT 5 | v114 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v013.4"
+local ver     = "v013.45"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -1103,16 +1103,25 @@ SurTab:Toggle({
 
 -- ====================== GENERATOR HELPERS (SHARED) ======================
 
-local UserInputService = game:GetService("UserInputService")
-
 local GeneratorRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Generator")
 local skillRemote      = GeneratorRemotes:WaitForChild("SkillCheckResultEvent")
 local repairRemote     = GeneratorRemotes:WaitForChild("RepairEvent")
 
 local currentRepairPoint = nil
 local currentRepairModel = nil
+
 local cancelWalkCooldown = false
 local cancelXCooldown    = false
+local mobileCancelHold   = false
+
+local function notify(title, content)
+    WindUI:Notify({
+        Title = title,
+        Content = content,
+        Duration = 5,
+        Icon = "triangle-alert"
+    })
+end
 
 local function getClosestGeneratorPoint(root, maxDist)
     local gens = getFolderGenerator()
@@ -1122,10 +1131,8 @@ local function getClosestGeneratorPoint(root, maxDist)
         if not generatorFinished(gen) then
             for i = 1, 4 do
                 local pt = gen:FindFirstChild("GeneratorPoint" .. i)
-
                 if pt then
                     local d = (root.Position - pt.Position).Magnitude
-
                     if d < bestDist then
                         bestDist = d
                         bestGen = gen
@@ -1145,7 +1152,7 @@ local function findNearestWeaponPlayer(root, maxDist)
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("Model") and obj ~= LocalPlayer.Character then
             local hasWeapon = obj:FindFirstChild("weapon", true)
-            local hrp_ = obj:FindFirstChild("HumanoidRootPart")
+            local hrp_      = obj:FindFirstChild("HumanoidRootPart")
 
             if hasWeapon and hrp_ then
                 local dist = (root.Position - hrp_.Position).Magnitude
@@ -1161,11 +1168,21 @@ local function findNearestWeaponPlayer(root, maxDist)
     return nearest, nearestDist
 end
 
+local function cancelRepair()
+    if currentRepairPoint then
+        repairRemote:FireServer(currentRepairPoint, false)
+        task.wait(0.05)
+        repairRemote:FireServer(currentRepairPoint, false)
+    end
+end
+
 local function teleportToBestGenerator()
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
 
-    if not root then return end
+    if not root then
+        return
+    end
 
     local gen, pt = getClosestGeneratorPoint(root)
 
@@ -1181,56 +1198,55 @@ local function teleportToBestGenerator()
     end
 end
 
--- Cancel when walking (PC only)
-if not UserInputService.TouchEnabled then
-    task.spawn(function()
-        while true do
-            task.wait(0.08)
+-- Better cancel movement system (PC + Mobile)
+task.spawn(function()
+    while true do
+        task.wait(0.06)
 
-            local char = LocalPlayer.Character
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            local hum  = char and char:FindFirstChild("Humanoid")
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local hum  = char and char:FindFirstChild("Humanoid")
 
-            if root and hum and currentRepairPoint then
-                local dist   = (root.Position - currentRepairPoint.Position).Magnitude
-                local moving = hum.MoveDirection.Magnitude > 0.05
+        if root and hum and currentRepairPoint then
+            local dist = (root.Position - currentRepairPoint.Position).Magnitude
 
-                if dist <= 7 and moving then
-                    if not cancelWalkCooldown then
-                        cancelWalkCooldown = true
+            local moving =
+                hum.MoveDirection.Magnitude > 0.03
+                or root.AssemblyLinearVelocity.Magnitude > 1
 
-                        repairRemote:FireServer(currentRepairPoint, false)
+            if dist <= 7 and moving then
+                if not cancelWalkCooldown then
+                    cancelWalkCooldown = true
 
-                        task.wait(0.08)
+                    cancelRepair()
 
-                        repairRemote:FireServer(currentRepairPoint, false)
-                    end
-                elseif dist > 7 then
+                    task.wait(0.35)
+
                     cancelWalkCooldown = false
                 end
-            else
-                cancelWalkCooldown = false
             end
+        else
+            cancelWalkCooldown = false
         end
-    end)
-end
+    end
+end)
 
--- Cancel with X
+-- X Cancel (PC)
 UserInputService.InputBegan:Connect(function(input, gpe)
-    if gpe then return end
+    if gpe then
+        return
+    end
 
     if input.KeyCode == Enum.KeyCode.X then
         if currentRepairPoint and not cancelXCooldown then
             cancelXCooldown = true
 
-            repairRemote:FireServer(currentRepairPoint, false)
+            cancelRepair()
 
-            WindUI:Notify({
-                Title = "Generator",
-                Content = "Repair canceled",
-                Duration = 3,
-                Icon = "triangle-alert"
-            })
+            notify(
+                "Generator Cancelled",
+                "Repair cancelled successfully."
+            )
 
             task.delay(0.4, function()
                 cancelXCooldown = false
@@ -1238,6 +1254,32 @@ UserInputService.InputBegan:Connect(function(input, gpe)
         end
     end
 end)
+
+-- Mobile cancel support
+if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+    task.spawn(function()
+        while true do
+            task.wait(0.1)
+
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChild("Humanoid")
+
+            if hum and currentRepairPoint then
+                if hum.MoveDirection.Magnitude > 0.05 then
+                    if not mobileCancelHold then
+                        mobileCancelHold = true
+
+                        cancelRepair()
+
+                        task.wait(0.4)
+
+                        mobileCancelHold = false
+                    end
+                end
+            end
+        end
+    end)
+end
 
 -- ── Generator Section ──
 SurTab:Section({
@@ -1257,11 +1299,15 @@ SurTab:Toggle({
 
     Callback = function(v)
         AutoSkillPerfect = v
-
         Config:Set("AutoSkillPerfect", v)
         Config:Save()
 
         if v then
+            notify(
+                "Auto Skill Perfect Enabled",
+                "Perfect skill checks are now automatic."
+            )
+
             task.spawn(function()
                 local pGui = LocalPlayer:WaitForChild("PlayerGui")
 
@@ -1314,11 +1360,15 @@ SurTab:Toggle({
 
     Callback = function(v)
         AutoSkillNeutral = v
-
         Config:Set("AutoSkillNeutral", v)
         Config:Save()
 
         if v then
+            notify(
+                "Auto Skill Neutral Enabled",
+                "Neutral skill checks are now automatic."
+            )
+
             task.spawn(function()
                 local pGui = LocalPlayer:WaitForChild("PlayerGui")
 
@@ -1363,7 +1413,7 @@ SurTab:Toggle({
     end
 })
 
--- Auto Teleport + Repair
+-- Auto Generator
 SurTab:Toggle({
     Title = "Auto Generator (Teleport + Repair)",
     Desc  = "Teleports and repairs generators automatically",
@@ -1371,17 +1421,14 @@ SurTab:Toggle({
 
     Callback = function(v)
         AutoGenRepair = v
-
         Config:Set("AutoGenRepair", v)
         Config:Save()
 
         if v then
-            WindUI:Notify({
-                Title = "Generator",
-                Content = "Press X to cancel repair",
-                Duration = 5,
-                Icon = "triangle-alert"
-            })
+            notify(
+                "Auto Generator Enabled",
+                "Press X or move joystick to cancel repair."
+            )
 
             task.spawn(function()
                 while AutoGenRepair do
@@ -1394,7 +1441,7 @@ SurTab:Toggle({
                         local killer = findNearestWeaponPlayer(root, 12.5)
 
                         if killer and currentRepairPoint then
-                            repairRemote:FireServer(currentRepairPoint, false)
+                            cancelRepair()
 
                             task.wait(0.2)
 
