@@ -1,7 +1,7 @@
 -- Powered by dyumra | v341 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v013.6"
+local ver     = "v013.62"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -472,6 +472,18 @@ local function updateESP()
 
         -- ── Gate ──
         elseif n == "Gate" then
+            local insidePlayer = false
+        
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr.Character and desc:IsDescendantOf(plr.Character) then
+                    insidePlayer = true
+                    break
+                end
+            end
+        
+            if insidePlayer then
+                continue
+            end
             scanned[desc] = true
             if espGate then
                 if dist <= ESP_MAX_DISTANCE then
