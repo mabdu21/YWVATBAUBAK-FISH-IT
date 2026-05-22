@@ -1,7 +1,7 @@
 -- Powered by dyumra | v341 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v013.55"
+local ver     = "v013.6"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -377,18 +377,43 @@ local function updateESP()
     -- ─── Players ESP ───────────────────────────────────────────
     for _, player in pairs(Players:GetPlayers()) do
         if player == LocalPlayer then continue end
+    
         local pChar = player.Character
         if not pChar or pChar.Name == "Lobby" then continue end
-
+    
+        local pRoot = pChar:FindFirstChild("HumanoidRootPart")
+        local dist = pRoot and math.floor((hrp.Position - pRoot.Position).Magnitude) or math.huge
+    
+        -- ถ้าไกลเกินระยะ ESP
+        if dist > ESP_MAX_DISTANCE then
+            local data = espObjects[pChar]
+    
+            if data then
+                if data.bill then
+                    data.bill.Enabled = false
+                end
+    
+                if data.highlight then
+                    data.highlight.Enabled = false
+                end
+            end
+    
+            continue
+        end
+    
         local isMurderer = pChar:FindFirstChild("Weapon") ~= nil
-
+    
         if isMurderer then
-            if espMurder then createESP(pChar, COLOR_MURDERER)
-            else             removeESP(pChar)
+            if espMurder then
+                createESP(pChar, COLOR_MURDERER)
+            else
+                removeESP(pChar)
             end
         else
-            if espSurvivor then createESP(pChar, COLOR_SURVIVOR)
-            else               removeESP(pChar)
+            if espSurvivor then
+                createESP(pChar, COLOR_SURVIVOR)
+            else
+                removeESP(pChar)
             end
         end
     end
@@ -617,6 +642,19 @@ local function updateESP()
         -- Player ESP → ไม่ใช้ distance gate (ผู้เล่นมองเห็นได้ตลอด)
         if isPlayer then
             local oDist = math.floor((hrp.Position - oPart.Position).Magnitude)
+        
+            -- ถ้าไกลเกินระยะ ESP
+            if oDist > ESP_MAX_DISTANCE then
+                if data.highlight then
+                    data.highlight.Enabled = false
+                end
+        
+                if data.bill then
+                    data.bill.Enabled = false
+                end
+        
+                continue
+            end
 
             if ShowHP and humanoid then
                 data.hpLabel.Text     = "[ " .. math.floor(humanoid.Health) .. " HP ]"
