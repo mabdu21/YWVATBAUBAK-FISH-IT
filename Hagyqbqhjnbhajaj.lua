@@ -98,7 +98,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/configtestv1.json"
+    self.ConfigPath = ConfigFolder .. "/configtestv2.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -184,64 +184,22 @@ Info:Divider()
 -- =====================================================================================
 --  AUTO PARRY SYSTEM v3  |  DYHUB  |  dyumra
 -- =====================================================================================
-
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
 local Vim               = game:GetService("VirtualInputManager")
-local UIS               = game:GetService("UserInputService")
 local LP                = Players.LocalPlayer
 
--- -- Platform Detection ------------------------------------------------------------
-local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
-
--- -- State --------------------------------------------------------------------------
+-- ── State ──────────────────────────────────────────────────────────────────────────
 _G.AutoParry        = Config:Get("autoparry",        false)
 _G.AutoParryMode    = Config:Get("autoparrymode",    {"Fast"})   -- "Fast" | "Smart" | "Predict"
 _G.AutoParryRange   = Config:Get("autoparryrange",   15)        -- studs
 
 local LastParry     = 0
-local PARRY_CD      = 0.35
-local Hooked        = {}     -- char = true
+local PARRY_CD      = 0.35   -- cooldown ขั้นต่ำระหว่าง parry (วิ) — ป้องกัน spam
+local Hooked        = {}     -- [char] = true
 
--- -- ButtonSystem (Mobile) ---------------------------------------------------------
-local ButtonSystem = {}
-ButtonSystem.Path = 'game:GetService("Players").LocalPlayer.PlayerGui["Survivor-mob"].Controls["Gui-mob"]'
-
-function ButtonSystem:GetButton(path)
-    local ok, result = pcall(function()
-        return loadstring("return " .. (path or self.Path))()
-    end)
-    if ok and result then return result end
-end
-
-function ButtonSystem:Click(btn)
-    if not btn then return false end
-    if btn:IsA("ImageButton") or btn:IsA("TextButton") then
-        pcall(function()
-            if firesignal then
-                firesignal(btn.MouseButton1Click)
-                firesignal(btn.Activated)
-            else
-                btn:Activate()
-            end
-        end)
-        return true
-    end
-    return false
-end
-
-function ButtonSystem:ClickFromPath(path)
-    local btn = self:GetButton(path)
-    return self:Click(btn)
-end
-
--- -- GUI Path -----------------------------------------------------------------------
--- icon id ????????????????? parry ?????
-local PARRY_ICON_ID = 92951359322494
-
--- ?? 77,77,77 = ???????????? ? ???? parry
-local SKILL_COLOR   = Color3.fromRGB(77, 77, 77)
-local COLOR_EPSILON = 3 / 255   -- tolerance ?????? float comparison
+-- ── GUI Path ───────────────────────────────────────────────────────────────────────
+local PARRY_IMAGE   = "rbxassetid://101288986880844"
 
 local function getParryBtn()
     local pg = LP:FindFirstChild("PlayerGui");     if not pg then return end
@@ -250,81 +208,38 @@ local function getParryBtn()
     return c:FindFirstChild("Gui-mob")
 end
 
--- ??????? Color3 ????????? 77,77,77 ??? (?????? float imprecision)
-local function isSkillColor(color)
-    return math.abs(color.R - SKILL_COLOR.R) <= COLOR_EPSILON
-       and math.abs(color.G - SKILL_COLOR.G) <= COLOR_EPSILON
-       and math.abs(color.B - SKILL_COLOR.B) <= COLOR_EPSILON
-end
-
---[[
-    isParryReady()
-    ??? true ?????:
-      1. ?? Gui-mob ???
-      2. btn.icon == PARRY_ICON_ID  (???????? parry ?????)
-      3. ImageColor3 ? 77,77,77     (???????????? skill-lock state)
-]]
 local function isParryReady()
     local btn = getParryBtn()
-    if not btn then return false end
-
-    -- ???? icon id (property ???? "icon" ??????????)
-    local iconOk = false
-    pcall(function()
-        iconOk = (btn.icon == PARRY_ICON_ID)
-    end)
-    -- fallback: ??? exploit expose ???? ImageLabel/ImageButton ????
-    if not iconOk then
-        pcall(function()
-            local idStr = tostring(btn.Image or "")
-            iconOk = idStr:find(tostring(PARRY_ICON_ID)) ~= nil
-        end)
-    end
-    if not iconOk then return false end
-
-    -- ?????? — ??????? 77,77,77 ?????????????????? ???? parry
-    local col
-    pcall(function() col = btn.ImageColor3 end)
-    if col and isSkillColor(col) then return false end
-
-    return true
+    return btn and tostring(btn.Image) == PARRY_IMAGE
 end
 
--- -- Fire Parry — ??? PC / Mobile -------------------------------------------------
-local RightClickConn   -- connection ?????? PC right-click listener
-
+-- ── Multi-method click (รองรับทุก exploit) ────────────────────────────────────────
 local function fireParryBtn()
-    if isMobile then
-        -- Mobile: ??? ButtonSystem
-        local clicked = ButtonSystem:ClickFromPath(ButtonSystem.Path)
-        if not clicked then
-            -- fallback: Activate() ???
-            local btn = getParryBtn()
-            if btn then pcall(function() btn:Activate() end) end
-        end
-    else
-        -- PC: ??? right-click ???? VirtualInputManager
-        pcall(function()
-            Vim:SendMouseButtonEvent(0, 0, 1, true,  game, 1)   -- RMB down
-            task.wait()
-            Vim:SendMouseButtonEvent(0, 0, 1, false, game, 1)   -- RMB up
-        end)
-        -- fallback: firesignal / Activate ?? button ???? (??? exploit ??????)
-        local btn = getParryBtn()
-        if btn then
-            pcall(function()
-                if firesignal then
-                    firesignal(btn.MouseButton1Click)
-                    firesignal(btn.Activated)
-                else
-                    btn:Activate()
-                end
-            end)
-        end
-    end
+    local btn = getParryBtn()
+    if not btn then return end
+
+    -- Method 1: firesignal
+    pcall(function()
+        firesignal(btn.MouseButton1Click)
+        firesignal(btn.Activated)
+    end)
+
+    -- Method 2: Activate()
+    pcall(function() btn:Activate() end)
+
+    -- Method 3: VirtualInputManager (mobile-style tap)
+    pcall(function()
+        local p = btn.AbsolutePosition
+        local sz = btn.AbsoluteSize
+        local x  = p.X + sz.X * 0.5
+        local y  = p.Y + sz.Y * 0.5
+        Vim:SendMouseButtonEvent(x, y, 0, true,  game, 1)
+        task.wait()
+        Vim:SendMouseButtonEvent(x, y, 0, false, game, 1)
+    end)
 end
 
--- -- Distance + Direction check ----------------------------------------------------
+-- ── Distance + Direction check ────────────────────────────────────────────────────
 local function getThreatLevel(killerChar)
     local my = LP.Character
     if not my then return 0 end
@@ -336,35 +251,42 @@ local function getThreatLevel(killerChar)
     local vel     = ksHRP.AssemblyLinearVelocity
     local speed   = vel.Magnitude
 
+    -- Predict killer position in next ~2 frames
     local frameDt   = 0.1
     local predicted = ksHRP.Position + vel * frameDt
     local dist      = (myHRP.Position - predicted).Magnitude
 
+    -- ถ้าไกลเกินกำหนด → ไม่ทำ
     if dist > _G.AutoParryRange then return 0 end
 
+    -- หัน killer มาหาเรา? (dot > 0 = หัน)
     local toMe = (myHRP.Position - ksHRP.Position).Unit
     local dot  = ksHRP.CFrame.LookVector:Dot(toMe)
 
+    -- คำนวณ threat 0–1
     local distScore  = 1 - math.clamp(dist / _G.AutoParryRange, 0, 1)
-    local dotScore   = math.clamp((dot + 1) * 0.5, 0, 1)
+    local dotScore   = math.clamp((dot + 1) * 0.5, 0, 1)         -- remap -1…1 → 0…1
     local speedScore = math.clamp(speed / 25, 0, 1)
 
     return (distScore * 0.5) + (dotScore * 0.35) + (speedScore * 0.15)
 end
 
--- -- Hitframe timing table ---------------------------------------------------------
+-- ── Hitframe timing table ─────────────────────────────────────────────────────────
+--  เวลาที่ควร parry หลัง animation เริ่ม (วิ)
+--  ปรับตาม animation speed / game ได้
+--  format: [animId] = { delay=วิ, window=วิ_ที่_parry_ยังทัน }
 local ANIM_HITFRAME = {
-    -- swing 1
+    -- ตี swing 1 (เร็ว)
     ["rbxassetid://139369275981139"] = { delay=0.20, window=0.25 },
     ["rbxassetid://110355011987939"] = { delay=0.20, window=0.25 },
     ["rbxassetid://135002183282873"] = { delay=0.22, window=0.25 },
     ["rbxassetid://121216847022485"] = { delay=0.20, window=0.25 },
-    -- swing 2
+    -- ตี swing 2 (ช้าลงนิด)
     ["rbxassetid://105374834496520"] = { delay=0.25, window=0.30 },
     ["rbxassetid://111920872708571"] = { delay=0.25, window=0.30 },
     ["rbxassetid://118907603246885"] = { delay=0.23, window=0.28 },
     ["rbxassetid://78432063483146"]  = { delay=0.22, window=0.28 },
-    -- lunge / dash
+    -- ตี lunge / dash (เร็วมาก)
     ["rbxassetid://113255068724446"] = { delay=0.15, window=0.20 },
     ["rbxassetid://74968262036854"]  = { delay=0.15, window=0.20 },
     ["rbxassetid://129784271201071"] = { delay=0.18, window=0.22 },
@@ -376,53 +298,64 @@ local ANIM_HITFRAME = {
     ["rbxassetid://133963973694098"] = { delay=0.30, window=0.35 },
 }
 
--- -- Mode: Fast --------------------------------------------------------------------
+-- ── Mode: Fast — parry ทันทีที่ detect (no delay, aggressive) ─────────────────────
 local function doParryFast(killerChar)
     if not isParryReady() then return end
     local threat = getThreatLevel(killerChar)
-    if threat <= 0 then return end
+    if threat <= 0 then return end   -- ไม่ได้อยู่ในระยะ
     local now = os.clock()
     if now - LastParry < PARRY_CD then return end
     LastParry = now
     fireParryBtn()
 end
 
--- -- Mode: Smart -------------------------------------------------------------------
+-- ── Mode: Smart — delay ตาม hitframe table ────────────────────────────────────────
 local function doParrySmart(killerChar, animId, track)
     local info = ANIM_HITFRAME[animId] or { delay=0.20, window=0.25 }
     local startTime = os.clock()
 
     task.spawn(function()
+        -- รอถึง hitframe
         task.wait(info.delay)
+
+        -- ยังอยู่ใน window ไหม?
         local elapsed = os.clock() - startTime
         if elapsed > info.window then return end
+
+        -- ยัง enabled ไหม?
         if not _G.AutoParry then return end
 
+        -- ตรวจ threat อีกครั้ง (killer อาจวิ่งออกไปแล้ว)
         local threat = getThreatLevel(killerChar)
         if threat <= 0 then return end
 
+        -- ยัง cooldown ไหม?
         local now = os.clock()
         if now - LastParry < PARRY_CD then return end
-        if not isParryReady() then return end
 
+        if not isParryReady() then return end
         LastParry = now
         fireParryBtn()
     end)
 end
 
--- -- Mode: Predict -----------------------------------------------------------------
+-- ── Mode: Predict — ใช้ animation speed เพื่อ scale delay ───────────────────────
 local function doParryPredict(killerChar, animId, track)
     local info = ANIM_HITFRAME[animId] or { delay=0.20, window=0.25 }
 
+    -- ดึง animation speed จาก track
     local speed = 1
     pcall(function() speed = math.max(track.Speed, 0.1) end)
 
+    -- hitframe จริง = delay / speed (ยิ่ง speed สูง = ตีเร็ว = delay สั้น)
     local realDelay  = info.delay  / speed
     local realWindow = info.window / speed
-    local startTime  = os.clock()
+
+    local startTime = os.clock()
 
     task.spawn(function()
         task.wait(realDelay)
+
         local elapsed = os.clock() - startTime
         if elapsed > realWindow then return end
         if not _G.AutoParry then return end
@@ -432,14 +365,14 @@ local function doParryPredict(killerChar, animId, track)
 
         local now = os.clock()
         if now - LastParry < PARRY_CD then return end
-        if not isParryReady() then return end
 
+        if not isParryReady() then return end
         LastParry = now
         fireParryBtn()
     end)
 end
 
--- -- Dispatch ----------------------------------------------------------------------
+-- ── Dispatch ──────────────────────────────────────────────────────────────────────
 local function onAttackAnim(killerChar, animId, track)
     if not _G.AutoParry then return end
     local mode = _G.AutoParryMode or "Smart"
@@ -452,7 +385,7 @@ local function onAttackAnim(killerChar, animId, track)
     end
 end
 
--- -- Hook character ----------------------------------------------------------------
+-- ── Hook character ────────────────────────────────────────────────────────────────
 local function hookChar(char)
     if Hooked[char] then return end
     Hooked[char] = true
@@ -470,13 +403,13 @@ local function hookChar(char)
     end)
 end
 
--- -- Hook player -------------------------------------------------------------------
+-- ── Hook player ───────────────────────────────────────────────────────────────────
 local function hookPlayer(plr)
     if plr == LP then return end
 
     local function onChar(char)
         Hooked[char] = nil
-        task.wait(0.5)
+        task.wait(0.5)   -- รอ character load
         hookChar(char)
     end
 
@@ -487,15 +420,11 @@ end
 for _, plr in pairs(Players:GetPlayers()) do hookPlayer(plr) end
 Players.PlayerAdded:Connect(hookPlayer)
 
--- -- UI ---------------------------------------------------------------------------
+-- ── UI ───────────────────────────────────────────────────────────────────────────
 SurTab:Paragraph({
     Title = "Information: Parry Mode",
-    Desc  = string.format(
-        "• Fast = Instant, no delay\n• Smart = Delay based on hitframe\n• Predict = Calculated from animation speed\n\nPlatform: %s",
-        isMobile and "Mobile" or "PC",
-        isMobile and "(ButtonSystem)" or "(RMB)"
-    ),
-    Image     = "rbxassetid://104487529937663",
+    Desc = "- Fast = Instant, no delay \n- Smart = Delay based on hitframe \n- Predict = Calculated from animation speed",
+    Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
 SurTab:Divider()
@@ -511,19 +440,19 @@ SurTab:Toggle({
         Config:Set("autoparry", v)
         Config:Save()
         WindUI:Notify({
-            Title    = "Auto Parry (BETA)",
-            Content  = v and "Enabled" or "Disabled",
+            Title   = "Auto Parry (BETA)",
+            Content = v and "Enabled" or "Disabled",
             Duration = 3,
-            Icon     = v and "shield" or "shield-off"
+            Icon    = v and "shield" or "shield-off"
         })
     end
 })
 
 SurTab:Dropdown({
-    Title    = "Parry Mode",
-    Values   = { "Fast", "Smart", "Predict" },
-    Multi    = false,
-    Value    = _G.AutoParryMode,
+    Title   = "Parry Mode",
+    Values = { "Fast", "Smart", "Predict" },
+    Multi = false,
+    Value   = _G.AutoParryMode,
     Callback = function(v)
         _G.AutoParryMode = v
         Config:Set("autoparrymode", v)
@@ -533,10 +462,10 @@ SurTab:Dropdown({
 })
 
 SurTab:Slider({
-    Title    = "Parry Range",
-    Desc     = "Range for parrying (studs)",
-    Value    = { Min = 5, Max = 35, Default = _G.AutoParryRange },
-    Step     = 1,
+    Title   = "Parry Range",
+    Desc    = "Range for parrying (studs)",
+    Value = { Min = 5, Max = 35, Default = _G.AutoParryRange },
+    Step = 1,
     Callback = function(v)
         _G.AutoParryRange = v
         Config:Set("autoparryrange", v)
