@@ -1,7 +1,7 @@
 -- Powered by dyumra | v345 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.00"
+local ver     = "v014.05"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -180,8 +180,8 @@ Window:SelectTab(1)
 -- =====================================================================================
 
 _G.AutoParry      = Config:Get("autoparry",      false)
-_G.AutoParryMode  = Config:Get("autoparrymode",  "Smart") -- string เท่านั้น
-_G.AutoParryRange = Config:Get("autoparryrange", 15)
+_G.AutoParryMode  = Config:Get("autoparrymode",  "Fast") -- string เท่านั้น
+_G.AutoParryRange = Config:Get("autoparryrange", 12)
 
 -- ── Constants ─────────────────────────────────────────────────────────────────────
 local PARRY_CD       = 0.30   -- วิ cooldown ขั้นต่ำ
@@ -456,7 +456,7 @@ Players.PlayerAdded:Connect(hookPlayer)
 -- ── UI ─────────────────────────────────────────────────────────────────────────────
 SurTab:Paragraph({
     Title = "Information: Parry Mode",
-    Desc  = "- Fast = Instant + Heartbeat scan\n- Smart = Delay ตาม hitframe table\n- Predict = คำนวณจาก animation speed",
+    Desc  = "- Fast = Fast = Instant + Heartbeat scan\n- Smart = Delay based on hitframe table\n- Predict = Calculated from animation speed",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
@@ -490,7 +490,7 @@ SurTab:Dropdown({
     Callback = function(v)
         -- v อาจมาเป็น table (Multi=false ยัง return table ใน WindUI บางเวอร์)
         if type(v) == "table" then v = v[1] end
-        _G.AutoParryMode = v or "Smart"
+        _G.AutoParryMode = v or "Fast"
         Config:Set("autoparrymode", _G.AutoParryMode)
         Config:Save()
         WindUI:Notify({ Title = "Parry Mode", Content = _G.AutoParryMode, Duration = 2, Icon = "settings" })
@@ -499,7 +499,7 @@ SurTab:Dropdown({
 
 SurTab:Slider({
     Title    = "Parry Range",
-    Desc     = "Range for parrying (studs) — แนะนำ 12–18",
+    Desc     = "Range for parrying (studs)",
     Value    = { Min = 5, Max = 35, Default = _G.AutoParryRange },
     Step     = 1,
     Callback = function(v)
@@ -2368,22 +2368,29 @@ killerTab:Button({
 })
 
 -- ====================== PLAYER TAB ======================
-local speedEnabled   = false
-local flyNoclipSpeed = Config:Get("SpeedWalk", 3)
+local speedEnabled   = Config:Set("enablespeed", false)
+local flyNoclipSpeed = Config:Get("ishowspeedimeanspeedwalk", 3)
 local NoClipEnabled  = Config:Get("NoClipEnabled", false)
 local speedConnection, noclipConnection
 
 PlayerTab:Section({ Title = "Feature Player", Icon = "rabbit" })
 PlayerTab:Slider({
-    Title = "Set Speed (Legit = 3)",
-    Value = { Min = 1, Max = 677, Value = flyNoclipSpeed },
-    Step  = 1,
-    Callback = function(val) flyNoclipSpeed=val; Config:Set("SpeedWalk",flyNoclipSpeed); Config:Save() end
+    Title    = "Set Speed Walk (Legit = 3)",
+    Desc     = "Speed for player (cframe)",
+    Value    = { Min = 3, Max = 999, Default = flyNoclipSpeed },
+    Step     = 1,
+    Callback = function(v)
+        flyNoclipSpeed = v
+        Config:Set("ishowspeedimeanspeedwalk", v)
+        Config:Save()
+    end
 })
 PlayerTab:Toggle({
-    Title = "Enable Speed", Desc = "Adjusts your character movement speed using a slider", Value = false,
+    Title = "Enable Speed", Desc = "Adjusts your character movement speed using a slider", Value = speedEnabled,
     Callback = function(v)
         speedEnabled = v
+        Config:Set("enablespeed", v)
+        Config:Save()
         if speedEnabled then
             if speedConnection then speedConnection:Disconnect() end
             speedConnection = RunService.RenderStepped:Connect(function()
@@ -2430,7 +2437,7 @@ PlayerTab:Toggle({
 })
 
 -- No Fall
-local NoFallEnabled = false
+local NoFallEnabled = Config:Set("nofall", false)
 local FallRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Mechanics"):WaitForChild("Fall")
 local mt = getrawmetatable(game)
 local oldNamecall = mt.__namecall
@@ -2444,7 +2451,7 @@ setreadonly(mt, true)
 
 PlayerTab:Toggle({
     Title = "No Fall (Beta)", Desc = "Prevents movement slowdown after falling from heights", Value = false,
-    Callback = function(v) NoFallEnabled = v end
+    Callback = function(v) NoFallEnabled = v; Config:Set("nofall", v); Config:Save() end
 })
 
 -- ====================== TELEPORT TAB ======================
@@ -2618,7 +2625,7 @@ Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/23/2026 | CL: " .. ver,
-    Desc  = "- [ Rework ] Auto Parry v3 — Heartbeat scan + AnimationPlayed dual-layer\n- [ Rework ] Generator System — Smart cancel, 1 loop, position-based movement\n- [ Fixed ] Auto Parry mode dropdown (string/table fix)\n- [ Fixed ] Generator false cancel (velocity → position delta)\n- [ Fixed ] Duplicate skill loops on toggle\n- [ Fixed ] Stale generator reference after round end\n- [ Fixed ] ESP ช่องว่าง object ไม่มี HP\n- [ Improved ] Cache invalidation throttle (ลด event spam)\n- [ Improved ] No Flashlight — event-based แทน polling\n- [ Improved ] Generator reconnect หลัง respawn\n- [ Optimized ] ลด Heartbeat connections (รวม loop)\n- [ Optimized ] findNearestKiller ใช้ Players list แทน GetDescendants",
+    Desc  = "- [ Rework ] Auto Parry v2 (Heartbeat scan + AnimationPlayed dual-layer)\n- [ Rework ] Generator System (Smart cancel, position-based movement)\n- [ Fixed ] Auto Parry mode (string/table fix)\n- [ Fixed ] Generator false cancel (velocity, position delta)\n- [ Fixed ] Duplicate skill loops on toggle\n- [ Fixed ] Stale generator reference after round end\n- [ Improved ] Cache invalidation throttle (Reduce event spam)\n- [ Improved ] No Flashlight (event-based instead polling)\n- [ Improved ] Generator reconnect behind before respawn\n- [ Optimized ] Reduce Heartbeat connections (together loop)",
 })
 Info:Divider()
 
