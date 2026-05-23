@@ -3,12 +3,12 @@
 local version = "Rework"
 local ver = "v011.4"
 -- =========================
-
+repeat task.wait() until game:IsLoaded()
 -- ====================== LOAD UI ======================
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 -- ====================== GameLoad ======================
-repeat task.wait() until game:IsLoaded()
+
 
 if setfpscap then
     setfpscap(1000000)
