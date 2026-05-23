@@ -1,7 +1,7 @@
 -- Powered by dyumra | v445 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.15"
+local ver     = "v014.16"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -177,7 +177,7 @@ Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/24/2026 | CL: " .. ver,
-    Desc  = "• [ Rework ] Auto Parry v2 (Heartbeat scan + AnimationPlayed dual-layer)\n• [ Rework ] Generator System (Smart cancel, position-based movement)\n• [ Fixed ] Auto Parry mode (string/table fix)\n• [ Fixed ] Generator false cancel (velocity, position delta)\n• [ Fixed ] Duplicate skill loops on toggle\n• [ Fixed ] Stale generator reference after round end\n• [ Improved ] Cache invalidation throttle (Reduce event spam)\n• [ Improved ] No Flashlight (event-based instead polling)\n• [ Improved ] Generator reconnect behind before respawn\n• [ Optimized ] Reduce Heartbeat connections (together loop)",
+    Desc  = "• [ Rework ] Auto Parry v3 (Heartbeat scan + AnimationPlayed dual-layer)\n• [ Rework ] Generator System (Smart cancel, position-based movement)\n• [ Fixed ] Auto Parry mode (string/table fix)\n• [ Fixed ] Generator false cancel (velocity, position delta)\n• [ Fixed ] Duplicate skill loops on toggle\n• [ Fixed ] Stale generator reference after round end\n• [ Improved ] Cache invalidation throttle (Reduce event spam)\n• [ Improved ] No Flashlight (event-based instead polling)\n• [ Improved ] Generator reconnect behind before respawn\n• [ Optimized ] Reduce Heartbeat connections (together loop)",
 })
 Info:Divider()
 
@@ -521,8 +521,8 @@ Players.PlayerAdded:Connect(hookPlayer)
 --  UI
 -- ══════════════════════════════════════════════════════════════════════════════════
 SurTab:Paragraph({
-    Title = "Auto Parry v4",
-    Desc  = "• Fast = Instant on spike/anim\n• Smart = Delay based on hitframe\n• Predict = Scaled by anim speed\n• Heartbeat pre-detect fires BEFORE animation\n• PC: uses right-click + key events\n• Cooldown: checks icon color (77,77,77) = on cooldown",
+    Title = "Information: Parry Mode",
+    Desc  = "• Fast = Instant on spike/anim\n• Smart = Delay based on hitframe\n• Predict = Scaled by anim speed",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
@@ -539,7 +539,7 @@ SurTab:Toggle({
         Config:Set("autoparry", v)
         Config:Save()
         WindUI:Notify({
-            Title    = "Auto Parry",
+            Title    = "Auto Parry (BETA)",
             Content  = v and "Enabled" or "Disabled",
             Duration = 3,
             Icon     = v and "shield" or "shield-off",
