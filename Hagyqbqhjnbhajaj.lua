@@ -1,7 +1,7 @@
 -- Powered by dyumra | v445 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.02"
+local ver     = "v014.03"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -98,7 +98,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config.json"
+    self.ConfigPath = ConfigFolder .. "/configtestv1.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -177,7 +177,7 @@ Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/23/2026 | CL: " .. ver,
-    Desc  = "- [ Rework ] Auto Parry v2 (Heartbeat scan + AnimationPlayed dual-layer)\n- [ Rework ] Generator System (Smart cancel, position-based movement)\n- [ Fixed ] Auto Parry mode (string/table fix)\n- [ Fixed ] Generator false cancel (velocity, position delta)\n- [ Fixed ] Duplicate skill loops on toggle\n- [ Fixed ] Stale generator reference after round end\n- [ Improved ] Cache invalidation throttle (Reduce event spam)\n- [ Improved ] No Flashlight (event-based instead polling)\n- [ Improved ] Generator reconnect behind before respawn\n- [ Optimized ] Reduce Heartbeat connections (together loop)",
+    Desc  = "• [ Rework ] Auto Parry v2 (Heartbeat scan + AnimationPlayed dual-layer)\n• [ Rework ] Generator System (Smart cancel, position-based movement)\n• [ Fixed ] Auto Parry mode (string/table fix)\n• [ Fixed ] Generator false cancel (velocity, position delta)\n• [ Fixed ] Duplicate skill loops on toggle\n• [ Fixed ] Stale generator reference after round end\n• [ Improved ] Cache invalidation throttle (Reduce event spam)\n• [ Improved ] No Flashlight (event-based instead polling)\n• [ Improved ] Generator reconnect behind before respawn\n• [ Optimized ] Reduce Heartbeat connections (together loop)",
 })
 Info:Divider()
 
@@ -201,7 +201,7 @@ _G.AutoParryRange   = Config:Get("autoparryrange",   15)        -- studs
 
 local LastParry     = 0
 local PARRY_CD      = 0.35
-local Hooked        = {}     -- [char] = true
+local Hooked        = {}     -- char = true
 
 -- -- ButtonSystem (Mobile) ---------------------------------------------------------
 local ButtonSystem = {}
@@ -491,9 +491,9 @@ Players.PlayerAdded:Connect(hookPlayer)
 SurTab:Paragraph({
     Title = "Information: Parry Mode",
     Desc  = string.format(
-        "- Fast = Instant, no delay\n- Smart = Delay based on hitframe\n- Predict = Calculated from animation speed\n\nPlatform: %s ? Parry via %s",
+        "• Fast = Instant, no delay\n• Smart = Delay based on hitframe\n• Predict = Calculated from animation speed\n\nPlatform: %s",
         isMobile and "Mobile" or "PC",
-        isMobile and "Button tap (ButtonSystem)" or "Right-click (RMB)"
+        isMobile and "(ButtonSystem)" or "(RMB)"
     ),
     Image     = "rbxassetid://104487529937663",
     ImageSize = 30,
@@ -2041,8 +2041,8 @@ local function DYHUB_CreateMobileButtons()
         c.CornerRadius = UDim.new(0,45); c.Parent = btn
         return btn
     end
-    DYHUB_mobileButton   = makeBtn("???", DYHUB_Settings.Aimbot.MobileButtonPosition,   DYHUB_AimbotEnabled)
-    DYHUB_mobileButton28 = makeBtn("??", DYHUB_Settings.Aimbot.MobileButton28Position, DYHUB_Aimbot28Enabled)
+    DYHUB_mobileButton   = makeBtn("🗡️", DYHUB_Settings.Aimbot.MobileButtonPosition,   DYHUB_AimbotEnabled)
+    DYHUB_mobileButton28 = makeBtn("⚔️", DYHUB_Settings.Aimbot.MobileButton28Position, DYHUB_Aimbot28Enabled)
     DYHUB_mobileButton.Visible   = DYHUB_AimbotToggleGUIVisible
     DYHUB_mobileButton28.Visible = DYHUB_Aimbot28ToggleGUIVisible
     DYHUB_mobileButton.MouseButton1Click:Connect(function()
@@ -2687,8 +2687,8 @@ local function LoadDiscordInfo()
                 end)
                 if ok and r and r.guild then
                     DiscordInfo:SetDesc(
-                        ' <font color="#52525b">?</font> Member Count : '..tostring(r.approximate_member_count)..
-                        '\n <font color="#16a34a">?</font> Online Count : '..tostring(r.approximate_presence_count)
+                        ' <font color="#52525b">●</font> Member Count : '..tostring(r.approximate_member_count)..
+                        '\n <font color="#16a34a">●</font> Online Count : '..tostring(r.approximate_presence_count)
                     )
                     WindUI:Notify({ Title = "Discord Info Updated", Content = "Refreshed!", Duration = 2, Icon = "refresh-cw" })
                 else
