@@ -1,7 +1,7 @@
--- Powered by dyumra | v345 (Reworked)
+-- Powered by dyumra | v425 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.11"
+local ver     = "v014.12"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -178,11 +178,11 @@ Window:SelectTab(1)
 -- =====================================================================================
 
 _G.AutoParry      = Config:Get("autoparry",      false)
-_G.AutoParryMode  = Config:Get("autoparrymode",  "Fast")
+_G.AutoParryMode  = Config:Get("autoparrymode",  "Smart")
 _G.AutoParryRange = Config:Get("autoparryrange", 12)
 
 -- ── Constants ─────────────────────────────────────────────────────────────────────
-local PARRY_CD      = 0.28          -- cooldown ขั้นต่ำ (วิ)
+local PARRY_CD      = 0.22          -- cooldown ขั้นต่ำ (วิ)
 local PARRY_IMAGE   = "rbxassetid://101288986880844"
 local SCAN_INTERVAL = 1 / 30        -- Heartbeat scan ~30 Hz (Fast mode only)
 local BTN_TTL       = 0.5           -- อายุ button cache (วิ)
