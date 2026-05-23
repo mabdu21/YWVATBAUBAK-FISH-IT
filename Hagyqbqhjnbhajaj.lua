@@ -1,7 +1,8 @@
--- Powered by dyumra | v445 (Reworked)
+
+-- Powered by dyumra | v345 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.05"
+local ver     = "v014.02"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -98,7 +99,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/configtestv5.json"
+    self.ConfigPath = ConfigFolder .. "/config2.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -168,18 +169,6 @@ local _D3         = Window:Divider()
 local Main3       = Window:Tab({ Title = "Settings",    Icon = "settings" })
 
 Window:SelectTab(1)
-
-local Info = InfoTab
-if not ui then ui = {} end
-if not ui.Creator then ui.Creator = {} end
-
-Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
-Info:Divider()
-Info:Paragraph({
-    Title = "Update: 05/23/2026 | CL: " .. ver,
-    Desc  = "• [ Rework ] Auto Parry v2 (Heartbeat scan + AnimationPlayed dual-layer)\n• [ Rework ] Generator System (Smart cancel, position-based movement)\n• [ Fixed ] Auto Parry mode (string/table fix)\n• [ Fixed ] Generator false cancel (velocity, position delta)\n• [ Fixed ] Duplicate skill loops on toggle\n• [ Fixed ] Stale generator reference after round end\n• [ Improved ] Cache invalidation throttle (Reduce event spam)\n• [ Improved ] No Flashlight (event-based instead polling)\n• [ Improved ] Generator reconnect behind before respawn\n• [ Optimized ] Reduce Heartbeat connections (together loop)",
-})
-Info:Divider()
 
 -- =====================================================================================
 --  AUTO PARRY SYSTEM v3  |  DYHUB  |  dyumra
@@ -287,9 +276,9 @@ local ANIM_HITFRAME = {
     ["rbxassetid://118907603246885"] = { delay=0.18, window=0.22 },
     ["rbxassetid://78432063483146"]  = { delay=0.18, window=0.22 },
     -- ?? lunge / dash (???????)
-    ["rbxassetid://113255068724446"] = { delay=0.15, window=0.22 },
-    ["rbxassetid://74968262036854"]  = { delay=0.15, window=0.22 },
-    ["rbxassetid://129784271201071"] = { delay=0.15, window=0.22 },
+    ["rbxassetid://113255068724446"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://74968262036854"]  = { delay=0.18, window=0.22 },
+    ["rbxassetid://129784271201071"] = { delay=0.18, window=0.22 },
     -- heavy / slam
     ["rbxassetid://132817836308238"] = { delay=0.18, window=0.22 },
     ["rbxassetid://112166042383605"] = { delay=0.18, window=0.22 },
@@ -423,7 +412,7 @@ Players.PlayerAdded:Connect(hookPlayer)
 -- -- UI ---------------------------------------------------------------------------
 SurTab:Paragraph({
     Title = "Information: Parry Mode",
-    Desc = "• Fast = Instant, no delay \n• Smart = Delay based on hitframe \n• Predict = Calculated from animation speed",
+    Desc = "- Fast = Instant, no delay \n- Smart = Delay based on hitframe \n- Predict = Calculated from animation speed",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
@@ -2574,6 +2563,17 @@ Main3:Button({
 })
 
 -- ====================== INFORMATION TAB ======================
+local Info = InfoTab
+if not ui then ui = {} end
+if not ui.Creator then ui.Creator = {} end
+
+Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
+Info:Divider()
+Info:Paragraph({
+    Title = "Update: 05/23/2026 | CL: " .. ver,
+    Desc  = "- [ Rework ] Auto Parry v3 — Heartbeat scan + AnimationPlayed dual-layer\n- [ Rework ] Generator System — Smart cancel, 1 loop, position-based movement\n- [ Fixed ] Auto Parry mode dropdown (string/table fix)\n- [ Fixed ] Generator false cancel (velocity ? position delta)\n- [ Fixed ] Duplicate skill loops on toggle\n- [ Fixed ] Stale generator reference after round end\n- [ Fixed ] ESP ???????? object ????? HP\n- [ Improved ] Cache invalidation throttle (?? event spam)\n- [ Improved ] No Flashlight — event-based ??? polling\n- [ Improved ] Generator reconnect ???? respawn\n- [ Optimized ] ?? Heartbeat connections (??? loop)\n- [ Optimized ] findNearestKiller ??? Players list ??? GetDescendants",
+})
+Info:Divider()
 
 ui.Creator.Request = function(requestData)
     local success, result = pcall(function()
