@@ -1,14 +1,14 @@
 -- v085
 -- =========================
 local version = "Rework"
-local ver = "v011.4"
+local ver = "v011.6"
 -- =========================
-repeat task.wait() until game:IsLoaded()
+
 -- ====================== LOAD UI ======================
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 -- ====================== GameLoad ======================
-
+repeat task.wait() until game:IsLoaded()
 
 if setfpscap then
     setfpscap(1000000)
@@ -66,19 +66,11 @@ function CustomConfig:Load()
     end
 end
 
-function CustomConfig:AutoSave(interval)
-    task.spawn(function()
-        while true do
-            task.wait(interval or 15)
-            self:Save()
-        end
-    end)
-end
-
 local SavedConfig = CustomConfig.new()
-SavedConfig:AutoSave(15)
 
 -- ====================== SERVICES ======================
+-- FIX: Players ต้อง declare ที่นี่ก่อนใช้งาน ไม่ใช่ด้านล่าง
+local Players            = game:GetService("Players")
 local ReplicatedStorage  = game:GetService("ReplicatedStorage")
 local RunService         = game:GetService("RunService")
 local Workspace          = game:GetService("Workspace")
@@ -100,20 +92,22 @@ local DefaultJumpPower  = Humanoid.JumpPower or 50
 local DefaultJumpHeight = Humanoid.JumpHeight or 7.2
 
 -- ====================== REMOTES ======================
-local UpgradeRemotes       = ReplicatedStorage:WaitForChild("UpgradeRemotes")
+local UpgradeRemotes        = ReplicatedStorage:WaitForChild("UpgradeRemotes")
 local PurchaseHealthUpgrade = UpgradeRemotes:WaitForChild("PurchaseHealthUpgrade")
 local PurchaseWeaponUpgrade = UpgradeRemotes:WaitForChild("PurchaseWeaponUpgrade")
-local WaveRemotes          = ReplicatedStorage:WaitForChild("WaveRemotes")
-local SkipVote             = WaveRemotes:WaitForChild("SkipVote")
-local GearRemotes          = ReplicatedStorage:WaitForChild("GearRemotes")
-local GearPurchase         = GearRemotes:WaitForChild("GearPurchase")
+local WaveRemotes           = ReplicatedStorage:WaitForChild("WaveRemotes")
+local SkipVote              = WaveRemotes:WaitForChild("SkipVote")
+local GearRemotes           = ReplicatedStorage:WaitForChild("GearRemotes")
+local GearPurchase          = GearRemotes:WaitForChild("GearPurchase")
 
 local ZombieDamageRemote = nil
 local function EnsureZombieRemote()
     if ZombieDamageRemote then return true end
     pcall(function()
-        local zr = ReplicatedStorage:WaitForChild("ZombieRemotes")
-        ZombieDamageRemote = zr:WaitForChild("ZombieDamage", 5)
+        local zr = ReplicatedStorage:WaitForChild("ZombieRemotes", 5)
+        if zr then
+            ZombieDamageRemote = zr:WaitForChild("ZombieDamage", 5)
+        end
     end)
     return ZombieDamageRemote ~= nil
 end
@@ -122,7 +116,7 @@ EnsureZombieRemote()
 local function FireZombieDamage(zombieId, damage)
     if not EnsureZombieRemote() then return end
     local ok = pcall(function() ZombieDamageRemote:FireServer(zombieId, damage) end)
-    if not ok then EnsureZombieRemote() end
+    if not ok then ZombieDamageRemote = nil; EnsureZombieRemote() end
 end
 
 -- ====================== CONFIG STATE ======================
@@ -144,21 +138,21 @@ local Config = {
     NoFog      = SavedConfig:Get("NoFog", false),
     FullBright = SavedConfig:Get("FullBright", false),
 
-    SpeedHack      = SavedConfig:Get("SpeedHack", false),
-    SpeedValue     = SavedConfig:Get("SpeedValue", 24),
-    JumpHack       = SavedConfig:Get("JumpHack", false),
-    JumpValue      = SavedConfig:Get("JumpValue", 100),
-    TPSafeGround   = false,
-    TPSafeSky      = false,
-    TPSafeZoneV2   = false,
-    Fly            = SavedConfig:Get("Fly", false),
-    FlySpeed       = SavedConfig:Get("FlySpeed", 50),
-    Noclip         = SavedConfig:Get("Noclip", false),
+    SpeedHack    = SavedConfig:Get("SpeedHack", false),
+    SpeedValue   = SavedConfig:Get("SpeedValue", 24),
+    JumpHack     = SavedConfig:Get("JumpHack", false),
+    JumpValue    = SavedConfig:Get("JumpValue", 100),
+    TPSafeGround = false,
+    TPSafeSky    = false,
+    TPSafeZoneV2 = false,
+    Fly          = SavedConfig:Get("Fly", false),
+    FlySpeed     = SavedConfig:Get("FlySpeed", 50),
+    Noclip       = SavedConfig:Get("Noclip", false),
 
-    AntiAFK     = SavedConfig:Get("AntiAFK", false),
-    FPSUncap    = SavedConfig:Get("FPSUncap", false),
-    FPSCap      = SavedConfig:Get("FPSCap", 60),
-    FPSBooster  = SavedConfig:Get("FPSBooster", false),
+    AntiAFK    = SavedConfig:Get("AntiAFK", false),
+    FPSUncap   = SavedConfig:Get("FPSUncap", false),
+    FPSCap     = SavedConfig:Get("FPSCap", 60),
+    FPSBooster = SavedConfig:Get("FPSBooster", false),
 }
 
 -- ====================== WEAPON DATA ======================
@@ -189,8 +183,8 @@ local WeaponDamage = {
 
 local GunConfig = nil
 pcall(function()
-    local data = ReplicatedStorage:WaitForChild("Data")
-    GunConfig = require(data:WaitForChild("GunConfig"))
+    local data = ReplicatedStorage:WaitForChild("Data", 5)
+    if data then GunConfig = require(data:WaitForChild("GunConfig")) end
 end)
 
 local function GetToolDamage(tool)
@@ -384,10 +378,10 @@ local function AutoBuyTick()
 end
 
 -- ====================== MOVEMENT ======================
-local SafeGroundCFrame  = nil
-local SafeZoneV2CFrame  = nil
-local SkyOrigPos        = nil
-local SkyPlatform       = nil
+local SafeGroundCFrame = nil
+local SafeZoneV2CFrame = nil
+local SkyOrigPos       = nil
+local SkyPlatform      = nil
 
 local function UpdateSpeed()
     if not Humanoid then return end
@@ -442,17 +436,17 @@ local function UpdateTPSafeSky()
     if not RootPart then return end
     if Config.TPSafeSky then
         if not SkyOrigPos then
-            SkyOrigPos   = RootPart.Position
-            local skyY   = SkyOrigPos.Y + 40
+            SkyOrigPos = RootPart.Position
+            local skyY = SkyOrigPos.Y + 40
             if not SkyPlatform then
-                SkyPlatform             = Instance.new("Part")
-                SkyPlatform.Name        = "SkyPlatform"
-                SkyPlatform.Size        = Vector3.new(50, 2, 50)
-                SkyPlatform.Anchored    = true
+                SkyPlatform              = Instance.new("Part")
+                SkyPlatform.Name         = "SkyPlatform"
+                SkyPlatform.Size         = Vector3.new(50, 2, 50)
+                SkyPlatform.Anchored     = true
                 SkyPlatform.Transparency = 1
-                SkyPlatform.CanCollide  = true
-                SkyPlatform.Position    = Vector3.new(SkyOrigPos.X, skyY - SkyPlatform.Size.Y / 2, SkyOrigPos.Z)
-                SkyPlatform.Parent      = Workspace
+                SkyPlatform.CanCollide   = true
+                SkyPlatform.Position     = Vector3.new(SkyOrigPos.X, skyY - SkyPlatform.Size.Y / 2, SkyOrigPos.Z)
+                SkyPlatform.Parent       = Workspace
             end
             RootPart.CFrame = CFrame.new(SkyOrigPos.X, skyY + (Humanoid.HipHeight or RootPart.Size.Y / 2), SkyOrigPos.Z)
         end
@@ -473,10 +467,10 @@ local function UpdateNoclip()
 end
 
 -- ====================== FLY ======================
-local BodyGyro       = nil
-local BodyVelocity   = nil
-local MobileFlyGui   = nil
-local MobileInput    = { up = false, down = false }
+local BodyGyro     = nil
+local BodyVelocity = nil
+local MobileFlyGui = nil
+local MobileInput  = { up = false, down = false }
 
 local function CreateMobileFlyButtons()
     if MobileFlyGui then return end
@@ -639,9 +633,9 @@ local function ApplyFPSSettings()
     else pcall(function() setfpscap(0) end) end
 end
 
-local FPSBoostActive  = false
-local FPSBoostSaved   = {}
-local FPSBoostConn    = nil
+local FPSBoostActive = false
+local FPSBoostSaved  = {}
+local FPSBoostConn   = nil
 
 local function EnableFPSBooster()
     if FPSBoostActive then return end
@@ -703,11 +697,11 @@ local function DisableFPSBooster()
         if child:IsA("PostProcessEffect") then pcall(function() child.Enabled = true end) end
     end
     if Terrain then
-        pcall(function() Terrain.Decoration        = FPSBoostSaved.TerrainDeco end)
-        pcall(function() Terrain.WaterWaveSize      = FPSBoostSaved.WaterWaveSize end)
-        pcall(function() Terrain.WaterWaveSpeed     = FPSBoostSaved.WaterWaveSpeed end)
-        pcall(function() Terrain.WaterReflectance   = FPSBoostSaved.WaterReflect end)
-        pcall(function() Terrain.WaterTransparency  = FPSBoostSaved.WaterTransp end)
+        pcall(function() Terrain.Decoration       = FPSBoostSaved.TerrainDeco end)
+        pcall(function() Terrain.WaterWaveSize     = FPSBoostSaved.WaterWaveSize end)
+        pcall(function() Terrain.WaterWaveSpeed    = FPSBoostSaved.WaterWaveSpeed end)
+        pcall(function() Terrain.WaterReflectance  = FPSBoostSaved.WaterReflect end)
+        pcall(function() Terrain.WaterTransparency = FPSBoostSaved.WaterTransp end)
     end
     pcall(function() settings().rendering.QualityLevel = FPSBoostSaved.QualityLevel end)
     Notify("FPS Booster", "Disabled - Settings restored", 2)
@@ -771,8 +765,8 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 end)
 
 -- ====================== HEARTBEAT ======================
-local ESPTimer    = 0
-local HeartbeatConn = RunService.Heartbeat:Connect(function()
+local ESPTimer = 0
+RunService.Heartbeat:Connect(function()
     KillAuraV1()
     AutoBuyTick()
     TryAutoEquip()
@@ -793,8 +787,6 @@ end)
 -- ========================================================
 -- ====================== WINDOW ==========================
 -- ========================================================
-local Players = game:GetService("Players")
-
 local FreeVersion    = "Free Version"
 local PremiumVersion = "Premium Version"
 local ExtraVersion   = "Free Version"
@@ -815,55 +807,55 @@ local function checkVersion(playerName)
     return FreeVersion
 end
 
-local player    = Players.LocalPlayer
-local userversion = checkVersion(player.Name)
+local userversion = checkVersion(LocalPlayer.Name)
 
 -- ====================== WINDOW ======================
 local Window = WindUI:CreateWindow({
-    Title = "DYHUB",
+    Title   = "DYHUB",
     IconThemed = true,
-    Icon = "rbxassetid://104487529937663",
-    Author = "Survive Zombie Arena | " .. userversion,
-    Folder = "DYHUB_SZA",
-    Size = UDim2.fromOffset(550, 380),
+    Icon    = "rbxassetid://104487529937663",
+    Author  = "Survive Zombie Arena | " .. userversion,
+    Folder  = "DYHUB_SZA",
+    Size    = UDim2.fromOffset(550, 380),
     Transparent = true,
-    Theme = "Dark",
+    Theme   = "Dark",
     BackgroundImageTransparency = 0.8,
     HasOutline = false,
     HideSearchBar = true,
     ScrollBarEnabled = true,
-    User = { Enabled = true, Anonymous = false },
+    User    = { Enabled = true, Anonymous = false },
 })
 
 Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") })
 
 Window:EditOpenButton({
-    Title = "DYHUB - Open",
-    Icon = "monitor",
-    CornerRadius = UDim.new(0, 6),
+    Title         = "DYHUB - Open",
+    Icon          = "monitor",
+    CornerRadius  = UDim.new(0, 6),
     StrokeThickness = 2,
-    Color = ColorSequence.new(Color3.fromRGB(30, 30, 30), Color3.fromRGB(255, 255, 255)),
-    Draggable = true
+    Color         = ColorSequence.new(Color3.fromRGB(30, 30, 30), Color3.fromRGB(255, 255, 255)),
+    Draggable     = true
 })
+
 -- ====================== TABS ======================
-local Info     = Window:Tab({ Title = "Information", Icon = "info" })
+local Info        = Window:Tab({ Title = "Information", Icon = "info" })
 local _D1         = Window:Divider()
 local TabMain     = Window:Tab({ Title = "Main",     Icon = "rocket" })
 local TabMovement = Window:Tab({ Title = "Movement", Icon = "footprints" })
 local TabVisual   = Window:Tab({ Title = "Visual",   Icon = "eye" })
-local TabConfig   = Window:Tab({ Title = "Setting",   Icon = "settings" })
+local TabConfig   = Window:Tab({ Title = "Setting",  Icon = "settings" })
 
 Window:SelectTab(1)
 
 -- ====================== INFORMATION TAB ======================
-
 if not ui then ui = {} end
 if not ui.Creator then ui.Creator = {} end
+
 Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/24/2026 | CL: " .. ver,
-    Desc  = "• [ New ] Custom Config System\n• [ New ] Auto Save Config\n• [ New ] Kill Aura V1 & V2\n• [ New ] FPS Booster\n• [ New ] Fly System\n• [ New ] Noclip\n• [ New ] Zombie & Player ESP\n• [ New ] TP Safe Ground / Sky / Zone V2\n• [ New ] Auto Buy Weapon / Health / Gear\n• [ New ] Full Bright & No Fog\n• [ New ] Anti AFK\n• [ Added ] Gear Type Selection\n• [ Fixed ] Anti AFK state on load\n• [ Improved ] Settings restored on rejoin",
+    Desc  = "• [ New ] Custom Config System\n• [ New ] Auto Save Config\n• [ New ] Kill Aura V1 & V2\n• [ New ] FPS Booster\n• [ New ] Fly System\n• [ New ] Noclip\n• [ New ] Zombie & Player ESP\n• [ New ] TP Safe Ground / Sky / Zone V2\n• [ New ] Auto Buy Weapon / Health / Gear\n• [ New ] Full Bright & No Fog\n• [ New ] Anti AFK\n• [ Added ] Gear Type Selection\n• [ Fixed ] Players service declared correctly\n• [ Fixed ] ZombieRemotes timeout guard\n• [ Improved ] Settings restored on rejoin",
 })
 Info:Divider()
 
@@ -1357,7 +1349,7 @@ TabConfig:Button({
 
 -- ====================== SKIP VOTE LOOP ======================
 local SkipVoteTimer = 0
-local SkipVoteHeartbeat = RunService.Heartbeat:Connect(function()
+RunService.Heartbeat:Connect(function()
     if Config.AutoSkipWave and os.clock() - SkipVoteTimer > 5 then
         SkipVoteTimer = os.clock()
         pcall(function() SkipVote:FireServer(true) end)
@@ -1373,4 +1365,4 @@ if Config.FPSBooster then task.wait(1); EnableFPSBooster() end
 RestartAutoSave()
 
 print("[DYHUB] Version " .. version .. " | " .. ver .. " loaded successfully!")
-print("[DYHUB] Config system active | Auto saving every 15 seconds")
+print("[DYHUB] Config system active | Auto saving every " .. AutoSaveDelay .. " seconds")
