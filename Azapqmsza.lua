@@ -1,30 +1,26 @@
+-- v085
+-- =========================
+local version = "Rework"
+local ver = "v011.4"
+-- =========================
+
 -- ====================== LOAD UI ======================
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 -- ====================== GameLoad ======================
 repeat task.wait() until game:IsLoaded()
 
--- ====================== LoadingGui ======================
-local Players = game:GetService("Players")
-local p = Players.LocalPlayer
-local pg = p:WaitForChild("PlayerGui")
-
-local function waitLoadingGone()
-    local gui = pg:FindFirstChild("LoadingGui")
-    if gui then
-        WindUI:Notify({ Title = "SyzenHub", Content = "Game is loading, Please wait.", Duration = 3, Icon = "download" })
-        gui.AncestryChanged:Wait()
-    end
+if setfpscap then
+    setfpscap(1000000)
+    WindUI:Notify({ Title = "Service", Content = "FPS Unlocked! | " .. ver, Duration = 3, Icon = "cpu" })
+    warn("FPS Unlocked!")
+else
+    WindUI:Notify({ Title = "Not Working", Content = "Your exploit does not support setfpscap.", Duration = 3, Icon = "ban" })
 end
-
-waitLoadingGone()
-
-WindUI:Notify({ Title = "SyzenHub", Content = "Load complete, Starting...", Duration = 3, Icon = "shield-check" })
-task.wait(2)
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
-local ConfigFolder = "SyzenHub_SurviveZombieArena"
+local ConfigFolder = "DYHUB_SZA"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
@@ -49,7 +45,7 @@ function CustomConfig:Save()
     local success, err = pcall(function()
         writefile(self.ConfigPath, HttpService:JSONEncode(self.ConfigData))
     end)
-    if success then warn("[SyzenHub] Config saved!") else warn("[SyzenHub] Save failed:", err) end
+    if success then warn("[DYHUB] Config saved!") else warn("[DYHUB] Save failed:", err) end
 end
 
 function CustomConfig:Load()
@@ -59,13 +55,13 @@ function CustomConfig:Load()
         end)
         if success and type(result) == "table" then
             self.ConfigData = result
-            print("[SyzenHub] Config loaded!")
+            print("[DYHUB] Config loaded!")
         else
-            warn("[SyzenHub] Failed to load config, using defaults")
+            warn("[DYHUB] Failed to load config, using defaults")
             self.ConfigData = {}
         end
     else
-        print("[SyzenHub] No config found, creating new one")
+        print("[DYHUB] No config found, creating new one")
         self.ConfigData = {}
     end
 end
@@ -797,12 +793,38 @@ end)
 -- ========================================================
 -- ====================== WINDOW ==========================
 -- ========================================================
+local Players = game:GetService("Players")
+
+local FreeVersion    = "Free Version"
+local PremiumVersion = "Premium Version"
+local ExtraVersion   = "Free Version"
+
+local function getData(url)
+    local success, response = pcall(function() return game:HttpGet(url) end)
+    if not success then return nil end
+    local func = loadstring(response)
+    if func then return func() end
+    return nil
+end
+
+local function checkVersion(playerName)
+    local extraData = getData("https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/STBBList.lua")
+    if extraData and extraData[playerName] then return ExtraVersion end
+    local premiumData = getData("https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/listpremium.lua")
+    if premiumData and premiumData[playerName] then return PremiumVersion end
+    return FreeVersion
+end
+
+local player    = Players.LocalPlayer
+local userversion = checkVersion(player.Name)
+
+-- ====================== WINDOW ======================
 local Window = WindUI:CreateWindow({
-    Title = "SyzenHub",
+    Title = "DYHUB",
     IconThemed = true,
-    Icon = "rbxassetid://83889336114659",
-    Author = "Survive Zombie Arena v1.3",
-    Folder = "SyzenHub",
+    Icon = "rbxassetid://104487529937663",
+    Author = "Survive Zombie Arena | " .. userversion,
+    Folder = "DYHUB_SZA",
     Size = UDim2.fromOffset(550, 380),
     Transparent = true,
     Theme = "Dark",
@@ -813,22 +835,119 @@ local Window = WindUI:CreateWindow({
     User = { Enabled = true, Anonymous = false },
 })
 
+Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") })
+
 Window:EditOpenButton({
-    Title = "SyzenHub - Open",
+    Title = "DYHUB - Open",
     Icon = "monitor",
     CornerRadius = UDim.new(0, 6),
     StrokeThickness = 2,
-    Color = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255)),
+    Color = ColorSequence.new(Color3.fromRGB(30, 30, 30), Color3.fromRGB(255, 255, 255)),
     Draggable = true
 })
-
 -- ====================== TABS ======================
-local TabMain     = Window:Tab({ Title = "Main",     Icon = "zap" })
+local Info     = Window:Tab({ Title = "Information", Icon = "info" })
+local _D1         = Window:Divider()
+local TabMain     = Window:Tab({ Title = "Main",     Icon = "rocket" })
 local TabMovement = Window:Tab({ Title = "Movement", Icon = "footprints" })
 local TabVisual   = Window:Tab({ Title = "Visual",   Icon = "eye" })
-local TabConfig   = Window:Tab({ Title = "Config",   Icon = "settings" })
+local TabConfig   = Window:Tab({ Title = "Setting",   Icon = "settings" })
 
 Window:SelectTab(1)
+
+-- ====================== INFORMATION TAB ======================
+
+if not ui then ui = {} end
+if not ui.Creator then ui.Creator = {} end
+Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
+Info:Divider()
+Info:Paragraph({
+    Title = "Update: 05/24/2026 | CL: " .. ver,
+    Desc  = "• [ New ] Custom Config System\n• [ New ] Auto Save Config\n• [ New ] Kill Aura V1 & V2\n• [ New ] FPS Booster\n• [ New ] Fly System\n• [ New ] Noclip\n• [ New ] Zombie & Player ESP\n• [ New ] TP Safe Ground / Sky / Zone V2\n• [ New ] Auto Buy Weapon / Health / Gear\n• [ New ] Full Bright & No Fog\n• [ New ] Anti AFK\n• [ Added ] Gear Type Selection\n• [ Fixed ] Anti AFK state on load\n• [ Improved ] Settings restored on rejoin",
+})
+Info:Divider()
+
+ui.Creator.Request = function(requestData)
+    local success, result = pcall(function()
+        if HttpService.RequestAsync then
+            local response = HttpService:RequestAsync({
+                Url = requestData.Url, Method = requestData.Method or "GET", Headers = requestData.Headers or {}
+            })
+            return { Body = response.Body, StatusCode = response.StatusCode, Success = response.Success }
+        else
+            local body = HttpService:GetAsync(requestData.Url)
+            return { Body = body, StatusCode = 200, Success = true }
+        end
+    end)
+    if success then return result else error("HTTP Request failed: "..tostring(result)) end
+end
+
+local InviteCode = "jWNDPNMmyB"
+local DiscordAPI = "https://discord.com/api/v10/invites/"..InviteCode.."?with_counts=true&with_expiration=true"
+
+local function LoadDiscordInfo()
+    local success, result = pcall(function()
+        return HttpService:JSONDecode(ui.Creator.Request({
+            Url = DiscordAPI, Method = "GET",
+            Headers = { ["User-Agent"] = "RobloxBot/1.0", ["Accept"] = "application/json" }
+        }).Body)
+    end)
+    if success and result and result.guild then
+        local DiscordInfo = Info:Paragraph({
+            Title = result.guild.name,
+            Desc  = ' <font color="#52525b">●</font> Member Count : '..tostring(result.approximate_member_count)..
+                    '\n <font color="#16a34a">●</font> Online Count : '..tostring(result.approximate_presence_count),
+            Image = "https://cdn.discordapp.com/icons/"..result.guild.id.."/"..result.guild.icon..".png?size=1024",
+            ImageSize = 42,
+        })
+        Info:Button({
+            Title = "Update Info",
+            Callback = function()
+                local ok, r = pcall(function()
+                    return HttpService:JSONDecode(ui.Creator.Request({ Url = DiscordAPI, Method = "GET" }).Body)
+                end)
+                if ok and r and r.guild then
+                    DiscordInfo:SetDesc(
+                        ' <font color="#52525b">●</font> Member Count : '..tostring(r.approximate_member_count)..
+                        '\n <font color="#16a34a">●</font> Online Count : '..tostring(r.approximate_presence_count)
+                    )
+                    WindUI:Notify({ Title = "Discord Info Updated", Content = "Refreshed!", Duration = 2, Icon = "refresh-cw" })
+                else
+                    WindUI:Notify({ Title = "Update Failed", Content = "Could not refresh Discord info", Duration = 3, Icon = "alert-triangle" })
+                end
+            end
+        })
+        Info:Button({
+            Title = "Copy Discord Invite",
+            Callback = function()
+                setclipboard("https://discord.gg/" .. InviteCode)
+                WindUI:Notify({ Title = "Copied!", Content = "Discord invite copied to clipboard", Duration = 2, Icon = "clipboard-check" })
+            end
+        })
+    else
+        Info:Paragraph({
+            Title = "Error fetching Discord Info", Desc = "Unable to load Discord information.",
+            Image = "triangle-alert", ImageSize = 26, Color = "Red",
+        })
+    end
+end
+
+LoadDiscordInfo()
+
+Info:Divider()
+Info:Section({ Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17 })
+Info:Divider()
+Info:Paragraph({ Title = "Main Owner", Desc = "@dyumraisgoodguy#8888", Image = "rbxassetid://119789418015420", ImageSize = 30 })
+Info:Paragraph({
+    Title = "Social", Desc = "Copy link social media for follow!",
+    Image = "rbxassetid://104487529937663", ImageSize = 30,
+    Buttons = {{ Icon="copy", Title="Copy Link", Callback=function() setclipboard("https://guns.lol/DYHUB") end }}
+})
+Info:Paragraph({
+    Title = "Discord", Desc = "Join our discord for more scripts!",
+    Image = "rbxassetid://104487529937663", ImageSize = 30,
+    Buttons = {{ Icon="copy", Title="Copy Link", Callback=function() setclipboard("https://discord.gg/jWNDPNMmyB") end }}
+})
 
 -- ====================== MAIN TAB ======================
 TabMain:Section({ Title = "Kill Aura", Icon = "crosshair" })
@@ -1193,7 +1312,7 @@ TabConfig:Input({
             SavedConfig:Set("AutoSaveDelay", num); SavedConfig:Save()
             RestartAutoSave()
         else
-            warn("[SyzenHub] Invalid delay value!")
+            warn("[DYHUB] Invalid delay value!")
         end
     end,
 })
@@ -1253,5 +1372,5 @@ if Config.FPSBooster then task.wait(1); EnableFPSBooster() end
 
 RestartAutoSave()
 
-print("[SyzenHub] Survive Zombie Arena v1.3 | WindUI loaded!")
-print("[SyzenHub] Config system active | Auto saving every " .. tostring(AutoSaveDelay) .. " seconds")
+print("[DYHUB] Version " .. version .. " | " .. ver .. " loaded successfully!")
+print("[DYHUB] Config system active | Auto saving every 15 seconds")
