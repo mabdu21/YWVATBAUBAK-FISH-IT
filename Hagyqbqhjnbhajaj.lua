@@ -1,7 +1,8 @@
+
 -- Powered by dyumra | v345 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v013.81"
+local ver     = "v014.00"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -29,19 +30,20 @@ local HttpService       = game:GetService("HttpService")
 local StarterGui        = game:GetService("StarterGui")
 local TeleportService   = game:GetService("TeleportService")
 local VirtualUser       = game:GetService("VirtualUser")
+local VIM               = game:GetService("VirtualInputManager")
 
-local LocalPlayer      = Players.LocalPlayer
-local PlayerGui        = LocalPlayer:WaitForChild("PlayerGui")
-local Camera           = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
+local Camera      = Workspace.CurrentCamera
 
--- ====================== CHARACTER CACHE (รองรับ Respawn) ======================
-local Character         = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local Humanoid          = Character:WaitForChild("Humanoid")
-local HumanoidRootPart  = Character:WaitForChild("HumanoidRootPart")
+-- ====================== CHARACTER CACHE (?????? Respawn) ======================
+local Character        = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid         = Character:WaitForChild("Humanoid")
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 
 LocalPlayer.CharacterAdded:Connect(function(char)
-    Character      = char
-    Humanoid       = char:WaitForChild("Humanoid")
+    Character        = char
+    Humanoid         = char:WaitForChild("Humanoid")
     HumanoidRootPart = char:WaitForChild("HumanoidRootPart")
 end)
 
@@ -73,34 +75,29 @@ local Window = WindUI:CreateWindow({
     Theme      = "Dark",
     BackgroundImageTransparency = 0.8,
     HasOutline = false,
-    HideSearchBar  = true,
+    HideSearchBar    = true,
     ScrollBarEnabled = true,
     User = { Enabled = true, Anonymous = false },
 })
 
 Window:SetToggleKey(Enum.KeyCode.K)
-
-pcall(function()
-    Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") })
-end)
-
+pcall(function() Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") }) end)
 Window:EditOpenButton({
-    Title          = "DYHUB - Open",
-    Icon           = "monitor",
-    CornerRadius   = UDim.new(0, 6),
+    Title           = "DYHUB - Open",
+    Icon            = "monitor",
+    CornerRadius    = UDim.new(0, 6),
     StrokeThickness = 2,
-    Color          = ColorSequence.new(Color3.fromRGB(30, 30, 30), Color3.fromRGB(255, 255, 255)),
-    Draggable      = true,
+    Color           = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255)),
+    Draggable       = true,
 })
 
 -- ====================== CONFIG SYSTEM ======================
 local ConfigFolder = "DYHUB_VD"
-
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
 
 function CustomConfig.new()
-    local self = setmetatable({}, CustomConfig)
+    local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
     self.ConfigPath = ConfigFolder .. "/config.json"
     self._autoSaveThread = nil
@@ -109,24 +106,17 @@ function CustomConfig.new()
     self:Load()
     return self
 end
-
-function CustomConfig:Set(key, value)
-    self.ConfigData[key] = value
-end
-
+function CustomConfig:Set(key, value) self.ConfigData[key] = value end
 function CustomConfig:Get(key, default)
     local v = self.ConfigData[key]
-    if v ~= nil then return v end
-    return default
+    return v ~= nil and v or default
 end
-
 function CustomConfig:Save()
     local ok, err = pcall(function()
         writefile(self.ConfigPath, HttpService:JSONEncode(self.ConfigData))
     end)
     if not ok then warn("[DYHUB] Save failed:", err) end
 end
-
 function CustomConfig:Load()
     if isfile(self.ConfigPath) then
         local ok, result = pcall(function()
@@ -144,7 +134,6 @@ function CustomConfig:Load()
         self.ConfigData = {}
     end
 end
-
 function CustomConfig:AutoSave(interval)
     if self._autoSaveThread then
         task.cancel(self._autoSaveThread)
@@ -162,7 +151,6 @@ function CustomConfig:AutoSave(interval)
 end
 
 local Config = CustomConfig.new()
-
 if Config:Get("AutoSaveEnabled", true) then
     Config:AutoSave(Config:Get("AutoSaveDelay", 15))
 end
@@ -183,260 +171,336 @@ local Main3       = Window:Tab({ Title = "Settings",    Icon = "settings" })
 Window:SelectTab(1)
 
 -- =====================================================================================
--- auto parry
+--  AUTO PARRY SYSTEM v3  |  DYHUB  |  dyumra
+--  Architecture:
+--    • Heartbeat-based continuous threat scan
+--    • AnimationPlayed ? immediate hitframe-timed coroutine
+--    • Connection pool + auto-cleanup ????? char ??? / respawn
+--    • Btn cache ??? 0.5s
+--    • Single cooldown gate ??????? double-fire
+--    • PC = Right-click | Mobile = ButtonSystem:Click()
 -- =====================================================================================
 
--- =====================================================================================
---  AUTO PARRY SYSTEM v2  |  DYHUB  |  dyumra
---  Logic: hook AnimationPlayed → detect hitframe window → fire parry at exact moment
---  ไม่ spam, ไม่ early, ไม่ late — parry ตรง hitframe
--- =====================================================================================
+_G.AutoParry      = Config:Get("autoparry",      false)
+_G.AutoParryMode  = Config:Get("autoparrymode",  "Smart")
+_G.AutoParryRange = Config:Get("autoparryrange", 15)
 
-local Players           = game:GetService("Players")
-local RunService        = game:GetService("RunService")
-local Vim               = game:GetService("VirtualInputManager")
-local LP                = Players.LocalPlayer
+-- -- Constants ---------------------------------------------------------------------
+local PARRY_CD       = 0.25
+local PARRY_IMAGE    = "rbxassetid://101288986880844"
+local SCAN_INTERVAL  = 1/30
 
--- ── State ──────────────────────────────────────────────────────────────────────────
-_G.AutoParry        = Config:Get("autoparry",        false)
-_G.AutoParryMode    = Config:Get("autoparrymode",    {"Fast"})   -- "Fast" | "Smart" | "Predict"
-_G.AutoParryRange   = Config:Get("autoparryrange",   15)        -- studs
+-- -- ButtonSystem (Mobile) ----------------------------------------------------------
+local ButtonSystem = {}
+ButtonSystem.Path = 'game:GetService("Players").LocalPlayer.PlayerGui["Survivor-mob"].Controls["Gui-mob"]'
 
-local LastParry     = 0
-local PARRY_CD      = 0.35   -- cooldown ขั้นต่ำระหว่าง parry (วิ) — ป้องกัน spam
-local Hooked        = {}     -- [char] = true
+function ButtonSystem:GetButton(path)
+    local ok, result = pcall(function()
+        return loadstring("return "..(path or self.Path))()
+    end)
+    if ok and result then return result end
+end
 
--- ── GUI Path ───────────────────────────────────────────────────────────────────────
-local PARRY_IMAGE   = "rbxassetid://101288986880844"
+function ButtonSystem:Click(btn)
+    if not btn then return false end
+    if btn:IsA("ImageButton") or btn:IsA("TextButton") then
+        pcall(function()
+            if firesignal then
+                firesignal(btn.MouseButton1Click)
+                firesignal(btn.Activated)
+            else
+                btn:Activate()
+            end
+        end)
+        return true
+    end
+    return false
+end
 
-local function getParryBtn()
-    local pg = LP:FindFirstChild("PlayerGui");     if not pg then return end
-    local s  = pg:FindFirstChild("Survivor-mob");  if not s  then return end
-    local c  = s:FindFirstChild("Controls");       if not c  then return end
+function ButtonSystem:ClickFromPath(path)
+    local btn = self:GetButton(path)
+    return self:Click(btn)
+end
+
+-- -- Platform detection -------------------------------------------------------------
+local isMobile = (function()
+    -- ????? VIM = PC ???????, ?? VIM = PC-exploit ???? mobile executor
+    -- ???? UserInputService.TouchEnabled ???? primary check
+    local ok, UIS = pcall(function()
+        return game:GetService("UserInputService")
+    end)
+    if ok and UIS then
+        return UIS.TouchEnabled
+    end
+    return false
+end)()
+
+-- -- State -------------------------------------------------------------------------
+local AP = {
+    lastParry   = 0,
+    hookedChars = {},
+    btnCache    = nil,
+    btnCacheAt  = 0,
+    BTN_TTL     = 0.5,
+    pending     = false,
+    pendingGen  = 0,
+}
+
+-- -- Hitframe timing ---------------------------------------------------------------
+local ANIM_HF = {
+    -- swing fast
+    ["rbxassetid://139369275981139"] = { delay=0.18, window=0.26 },
+    ["rbxassetid://110355011987939"] = { delay=0.18, window=0.26 },
+    ["rbxassetid://135002183282873"] = { delay=0.19, window=0.26 },
+    ["rbxassetid://121216847022485"] = { delay=0.18, window=0.26 },
+    -- swing normal
+    ["rbxassetid://105374834496520"] = { delay=0.22, window=0.30 },
+    ["rbxassetid://111920872708571"] = { delay=0.22, window=0.30 },
+    ["rbxassetid://118907603246885"] = { delay=0.21, window=0.28 },
+    ["rbxassetid://78432063483146"]  = { delay=0.20, window=0.28 },
+    -- lunge / dash
+    ["rbxassetid://113255068724446"] = { delay=0.12, window=0.18 },
+    ["rbxassetid://74968262036854"]  = { delay=0.12, window=0.18 },
+    ["rbxassetid://129784271201071"] = { delay=0.15, window=0.21 },
+    -- heavy / slam
+    ["rbxassetid://132817836308238"] = { delay=0.28, window=0.36 },
+    ["rbxassetid://112166042383605"] = { delay=0.26, window=0.33 },
+    ["rbxassetid://122812055447896"] = { delay=0.26, window=0.33 },
+    ["rbxassetid://117042998468241"] = { delay=0.28, window=0.36 },
+    ["rbxassetid://133963973694098"] = { delay=0.28, window=0.36 },
+}
+
+-- -- Cached button fetch (Mobile only) ---------------------------------------------
+local function _fetchParryBtn()
+    local pg = LocalPlayer:FindFirstChild("PlayerGui");    if not pg then return end
+    local s  = pg:FindFirstChild("Survivor-mob");          if not s  then return end
+    local c  = s:FindFirstChild("Controls");               if not c  then return end
     return c:FindFirstChild("Gui-mob")
 end
 
-local function isParryReady()
-    local btn = getParryBtn()
-    return btn and tostring(btn.Image) == PARRY_IMAGE
-end
-
--- ── Multi-method click (รองรับทุก exploit) ────────────────────────────────────────
-local function fireParryBtn()
-    local btn = getParryBtn()
-    if not btn then return end
-
-    -- Method 1: firesignal
-    pcall(function()
-        firesignal(btn.MouseButton1Click)
-        firesignal(btn.Activated)
-    end)
-
-    -- Method 2: Activate()
-    pcall(function() btn:Activate() end)
-
-    -- Method 3: VirtualInputManager (mobile-style tap)
-    pcall(function()
-        local p = btn.AbsolutePosition
-        local sz = btn.AbsoluteSize
-        local x  = p.X + sz.X * 0.5
-        local y  = p.Y + sz.Y * 0.5
-        Vim:SendMouseButtonEvent(x, y, 0, true,  game, 1)
-        task.wait()
-        Vim:SendMouseButtonEvent(x, y, 0, false, game, 1)
-    end)
-end
-
--- ── Distance + Direction check ────────────────────────────────────────────────────
-local function getThreatLevel(killerChar)
-    local my = LP.Character
-    if not my then return 0 end
-
-    local myHRP  = my:FindFirstChild("HumanoidRootPart")
-    local ksHRP  = killerChar:FindFirstChild("HumanoidRootPart")
-    if not myHRP or not ksHRP then return 0 end
-
-    local vel     = ksHRP.AssemblyLinearVelocity
-    local speed   = vel.Magnitude
-
-    -- Predict killer position in next ~2 frames
-    local frameDt   = 0.1
-    local predicted = ksHRP.Position + vel * frameDt
-    local dist      = (myHRP.Position - predicted).Magnitude
-
-    -- ถ้าไกลเกินกำหนด → ไม่ทำ
-    if dist > _G.AutoParryRange then return 0 end
-
-    -- หัน killer มาหาเรา? (dot > 0 = หัน)
-    local toMe = (myHRP.Position - ksHRP.Position).Unit
-    local dot  = ksHRP.CFrame.LookVector:Dot(toMe)
-
-    -- คำนวณ threat 0–1
-    local distScore  = 1 - math.clamp(dist / _G.AutoParryRange, 0, 1)
-    local dotScore   = math.clamp((dot + 1) * 0.5, 0, 1)         -- remap -1…1 → 0…1
-    local speedScore = math.clamp(speed / 25, 0, 1)
-
-    return (distScore * 0.5) + (dotScore * 0.35) + (speedScore * 0.15)
-end
-
--- ── Hitframe timing table ─────────────────────────────────────────────────────────
---  เวลาที่ควร parry หลัง animation เริ่ม (วิ)
---  ปรับตาม animation speed / game ได้
---  format: [animId] = { delay=วิ, window=วิ_ที่_parry_ยังทัน }
-local ANIM_HITFRAME = {
-    -- ตี swing 1 (เร็ว)
-    ["rbxassetid://139369275981139"] = { delay=0.20, window=0.25 },
-    ["rbxassetid://110355011987939"] = { delay=0.20, window=0.25 },
-    ["rbxassetid://135002183282873"] = { delay=0.22, window=0.25 },
-    ["rbxassetid://121216847022485"] = { delay=0.20, window=0.25 },
-    -- ตี swing 2 (ช้าลงนิด)
-    ["rbxassetid://105374834496520"] = { delay=0.25, window=0.30 },
-    ["rbxassetid://111920872708571"] = { delay=0.25, window=0.30 },
-    ["rbxassetid://118907603246885"] = { delay=0.23, window=0.28 },
-    ["rbxassetid://78432063483146"]  = { delay=0.22, window=0.28 },
-    -- ตี lunge / dash (เร็วมาก)
-    ["rbxassetid://113255068724446"] = { delay=0.15, window=0.20 },
-    ["rbxassetid://74968262036854"]  = { delay=0.15, window=0.20 },
-    ["rbxassetid://129784271201071"] = { delay=0.18, window=0.22 },
-    -- heavy / slam
-    ["rbxassetid://132817836308238"] = { delay=0.30, window=0.35 },
-    ["rbxassetid://112166042383605"] = { delay=0.28, window=0.32 },
-    ["rbxassetid://122812055447896"] = { delay=0.28, window=0.32 },
-    ["rbxassetid://117042998468241"] = { delay=0.30, window=0.35 },
-    ["rbxassetid://133963973694098"] = { delay=0.30, window=0.35 },
-}
-
--- ── Mode: Fast — parry ทันทีที่ detect (no delay, aggressive) ─────────────────────
-local function doParryFast(killerChar)
-    if not isParryReady() then return end
-    local threat = getThreatLevel(killerChar)
-    if threat <= 0 then return end   -- ไม่ได้อยู่ในระยะ
+local function getParryBtn()
+    if not isMobile then return nil end  -- PC ?????????? GUI button
     local now = os.clock()
-    if now - LastParry < PARRY_CD then return end
-    LastParry = now
-    fireParryBtn()
+    if AP.btnCache and AP.btnCache.Parent and (now - AP.btnCacheAt) < AP.BTN_TTL then
+        return AP.btnCache
+    end
+    AP.btnCache   = _fetchParryBtn()
+    AP.btnCacheAt = now
+    return AP.btnCache
 end
 
--- ── Mode: Smart — delay ตาม hitframe table ────────────────────────────────────────
-local function doParrySmart(killerChar, animId, track)
-    local info = ANIM_HITFRAME[animId] or { delay=0.20, window=0.25 }
-    local startTime = os.clock()
-
-    task.spawn(function()
-        -- รอถึง hitframe
-        task.wait(info.delay)
-
-        -- ยังอยู่ใน window ไหม?
-        local elapsed = os.clock() - startTime
-        if elapsed > info.window then return end
-
-        -- ยัง enabled ไหม?
-        if not _G.AutoParry then return end
-
-        -- ตรวจ threat อีกครั้ง (killer อาจวิ่งออกไปแล้ว)
-        local threat = getThreatLevel(killerChar)
-        if threat <= 0 then return end
-
-        -- ยัง cooldown ไหม?
-        local now = os.clock()
-        if now - LastParry < PARRY_CD then return end
-
-        if not isParryReady() then return end
-        LastParry = now
-        fireParryBtn()
-    end)
-end
-
--- ── Mode: Predict — ใช้ animation speed เพื่อ scale delay ───────────────────────
-local function doParryPredict(killerChar, animId, track)
-    local info = ANIM_HITFRAME[animId] or { delay=0.20, window=0.25 }
-
-    -- ดึง animation speed จาก track
-    local speed = 1
-    pcall(function() speed = math.max(track.Speed, 0.1) end)
-
-    -- hitframe จริง = delay / speed (ยิ่ง speed สูง = ตีเร็ว = delay สั้น)
-    local realDelay  = info.delay  / speed
-    local realWindow = info.window / speed
-
-    local startTime = os.clock()
-
-    task.spawn(function()
-        task.wait(realDelay)
-
-        local elapsed = os.clock() - startTime
-        if elapsed > realWindow then return end
-        if not _G.AutoParry then return end
-
-        local threat = getThreatLevel(killerChar)
-        if threat <= 0 then return end
-
-        local now = os.clock()
-        if now - LastParry < PARRY_CD then return end
-
-        if not isParryReady() then return end
-        LastParry = now
-        fireParryBtn()
-    end)
-end
-
--- ── Dispatch ──────────────────────────────────────────────────────────────────────
-local function onAttackAnim(killerChar, animId, track)
-    if not _G.AutoParry then return end
-    local mode = _G.AutoParryMode or "Smart"
-    if mode == "Fast" then
-        doParryFast(killerChar)
-    elseif mode == "Predict" then
-        doParryPredict(killerChar, animId, track)
+local function isParryReady()
+    if isMobile then
+        local btn = getParryBtn()
+        return btn and tostring(btn.Image) == PARRY_IMAGE
     else
-        doParrySmart(killerChar, animId, track)
+        -- PC: ????? GUI — ?????? ready ???? (???? cooldown ?????????)
+        return true
     end
 end
 
--- ── Hook character ────────────────────────────────────────────────────────────────
-local function hookChar(char)
-    if Hooked[char] then return end
-    Hooked[char] = true
+-- -- Multi-method fire --------------------------------------------------------------
+-- PC  ? Right-click ???? VIM (mouse button 1 = right)
+-- Mobile ? ButtonSystem:Click() ??? GUI button
+local function fireParry()
+    if isMobile then
+        -- === MOBILE: ??? ButtonSystem ===
+        local btn = getParryBtn()
+        if btn then
+            ButtonSystem:Click(btn)
+        else
+            -- fallback: ClickFromPath ??? cache miss
+            ButtonSystem:ClickFromPath(nil)
+        end
+    else
+        -- === PC: Right-click ???? VIM ===
+        pcall(function()
+            -- VIM mouse button index: 0=left, 1=right
+            VIM:SendMouseButtonEvent(0, 0, 1, true,  game, 1)
+            VIM:SendMouseButtonEvent(0, 0, 1, false, game, 1)
+        end)
+    end
+end
 
-    local hum = char:FindFirstChildOfClass("Humanoid")
+-- -- Threat calculator -------------------------------------------------------------
+local function getThreat(killerChar)
+    local my = LocalPlayer.Character
+    if not my then return 0 end
+    local myHRP = my:FindFirstChild("HumanoidRootPart")
+    local ksHRP = killerChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP or not ksHRP then return 0 end
+
+    local vel   = ksHRP.AssemblyLinearVelocity
+    local spd   = vel.Magnitude
+    local pred  = ksHRP.Position + vel * 0.083
+    local dist  = (myHRP.Position - pred).Magnitude
+    if dist > _G.AutoParryRange then return 0 end
+
+    local toMe     = (myHRP.Position - ksHRP.Position)
+    local toMeUnit = toMe.Magnitude > 0 and toMe.Unit or Vector3.zero
+    local dot      = ksHRP.CFrame.LookVector:Dot(toMeUnit)
+
+    local dScore = 1 - math.clamp(dist / _G.AutoParryRange, 0, 1)
+    local fScore = math.clamp((dot + 1) * 0.5, 0, 1)
+    local sScore = math.clamp(spd / 28, 0, 1)
+    return dScore * 0.50 + fScore * 0.35 + sScore * 0.15
+end
+
+-- -- Gate: ??????? fire ??? --------------------------------------------------------
+local function tryFire(killerChar)
+    if not _G.AutoParry then return end
+    if not isParryReady() then return end
+    if getThreat(killerChar) <= 0 then return end
+    local now = os.clock()
+    if now - AP.lastParry < PARRY_CD then return end
+    AP.lastParry = now
+    fireParry()
+end
+
+-- -- Parry modes -------------------------------------------------------------------
+local function doFast(killerChar)
+    tryFire(killerChar)
+end
+
+local function doSmart(killerChar, animId)
+    local info = ANIM_HF[animId] or { delay=0.19, window=0.26 }
+    local gen  = AP.pendingGen + 1
+    AP.pendingGen = gen
+    AP.pending = true
+    task.delay(info.delay, function()
+        AP.pending = false
+        if AP.pendingGen ~= gen then return end
+        if os.clock() - (AP.lastParry + info.delay) > (info.window - info.delay) then return end
+        tryFire(killerChar)
+    end)
+end
+
+local function doPredict(killerChar, animId, track)
+    local info  = ANIM_HF[animId] or { delay=0.19, window=0.26 }
+    local speed = 1
+    pcall(function() speed = math.max(track.Speed, 0.1) end)
+    local realDelay  = info.delay  / speed
+    local realWindow = info.window / speed
+    local startTime  = os.clock()
+    local gen        = AP.pendingGen + 1
+    AP.pendingGen = gen
+    AP.pending = true
+    task.delay(realDelay, function()
+        AP.pending = false
+        if AP.pendingGen ~= gen then return end
+        if os.clock() - startTime > realWindow then return end
+        tryFire(killerChar)
+    end)
+end
+
+-- -- Dispatch ----------------------------------------------------------------------
+local function onAttack(killerChar, animId, track)
+    if not _G.AutoParry then return end
+    local mode = _G.AutoParryMode
+    if mode == "Fast" then
+        doFast(killerChar)
+    elseif mode == "Predict" then
+        doPredict(killerChar, animId, track)
+    else
+        doSmart(killerChar, animId)
+    end
+end
+
+-- -- Cleanup / Hook -----------------------------------------------------------------
+local function cleanupChar(char)
+    local entry = AP.hookedChars[char]
+    if not entry then return end
+    for _, conn in ipairs(entry.connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    AP.hookedChars[char] = nil
+end
+
+local function hookChar(char)
+    if AP.hookedChars[char] then return end
+    local hum = char:WaitForChild("Humanoid", 5)
     if not hum then return end
 
-    hum.AnimationPlayed:Connect(function(track)
+    local conns = {}
+
+    conns[#conns+1] = hum.AnimationPlayed:Connect(function(track)
         local anim = track and track.Animation
         if not anim then return end
         local id = tostring(anim.AnimationId)
-        if ANIM_HITFRAME[id] then
-            onAttackAnim(char, id, track)
+        if ANIM_HF[id] then
+            onAttack(char, id, track)
         end
+    end)
+
+    conns[#conns+1] = char.AncestryChanged:Connect(function()
+        if not char.Parent then
+            cleanupChar(char)
+        end
+    end)
+
+    AP.hookedChars[char] = { connections = conns }
+end
+
+-- -- Heartbeat scan (Fast mode only) -----------------------------------------------
+local _scanAccum = 0
+RunService.Heartbeat:Connect(function(dt)
+    if not _G.AutoParry then return end
+    if _G.AutoParryMode ~= "Fast" then return end
+    _scanAccum += dt
+    if _scanAccum < SCAN_INTERVAL then return end
+    _scanAccum = 0
+
+    local my    = LocalPlayer.Character
+    local myHRP = my and my:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr == LocalPlayer then continue end
+        local char  = plr.Character
+        if not char then continue end
+        local ksHRP = char:FindFirstChild("HumanoidRootPart")
+        if not ksHRP then continue end
+        local dist = (myHRP.Position - ksHRP.Position).Magnitude
+        if dist <= _G.AutoParryRange * 0.6 then
+            tryFire(char)
+            break
+        end
+    end
+end)
+
+-- -- Hook players ------------------------------------------------------------------
+local function hookPlayer(plr)
+    if plr == LocalPlayer then return end
+    local function onChar(char)
+        cleanupChar(char)
+        task.delay(0.4, function()
+            if char and char.Parent then hookChar(char) end
+        end)
+    end
+    if plr.Character then onChar(plr.Character) end
+    plr.CharacterAdded:Connect(onChar)
+    plr.CharacterRemoving:Connect(function(char)
+        cleanupChar(char)
     end)
 end
 
--- ── Hook player ───────────────────────────────────────────────────────────────────
-local function hookPlayer(plr)
-    if plr == LP then return end
+LocalPlayer.CharacterAdded:Connect(function()
+    AP.btnCache   = nil
+    AP.btnCacheAt = 0
+    AP.lastParry  = 0
+end)
 
-    local function onChar(char)
-        Hooked[char] = nil
-        task.wait(0.5)   -- รอ character load
-        hookChar(char)
-    end
-
-    if plr.Character then onChar(plr.Character) end
-    plr.CharacterAdded:Connect(onChar)
-end
-
-for _, plr in pairs(Players:GetPlayers()) do hookPlayer(plr) end
+for _, plr in ipairs(Players:GetPlayers()) do hookPlayer(plr) end
 Players.PlayerAdded:Connect(hookPlayer)
 
--- ── UI ───────────────────────────────────────────────────────────────────────────
+-- -- UI -----------------------------------------------------------------------------
 SurTab:Paragraph({
     Title = "Information: Parry Mode",
-    Desc = "- Fast = Instant, no delay \n- Smart = Delay based on hitframe \n- Predict = Calculated from animation speed",
+    Desc  = "- Fast = Instant + Heartbeat scan\n- Smart = Delay based on hitframe table\n- Predict = Adjust to animation speed",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
 SurTab:Divider()
-
 SurTab:Section({ Title = "Feature Survivor", Icon = "user" })
 
 SurTab:Toggle({
@@ -444,36 +508,39 @@ SurTab:Toggle({
     Desc     = "Parries killer attacks automatically at the correct hitframe",
     Value    = _G.AutoParry,
     Callback = function(v)
-        _G.AutoParry = v
+        _G.AutoParry  = v
+        AP.lastParry  = 0
+        AP.pendingGen += 1
         Config:Set("autoparry", v)
         Config:Save()
         WindUI:Notify({
-            Title   = "Auto Parry (BETA)",
-            Content = v and "Enabled" or "Disabled",
+            Title    = "Auto Parry (BETA)",
+            Content  = v and "Enabled" or "Disabled",
             Duration = 3,
-            Icon    = v and "shield" or "shield-off"
+            Icon     = v and "shield" or "shield-off"
         })
     end
 })
 
 SurTab:Dropdown({
-    Title   = "Parry Mode",
-    Values = { "Fast", "Smart", "Predict" },
-    Multi = false,
-    Value   = _G.AutoParryMode,
+    Title    = "Parry Mode",
+    Values   = { "Fast", "Smart", "Predict" },
+    Multi    = false,
+    Value    = _G.AutoParryMode,
     Callback = function(v)
-        _G.AutoParryMode = v
-        Config:Set("autoparrymode", v)
+        if type(v) == "table" then v = v[1] end
+        _G.AutoParryMode = v or "Smart"
+        Config:Set("autoparrymode", _G.AutoParryMode)
         Config:Save()
-        WindUI:Notify({ Title = "Parry Mode", Content = v, Duration = 2, Icon = "settings" })
+        WindUI:Notify({ Title = "Parry Mode", Content = _G.AutoParryMode, Duration = 2, Icon = "settings" })
     end
 })
 
 SurTab:Slider({
-    Title   = "Parry Range",
-    Desc    = "Range for parrying (studs)",
-    Value = { Min = 5, Max = 35, Default = _G.AutoParryRange },
-    Step = 1,
+    Title    = "Parry Range",
+    Desc     = "Range for parrying (studs)",
+    Value    = { Min = 5, Max = 35, Default = _G.AutoParryRange },
+    Step     = 1,
     Callback = function(v)
         _G.AutoParryRange = v
         Config:Set("autoparryrange", v)
@@ -482,23 +549,21 @@ SurTab:Slider({
 })
 
 -- =====================================================================================
-
--- =====================================================================================
---  ESP SYSTEM  (รองรับ Respawn / Map Reload / Spawn ใหม่ / ไม่ Leak)
+--  ESP SYSTEM  (?????? Respawn / Map Reload / ??? Leak)
 -- =====================================================================================
 
--- ── สี ──
-local COLOR_SURVIVOR       = Color3.fromRGB(0,   0,   255)
-local COLOR_MURDERER       = Color3.fromRGB(255,  0,    0)
-local COLOR_GENERATOR_DONE = Color3.fromRGB(0,   255,   0)
+-- -- ?? ------------------------------------------------------------------------------
+local COLOR_SURVIVOR       = Color3.fromRGB(0,     0,  255)
+local COLOR_MURDERER       = Color3.fromRGB(255,   0,    0)
+local COLOR_GENERATOR_DONE = Color3.fromRGB(0,   255,    0)
 local COLOR_GATE           = Color3.fromRGB(255, 255,  255)
-local COLOR_PALLET         = Color3.fromRGB(255, 255,   0)
-local COLOR_OUTLINE        = Color3.fromRGB(0,     0,   0)
+local COLOR_PALLET         = Color3.fromRGB(255, 255,    0)
+local COLOR_OUTLINE        = Color3.fromRGB(0,     0,    0)
 local COLOR_WINDOW         = Color3.fromRGB(175, 215,  230)
-local COLOR_HOOK           = Color3.fromRGB(255,   0,   0)
-local COLOR_PATIENT        = Color3.fromRGB(255, 165,   0)
+local COLOR_HOOK           = Color3.fromRGB(255,   0,    0)
+local COLOR_PATIENT        = Color3.fromRGB(255, 165,    0)
 
--- ── State ──
+-- -- State ---------------------------------------------------------------------------
 local espEnabled       = Config:Get("espEnabled",       false)
 local espSurvivor      = Config:Get("espSurvivor",      false)
 local espMurder        = Config:Get("espMurder",        false)
@@ -513,38 +578,51 @@ local ShowDistance     = Config:Get("ShowDistance",     true)
 local ShowHP           = Config:Get("ShowHP",           true)
 local ShowHighlight    = Config:Get("ShowHighlight",    true)
 local ShowPercent      = Config:Get("ShowPercent",      true)
-local ESP_MAX_DISTANCE = Config:Get("ESP_MAX_DISTANCE", 1500) 
+local ESP_MAX_DISTANCE = Config:Get("ESP_MAX_DISTANCE", 1500)
 
--- ── Table เก็บ ESP ทั้งหมด ──
--- key = Instance (char / model)
--- value = { highlight, bill, nameLabel, hpLabel, distLabel, color }
+-- key = Instance, value = { highlight, bill, nameLabel, hpLabel, distLabel, color }
 local espObjects = {}
 
--- ── Generator Cache ──
+-- -- Generator Cache ------------------------------------------------------------------
 local _cachedGenFolders  = nil
-local _cacheInvalidTimer = 0
 
 local function _invalidateGenCache()
     _cachedGenFolders = nil
 end
-
--- Invalidate เมื่อมี descendant เพิ่ม/ลบ (batch; ไม่ใช้ Connect แบบหนัก)
-Workspace.DescendantAdded:Connect(_invalidateGenCache)
-Workspace.DescendantRemoving:Connect(_invalidateGenCache)
+-- Batch invalidate ???? throttle (??????????? event)
+local _invalidateScheduled = false
+Workspace.DescendantAdded:Connect(function()
+    if not _invalidateScheduled then
+        _invalidateScheduled = true
+        task.delay(1, function()
+            _invalidateGenCache()
+            _invalidateScheduled = false
+        end)
+    end
+end)
+Workspace.DescendantRemoving:Connect(function()
+    if not _invalidateScheduled then
+        _invalidateScheduled = true
+        task.delay(1, function()
+            _invalidateGenCache()
+            _invalidateScheduled = false
+        end)
+    end
+end)
 
 local function getFolderGenerator()
     if _cachedGenFolders then return _cachedGenFolders end
     local list = {}
     for _, desc in ipairs(Workspace:GetDescendants()) do
         if desc.Name == "Generator" and desc:IsA("Model") then
-            table.insert(list, desc)
+            list[#list+1] = desc
         end
     end
     _cachedGenFolders = list
     return list
 end
 
--- ── ลบ ESP ของ object นั้น ──
+-- -- ESP helpers ----------------------------------------------------------------------
 local function removeESP(obj)
     local data = espObjects[obj]
     if not data then return end
@@ -553,14 +631,12 @@ local function removeESP(obj)
     espObjects[obj] = nil
 end
 
--- ── สร้าง / อัปเดต ESP ──
 local function createESP(obj, baseColor)
     if not obj or not obj.Parent then return end
     if obj.Name == "Lobby" then return end
-
-    -- ถ้ามีอยู่แล้ว → อัปเดตสีเท่านั้น ไม่สร้างซ้ำ
     local data = espObjects[obj]
     if data then
+        -- update color ????????
         if data.highlight then
             data.highlight.FillColor    = baseColor
             data.highlight.OutlineColor = baseColor
@@ -572,8 +648,6 @@ local function createESP(obj, baseColor)
         data.color = baseColor
         return
     end
-
-    -- Highlight
     local highlight = Instance.new("Highlight")
     highlight.Adornee             = obj
     highlight.FillColor           = baseColor
@@ -584,7 +658,6 @@ local function createESP(obj, baseColor)
     highlight.DepthMode           = Enum.HighlightDepthMode.AlwaysOnTop
     pcall(function() highlight.Parent = obj end)
 
-    -- BillboardGui
     local bill = Instance.new("BillboardGui")
     bill.Size        = UDim2.new(0, 200, 0, 50)
     bill.Adornee     = obj
@@ -592,14 +665,14 @@ local function createESP(obj, baseColor)
     pcall(function() bill.Parent = obj end)
 
     local frame = Instance.new("Frame")
-    frame.Size                   = UDim2.new(1, 0, 1, 0)
+    frame.Size                   = UDim2.new(1,0,1,0)
     frame.BackgroundTransparency = 1
     frame.Parent                 = bill
 
     local function makeLabel(ypos)
         local lbl = Instance.new("TextLabel")
-        lbl.Size                   = UDim2.new(1, 0, 0.33, 0)
-        lbl.Position               = UDim2.new(0, 0, ypos, 0)
+        lbl.Size                   = UDim2.new(1,0,0.33,0)
+        lbl.Position               = UDim2.new(0,0,ypos,0)
         lbl.BackgroundTransparency = 1
         lbl.Font                   = Enum.Font.SourceSansBold
         lbl.TextSize               = 14
@@ -626,25 +699,22 @@ local function createESP(obj, baseColor)
     }
 end
 
--- ── Helper: set labels for World Objects (ไม่มี HP → 2 แถวชิดกัน) ──
+-- -- Object labels (????? HP ? 2 ?????????) ------------------------------------------
 local function setObjectLabels(data, col, nameText, showName, distText, showDist)
     if not data then return end
-    -- nameLabel → แถวบน
-    data.nameLabel.Text     = nameText or ""
-    data.nameLabel.Visible  = showName
-    data.nameLabel.Position = UDim2.new(0, 0, 0, 0)
+    data.nameLabel.Text      = nameText or ""
+    data.nameLabel.Visible   = showName
+    data.nameLabel.Position  = UDim2.new(0,0,0,0)
     data.nameLabel.TextColor3 = col
-    -- hpLabel → ซ่อน (ไม่มี HP)
-    data.hpLabel.Text    = ""
-    data.hpLabel.Visible = false
-    -- distLabel → แถวที่ 2 (เลื่อนขึ้นมาชิด nameLabel)
-    data.distLabel.Text     = distText or ""
-    data.distLabel.Visible  = showDist
-    data.distLabel.Position = UDim2.new(0, 0, 0.33, 0)
+    data.hpLabel.Text        = ""
+    data.hpLabel.Visible     = false
+    data.distLabel.Text      = distText or ""
+    data.distLabel.Visible   = showDist
+    data.distLabel.Position  = UDim2.new(0,0,0.33,0)
     data.distLabel.TextColor3 = col
 end
 
--- ── Generator progress helpers ──
+-- -- Generator progress ----------------------------------------------------------------
 local function getGeneratorProgress(gen)
     local progress = 0
     if gen:GetAttribute("Progress") then
@@ -661,16 +731,16 @@ local function getGeneratorProgress(gen)
             end
         end
     end
-    progress = (progress > 1) and progress / 100 or progress
+    progress = progress > 1 and progress / 100 or progress
     return math.clamp(progress, 0, 1)
 end
 
 local function getProgressColor(p)
     if p < 0.5 then
         local t = p / 0.5
-        return Color3.fromRGB(math.floor(255 - (255-153)*t), 255, math.floor(255 - (255-153)*t))
+        return Color3.fromRGB(math.floor(255-(255-153)*t), 255, math.floor(255-(255-153)*t))
     else
-        local t = (p - 0.5) / 0.5
+        local t = (p-0.5)/0.5
         return Color3.fromRGB(math.floor(153*(1-t)), 255, math.floor(153*(1-t)))
     end
 end
@@ -681,82 +751,56 @@ local function generatorFinished(gen)
         or gen:FindFirstChild("Repaired") ~= nil
 end
 
--- ── Main ESP Update (ทุก ESP_INTERVAL วิ) ──
+-- -- Main ESP Update -------------------------------------------------------------------
 local _espAccum    = 0
-local ESP_INTERVAL = 0.5   -- วินาที; ปรับได้
+local ESP_INTERVAL = 0.5
 
 local function updateESP()
     if not espEnabled then return end
-
-    -- ดึง HRP ของตัวเอง (รองรับ respawn)
     local char = LocalPlayer.Character
     local hrp  = char and char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    -- ─── Players ESP ───────────────────────────────────────────
-    for _, player in pairs(Players:GetPlayers()) do
+    -- Players
+    for _, player in ipairs(Players:GetPlayers()) do
         if player == LocalPlayer then continue end
-    
         local pChar = player.Character
         if not pChar or pChar.Name == "Lobby" then continue end
-    
         local pRoot = pChar:FindFirstChild("HumanoidRootPart")
-        local dist = pRoot and math.floor((hrp.Position - pRoot.Position).Magnitude) or math.huge
-    
-        -- ถ้าไกลเกินระยะ ESP
+        local dist  = pRoot and math.floor((hrp.Position - pRoot.Position).Magnitude) or math.huge
         if dist > ESP_MAX_DISTANCE then
             local data = espObjects[pChar]
-    
             if data then
-                if data.bill then
-                    data.bill.Enabled = false
-                end
-    
-                if data.highlight then
-                    data.highlight.Enabled = false
-                end
+                if data.bill      then data.bill.Enabled      = false end
+                if data.highlight then data.highlight.Enabled = false end
             end
-    
             continue
         end
-    
         local isMurderer = pChar:FindFirstChild("Weapon") ~= nil
-    
         if isMurderer then
-            if espMurder then
-                createESP(pChar, COLOR_MURDERER)
-            else
-                removeESP(pChar)
-            end
+            if espMurder   then createESP(pChar, COLOR_MURDERER)  else removeESP(pChar) end
         else
-            if espSurvivor then
-                createESP(pChar, COLOR_SURVIVOR)
-            else
-                removeESP(pChar)
-            end
+            if espSurvivor then createESP(pChar, COLOR_SURVIVOR)  else removeESP(pChar) end
         end
     end
 
-    -- ─── World Objects ESP ─────────────────────────────────────
+    -- World Objects
     local scanned = {}
-
     for _, desc in ipairs(Workspace:GetDescendants()) do
         if not desc:IsA("Model") or scanned[desc] then continue end
-
         local n    = desc.Name
         local part = desc.PrimaryPart or desc:FindFirstChildWhichIsA("BasePart")
         local dist = part and math.floor((hrp.Position - part.Position).Magnitude) or math.huge
 
-        -- ── Generator ──
+        -- Generator
         if n == "Generator" then
             scanned[desc] = true
             if espGenerator then
-                -- Distance check
                 if dist > ESP_MAX_DISTANCE then
-                    local data = espObjects[desc]
-                    if data then
-                        if data.bill      then data.bill.Enabled      = false end
-                        if data.highlight then data.highlight.Enabled = false end
+                    local d = espObjects[desc]
+                    if d then
+                        if d.bill      then d.bill.Enabled      = false end
+                        if d.highlight then d.highlight.Enabled = false end
                     end
                     continue
                 end
@@ -766,13 +810,11 @@ local function updateESP()
                 createESP(desc, col)
                 local data = espObjects[desc]
                 if data and part then
-                    local nameText
+                    local nameText = ""
                     if ShowName and ShowPercent then
                         nameText = n .. " | " .. math.floor(progress * 100) .. "%"
                     elseif ShowName then
                         nameText = n
-                    else
-                        nameText = ""
                     end
                     setObjectLabels(data, col, nameText, ShowName or ShowPercent,
                         ShowDistance and ("[ " .. dist .. " MM ]") or "", ShowDistance)
@@ -783,20 +825,15 @@ local function updateESP()
                 removeESP(desc)
             end
 
-        -- ── Gate ──
+        -- Gate
         elseif n == "Gate" then
             local insidePlayer = false
-        
             for _, plr in ipairs(Players:GetPlayers()) do
                 if plr.Character and desc:IsDescendantOf(plr.Character) then
-                    insidePlayer = true
-                    break
+                    insidePlayer = true; break
                 end
             end
-        
-            if insidePlayer then
-                continue
-            end
+            if insidePlayer then continue end
             scanned[desc] = true
             if espGate then
                 if dist <= ESP_MAX_DISTANCE then
@@ -820,7 +857,7 @@ local function updateESP()
                 removeESP(desc)
             end
 
-        -- ── Hook ──
+        -- Hook
         elseif n == "Hook" then
             scanned[desc] = true
             local mdl = desc:FindFirstChild("Model")
@@ -850,7 +887,7 @@ local function updateESP()
                 end
             end
 
-        -- ── Pallet ──
+        -- Pallet
         elseif n == "Palletwrong" then
             scanned[desc] = true
             if espPallet then
@@ -875,7 +912,7 @@ local function updateESP()
                 removeESP(desc)
             end
 
-        -- ── Window ──
+        -- Window
         elseif n == "Window" then
             scanned[desc] = true
             if espWindowEnabled then
@@ -901,8 +938,7 @@ local function updateESP()
             end
         end
 
-        -- ── Patient (SCP / scp###) ──
-        -- ตรวจแยกต่างหากหลัง block ด้านบน
+        -- Patient (SCP###)
         if not scanned[desc] and n:match("^[Ss][Cc][Pp]%d*$") then
             scanned[desc] = true
             if espPatient then
@@ -910,13 +946,9 @@ local function updateESP()
                     createESP(desc, COLOR_PATIENT)
                     local data = espObjects[desc]
                     if data and part then
-                        data.nameLabel.Text       = ShowName and "Patient" or ""
-                        data.nameLabel.Visible    = ShowName
-                        data.nameLabel.TextColor3 = COLOR_PATIENT
-                        data.distLabel.Text       = ShowDistance and ("[ " .. dist .. " MM ]") or ""
-                        data.distLabel.Visible    = ShowDistance
-                        data.distLabel.TextColor3 = COLOR_PATIENT
-                        data.hpLabel.Visible      = false
+                        setObjectLabels(data, COLOR_PATIENT,
+                            ShowName and "Patient" or "", ShowName,
+                            ShowDistance and ("[ " .. dist .. " MM ]") or "", ShowDistance)
                         if data.bill      then data.bill.Enabled      = true end
                         if data.highlight then data.highlight.Enabled = ShowHighlight end
                     end
@@ -933,64 +965,45 @@ local function updateESP()
         end
     end
 
-    -- ─── Update labels สำหรับ Player ESP ─────────────────────
+    -- Update Player ESP labels
     for obj, data in pairs(espObjects) do
-        if not obj or not obj.Parent then
-            removeESP(obj); continue
-        end
+        if not obj or not obj.Parent then removeESP(obj); continue end
         if obj.Name == "Lobby" then continue end
-
         local oPart    = obj:FindFirstChild("HumanoidRootPart")
                       or obj.PrimaryPart
                       or obj:FindFirstChildWhichIsA("BasePart")
         if not oPart then continue end
-
         local humanoid = obj:FindFirstChildOfClass("Humanoid")
-        local isPlayer = humanoid ~= nil
+        if not humanoid then continue end
 
-        -- Player ESP → ไม่ใช้ distance gate (ผู้เล่นมองเห็นได้ตลอด)
-        if isPlayer then
-            local oDist = math.floor((hrp.Position - oPart.Position).Magnitude)
-        
-            -- ถ้าไกลเกินระยะ ESP
-            if oDist > ESP_MAX_DISTANCE then
-                if data.highlight then
-                    data.highlight.Enabled = false
-                end
-        
-                if data.bill then
-                    data.bill.Enabled = false
-                end
-        
-                continue
-            end
-
-            if ShowHP and humanoid then
-                data.hpLabel.Text     = "[ " .. math.floor(humanoid.Health) .. " HP ]"
-                data.hpLabel.Visible  = true
-                data.hpLabel.Position = UDim2.new(0, 0, 0.33, 0)
-                data.distLabel.Position = UDim2.new(0, 0, 0.66, 0)
-            else
-                data.hpLabel.Text    = ""
-                data.hpLabel.Visible = false
-                data.distLabel.Position = UDim2.new(0, 0, 0.33, 0)
-            end
-
-            if ShowName and not data.nameLabel.Text:find("|") then
-                data.nameLabel.Visible = true
-            end
-
-            data.distLabel.Text    = ShowDistance and ("[ " .. oDist .. " MM ]") or ""
-            data.distLabel.Visible = ShowDistance
-
-            if data.highlight then data.highlight.Enabled = ShowHighlight end
-            if data.bill      then data.bill.Enabled      = true end
+        local oDist = math.floor((hrp.Position - oPart.Position).Magnitude)
+        if oDist > ESP_MAX_DISTANCE then
+            if data.highlight then data.highlight.Enabled = false end
+            if data.bill      then data.bill.Enabled      = false end
+            continue
         end
-        -- World Object labels ถูก update ในรอบ scan ด้านบนแล้ว
+
+        if ShowHP then
+            data.hpLabel.Text      = "[ " .. math.floor(humanoid.Health) .. " HP ]"
+            data.hpLabel.Visible   = true
+            data.hpLabel.Position  = UDim2.new(0,0,0.33,0)
+            data.distLabel.Position = UDim2.new(0,0,0.66,0)
+        else
+            data.hpLabel.Text     = ""
+            data.hpLabel.Visible  = false
+            data.distLabel.Position = UDim2.new(0,0,0.33,0)
+        end
+
+        if ShowName and not data.nameLabel.Text:find("|") then
+            data.nameLabel.Visible = true
+        end
+        data.distLabel.Text    = ShowDistance and ("[ " .. oDist .. " MM ]") or ""
+        data.distLabel.Visible = ShowDistance
+        if data.highlight then data.highlight.Enabled = ShowHighlight end
+        if data.bill      then data.bill.Enabled      = true end
     end
 end
 
--- ── Heartbeat throttle ──
 RunService.Heartbeat:Connect(function(dt)
     _espAccum += dt
     if _espAccum >= ESP_INTERVAL then
@@ -999,46 +1012,32 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
--- ── ลบ ESP เมื่อ Player ออก ──
 Players.PlayerRemoving:Connect(function(player)
     if player.Character then removeESP(player.Character) end
 end)
-
--- ── ลบ ESP เมื่อ Character Respawn ──
 Players.PlayerAdded:Connect(function(player)
-    player.CharacterRemoving:Connect(function(char)
-        removeESP(char)
-    end)
+    player.CharacterRemoving:Connect(function(char) removeESP(char) end)
 end)
 for _, player in ipairs(Players:GetPlayers()) do
-    player.CharacterRemoving:Connect(function(char)
-        removeESP(char)
-    end)
+    player.CharacterRemoving:Connect(function(char) removeESP(char) end)
 end
 
--- ── ล้าง ESP ทั้งหมด ──
 local function clearAllESP()
-    for obj in pairs(espObjects) do
-        removeESP(obj)
-    end
+    for obj in pairs(espObjects) do removeESP(obj) end
 end
 
 -- ====================== ESP UI ======================
 EspTab:Section({ Title = "Feature Esp", Icon = "eye" })
-
 EspTab:Toggle({
     Title = "Enable ESP",
     Desc  = "Automatically enables ESP for all supported",
     Value = espEnabled,
     Callback = function(v)
         espEnabled = v
-        Config:Set("espEnabled", v)
-        Config:Save()
+        Config:Set("espEnabled", v); Config:Save()
         if not espEnabled then clearAllESP() end
     end
 })
-
--- ── ESP Distance Slider ──
 EspTab:Input({
     Title = "Set ESP Distance (Maximum distance)",
     Default = tostring(ESP_MAX_DISTANCE),
@@ -1052,99 +1051,61 @@ EspTab:Input({
 
 EspTab:Section({ Title = "Esp Role", Icon = "user" })
 EspTab:Toggle({
-    Title = "ESP Survivor",
-    Desc  = "ESP the Survivor locations through walls",
-    Value = espSurvivor,
+    Title = "ESP Survivor", Desc = "ESP the Survivor locations through walls", Value = espSurvivor,
     Callback = function(v) espSurvivor = v; Config:Set("espSurvivor", v); Config:Save() end
 })
 EspTab:Toggle({
-    Title = "ESP Killer",
-    Desc  = "ESP the Killer location through walls",
-    Value = espMurder,
+    Title = "ESP Killer", Desc = "ESP the Killer location through walls", Value = espMurder,
     Callback = function(v) espMurder = v; Config:Set("espMurder", v); Config:Save() end
 })
 
 EspTab:Section({ Title = "Esp Engine", Icon = "biceps-flexed" })
 EspTab:Toggle({
-    Title = "ESP Generator",
-    Desc  = "ESP the Generator location through walls",
-    Value = espGenerator,
+    Title = "ESP Generator", Desc = "ESP the Generator location through walls", Value = espGenerator,
     Callback = function(v)
         espGenerator = v; Config:Set("espGenerator", v); Config:Save()
-        if not v then
-            for obj in pairs(espObjects) do
-                if obj.Name == "Generator" then removeESP(obj) end
-            end
-        end
+        if not v then for obj in pairs(espObjects) do if obj.Name == "Generator" then removeESP(obj) end end end
     end
 })
 EspTab:Toggle({
-    Title = "ESP Gate",
-    Desc  = "ESP the Gate locations through walls",
-    Value = espGate,
+    Title = "ESP Gate", Desc = "ESP the Gate locations through walls", Value = espGate,
     Callback = function(v)
         espGate = v; Config:Set("espGate", v); Config:Save()
-        if not v then
-            for obj in pairs(espObjects) do
-                if obj.Name == "Gate" then removeESP(obj) end
-            end
-        end
+        if not v then for obj in pairs(espObjects) do if obj.Name == "Gate" then removeESP(obj) end end end
     end
 })
 
 EspTab:Section({ Title = "Esp Object", Icon = "package" })
 EspTab:Toggle({
-    Title = "ESP Pallet",
-    Desc  = "ESP the Pallet locations through walls",
-    Value = espPallet,
+    Title = "ESP Pallet", Desc = "ESP the Pallet locations through walls", Value = espPallet,
     Callback = function(v)
         espPallet = v; Config:Set("espPallet", v); Config:Save()
-        if not v then
-            for obj in pairs(espObjects) do
-                if obj.Name == "Palletwrong" then removeESP(obj) end
-            end
-        end
+        if not v then for obj in pairs(espObjects) do if obj.Name == "Palletwrong" then removeESP(obj) end end end
     end
 })
 EspTab:Toggle({
-    Title = "ESP Hook",
-    Desc  = "ESP the Hook locations through walls",
-    Value = espHook,
+    Title = "ESP Hook", Desc = "ESP the Hook locations through walls", Value = espHook,
     Callback = function(v)
         espHook = v; Config:Set("espHook", v); Config:Save()
         if not v then
             for obj in pairs(espObjects) do
-                if obj.Name == "Model" and obj.Parent and obj.Parent.Name == "Hook" then
-                    removeESP(obj)
-                end
+                if obj.Name == "Model" and obj.Parent and obj.Parent.Name == "Hook" then removeESP(obj) end
             end
         end
     end
 })
 EspTab:Toggle({
-    Title = "ESP Window",
-    Desc  = "ESP the Window locations through walls",
-    Value = espWindowEnabled,
+    Title = "ESP Window", Desc = "ESP the Window locations through walls", Value = espWindowEnabled,
     Callback = function(v)
         espWindowEnabled = v; Config:Set("espWindow", v); Config:Save()
-        if not v then
-            for obj in pairs(espObjects) do
-                if obj.Name == "Window" then removeESP(obj) end
-            end
-        end
+        if not v then for obj in pairs(espObjects) do if obj.Name == "Window" then removeESP(obj) end end end
     end
 })
 EspTab:Toggle({
-    Title = "ESP Patient",
-    Desc  = "ESP the Patient (SCP) locations through walls",
-    Value = espPatient,
+    Title = "ESP Patient", Desc = "ESP the Patient (SCP) locations through walls", Value = espPatient,
     Callback = function(v)
         espPatient = v; Config:Set("espPatient", v); Config:Save()
-        if not v then
-            for obj in pairs(espObjects) do
-                if obj.Name:match("^[Ss][Cc][Pp]%d*$") then removeESP(obj) end
-            end
-        end
+        if not v then for obj in pairs(espObjects) do if obj.Name:match("^[Ss][Cc][Pp]%d*$") then removeESP(obj) end end end
     end
 })
 
@@ -1177,7 +1138,6 @@ EspTab:Toggle({
 
 -- ====================== MAIN TAB ======================
 MainTab:Section({ Title = "Feature Gameplay", Icon = "target" })
-
 MainTab:Button({
     Title    = "Aimbot (NEW)",
     Desc     = "Advanced survivor aimbot settings and lock",
@@ -1186,31 +1146,29 @@ MainTab:Button({
     end
 })
 
--- ── Crosshair ──
+-- -- Crosshair ------------------------------------------------------------------------
 local CrosshairEnabled = Config:Get("CrosshairEnabled", false)
 
 local function CreateCrosshair()
     if PlayerGui:FindFirstChild("CrosshairGUI") then return end
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name            = "CrosshairGUI"
-    ScreenGui.ResetOnSpawn    = false
-    ScreenGui.IgnoreGuiInset  = true
-    ScreenGui.Parent          = PlayerGui
-
-    local Frame = Instance.new("Frame")
-    Frame.Name                = "Crosshair"
-    Frame.Size                = UDim2.new(0, 5, 0, 5)
-    Frame.AnchorPoint         = Vector2.new(0.5, 0.5)
-    Frame.Position            = UDim2.new(0.5, 0, 0.5, 0)
-    Frame.BackgroundColor3    = Color3.new(1, 1, 1)
-    Frame.BackgroundTransparency = 0.3
-    Frame.BorderSizePixel     = 0
-    Frame.ZIndex              = 999
-    Frame.Parent              = ScreenGui
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(1, 0)
-    corner.Parent       = Frame
+    local sg = Instance.new("ScreenGui")
+    sg.Name           = "CrosshairGUI"
+    sg.ResetOnSpawn   = false
+    sg.IgnoreGuiInset = true
+    sg.Parent         = PlayerGui
+    local f = Instance.new("Frame")
+    f.Name                    = "Crosshair"
+    f.Size                    = UDim2.new(0,5,0,5)
+    f.AnchorPoint             = Vector2.new(0.5,0.5)
+    f.Position                = UDim2.new(0.5,0,0.5,0)
+    f.BackgroundColor3        = Color3.new(1,1,1)
+    f.BackgroundTransparency  = 0.3
+    f.BorderSizePixel         = 0
+    f.ZIndex                  = 999
+    f.Parent                  = sg
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(1,0)
+    c.Parent       = f
 end
 
 local function RemoveCrosshair()
@@ -1223,7 +1181,6 @@ PlayerGui.ChildRemoved:Connect(function(child)
         task.defer(CreateCrosshair)
     end
 end)
-
 if CrosshairEnabled then CreateCrosshair() end
 
 MainTab:Toggle({
@@ -1232,20 +1189,19 @@ MainTab:Toggle({
     Value = CrosshairEnabled,
     Callback = function(state)
         CrosshairEnabled = state
-        Config:Set("CrosshairEnabled", state)
-        Config:Save()
+        Config:Set("CrosshairEnabled", state); Config:Save()
         if state then CreateCrosshair() else RemoveCrosshair() end
     end
 })
 
--- ── Bypass Gate ──
+-- -- Bypass Gate ----------------------------------------------------------------------
 local bypassGateEnabled = Config:Get("bypassGateEnabled", false)
 
 local function gatherGates()
     local gates = {}
     for _, desc in ipairs(Workspace:GetDescendants()) do
         if desc.Name == "Gate" and desc:IsA("Model") then
-            table.insert(gates, desc)
+            gates[#gates+1] = desc
         end
     end
     return gates
@@ -1283,13 +1239,12 @@ MainTab:Toggle({
     Value = bypassGateEnabled,
     Callback = function(state)
         bypassGateEnabled = state
-        Config:Set("bypassGateEnabled", state)
-        Config:Save()
+        Config:Set("bypassGateEnabled", state); Config:Save()
         setGateState(state)
     end
 })
 
--- ── Visual ──
+-- -- Visual ----------------------------------------------------------------------------
 local fullBrightEnabled = Config:Get("fullBrightEnabled", false)
 local noFogEnabled      = Config:Get("noFogEnabled", false)
 local _fullBrightConn, _noFogConn
@@ -1301,21 +1256,20 @@ MainTab:Toggle({
     Value = fullBrightEnabled,
     Callback = function(v)
         fullBrightEnabled = v
-        Config:Set("fullBrightEnabled", v)
-        Config:Save()
+        Config:Set("fullBrightEnabled", v); Config:Save()
         if v then
             if _fullBrightConn then _fullBrightConn:Disconnect() end
-            _fullBrightConn = RunService.Heartbeat:Connect(function()
+            _fullBrightConn = RunService.RenderStepped:Connect(function()
                 if not fullBrightEnabled then _fullBrightConn:Disconnect(); _fullBrightConn = nil; return end
                 Lighting.Brightness = 2
                 Lighting.ClockTime  = 14
-                Lighting.Ambient    = Color3.fromRGB(255, 255, 255)
+                Lighting.Ambient    = Color3.fromRGB(255,255,255)
             end)
         else
             if _fullBrightConn then _fullBrightConn:Disconnect(); _fullBrightConn = nil end
             Lighting.Brightness = 1
             Lighting.ClockTime  = 12
-            Lighting.Ambient    = Color3.fromRGB(128, 128, 128)
+            Lighting.Ambient    = Color3.fromRGB(128,128,128)
         end
     end
 })
@@ -1326,11 +1280,10 @@ MainTab:Toggle({
     Value = noFogEnabled,
     Callback = function(v)
         noFogEnabled = v
-        Config:Set("noFogEnabled", v)
-        Config:Save()
+        Config:Set("noFogEnabled", v); Config:Save()
         if v then
             if _noFogConn then _noFogConn:Disconnect() end
-            _noFogConn = RunService.Heartbeat:Connect(function()
+            _noFogConn = RunService.RenderStepped:Connect(function()
                 if not noFogEnabled then _noFogConn:Disconnect(); _noFogConn = nil; return end
                 local atm = Lighting:FindFirstChild("Atmosphere")
                 if atm then atm.Density = 0 end
@@ -1343,23 +1296,22 @@ MainTab:Toggle({
     end
 })
 
--- ── Anti AFK ──
+-- -- Anti AFK -------------------------------------------------------------------------
 MainTab:Section({ Title = "Misc", Icon = "settings" })
-local AntiAFK_main    = Config:Get("AntiAFK_main", true)
+local AntiAFK_main = Config:Get("AntiAFK_main", true)
 local _antiAfkThread
 
 local function startAntiAFK()
     if _antiAfkThread then task.cancel(_antiAfkThread); _antiAfkThread = nil end
     _antiAfkThread = task.spawn(function()
         while AntiAFK_main do
-            VirtualUser:Button2Down(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
+            VirtualUser:Button2Down(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
             task.wait(math.random(150, 270))
-            VirtualUser:Button2Up(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
+            VirtualUser:Button2Up(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
             task.wait(math.random(150, 270))
         end
     end)
 end
-
 if AntiAFK_main then startAntiAFK() end
 
 MainTab:Toggle({
@@ -1368,493 +1320,317 @@ MainTab:Toggle({
     Value = AntiAFK_main,
     Callback = function(state)
         AntiAFK_main = state
-        Config:Set("AntiAFK_main", state)
-        Config:Save()
+        Config:Set("AntiAFK_main", state); Config:Save()
         if state then startAntiAFK()
         elseif _antiAfkThread then task.cancel(_antiAfkThread); _antiAfkThread = nil end
     end
 })
 
-
--- ====================== SURVIVOR TAB ======================
-
-
---[[ Auto Shoot
-local autoShoot = false
-SurTab:Toggle({
-    Title = "Auto Shoot (STILL BUG)",
-    Desc  = "Automatically shoots nearby killer",
-    Value = false,
-    Callback = function(v)
-        autoShoot = v
-        if autoShoot then
-            task.spawn(function()
-                local remote = ReplicatedStorage:WaitForChild("Remotes")
-                    :WaitForChild("Items")
-                    :WaitForChild("Parrying Dagger")
-                    :WaitForChild("parry")
-                while autoShoot do
-                    local char = LocalPlayer.Character
-                    local root = char and char:FindFirstChild("HumanoidRootPart")
-                    if root then
-                        for _, plr in ipairs(Players:GetPlayers()) do
-                            if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Weapon") then
-                                local tr = plr.Character:FindFirstChild("HumanoidRootPart")
-                                if tr and (root.Position - tr.Position).Magnitude <= 10 then
-                                    remote:FireServer()
-                                end
-                            end
-                        end
-                    end
-                    task.wait(0.001)
-                end
-            end)
-        end
-    end
-})
---]]
-
-
--- ====================== GENERATOR HELPERS (SHARED) ======================
-
+-- ====================== GENERATOR SYSTEM ======================
+-- -- Remote refs ----------------------------------------------------------------------
 local GeneratorRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Generator")
 local skillRemote      = GeneratorRemotes:WaitForChild("SkillCheckResultEvent")
 local repairRemote     = GeneratorRemotes:WaitForChild("RepairEvent")
 
-local currentRepairPoint = nil
-local currentRepairModel = nil
-
-local cancelWalkCooldown = false
-local cancelXCooldown    = false
-local mobileCancelHold   = false
+-- -- Repair state ---------------------------------------------------------------------
+local GEN = {
+    repairPoint = nil,   -- current GeneratorPoint BasePart
+    repairModel = nil,   -- current Generator Model
+    -- Debounce flags (true = cooldown active)
+    cancelDB    = false,
+    skillDB     = false,
+    -- Cached last HRP position for movement threshold
+    lastPos     = nil,
+    MOVE_THRESH = 0.9,   -- studs ????????? "????????" (?? false cancel)
+}
 
 local function notify(title, content)
-    WindUI:Notify({
-        Title = title,
-        Content = content,
-        Duration = 5,
-        Icon = "triangle-alert"
-    })
+    WindUI:Notify({ Title = title, Content = content, Duration = 5, Icon = "triangle-alert" })
 end
 
-local function getClosestGeneratorPoint(root, maxDist)
-    local gens = getFolderGenerator()
-    local bestGen, bestPt, bestDist = nil, nil, maxDist or 999
+-- -- Validate repair point ??????????????? --------------------------------------------
+local function isRepairPointValid()
+    return GEN.repairPoint
+        and GEN.repairPoint.Parent
+        and GEN.repairModel
+        and GEN.repairModel.Parent
+        and not generatorFinished(GEN.repairModel)
+end
 
+-- -- Clear repair state ----------------------------------------------------------------
+local function clearRepairState()
+    GEN.repairPoint = nil
+    GEN.repairModel = nil
+    GEN.lastPos     = nil
+end
+
+-- -- Safe cancel (fire 1 ????? + ?????? ??? spam) ----------------------------------
+local function cancelRepair()
+    if not isRepairPointValid() then clearRepairState(); return end
+    if GEN.cancelDB then return end
+    GEN.cancelDB = true
+    pcall(function() repairRemote:FireServer(GEN.repairPoint, false) end)
+    task.delay(0.4, function() GEN.cancelDB = false end)
+end
+
+-- -- Generator point finder ------------------------------------------------------------
+local function getClosestGeneratorPoint(root, maxDist)
+    local gens                    = getFolderGenerator()
+    local bestGen, bestPt, bestD  = nil, nil, maxDist or 999
     for _, gen in ipairs(gens) do
-        if not generatorFinished(gen) then
+        if gen.Parent and not generatorFinished(gen) then
             for i = 1, 4 do
                 local pt = gen:FindFirstChild("GeneratorPoint" .. i)
                 if pt then
                     local d = (root.Position - pt.Position).Magnitude
-                    if d < bestDist then
-                        bestDist = d
+                    if d < bestD then
+                        bestD   = d
                         bestGen = gen
-                        bestPt = pt
+                        bestPt  = pt
                     end
                 end
             end
         end
     end
-
-    return bestGen, bestPt, bestDist
+    return bestGen, bestPt, bestD
 end
 
-local function findNearestWeaponPlayer(root, maxDist)
+-- -- Killer proximity check (??? Players list ??? GetDescendants ???????) -----------
+local function findNearestKiller(root, maxDist)
     local nearest, nearestDist = nil, maxDist or 12.5
-
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj ~= LocalPlayer.Character then
-            local hasWeapon = obj:FindFirstChild("Weapon", true)
-            local hrp_      = obj:FindFirstChild("HumanoidRootPart")
-
-            if hasWeapon and hrp_ then
-                local dist = (root.Position - hrp_.Position).Magnitude
-
-                if dist < nearestDist then
-                    nearestDist = dist
-                    nearest = obj
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character then
+            local hasWeapon = plr.Character:FindFirstChild("Weapon", true)
+            local oHRP      = plr.Character:FindFirstChild("HumanoidRootPart")
+            if hasWeapon and oHRP then
+                local d = (root.Position - oHRP.Position).Magnitude
+                if d < nearestDist then
+                    nearestDist = d
+                    nearest     = plr.Character
                 end
             end
         end
     end
-
     return nearest, nearestDist
 end
 
-local function cancelRepair()
-    if currentRepairPoint then
-        repairRemote:FireServer(currentRepairPoint, false)
-        task.wait(0.05)
-        repairRemote:FireServer(currentRepairPoint, false)
-    end
-end
-
-local function teleportToBestGenerator()
+-- -- Teleport to best generator + start repair ----------------------------------------
+local function teleportToGenerator()
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
-
-    if not root then
-        return
-    end
+    if not root then return end
 
     local gen, pt = getClosestGeneratorPoint(root)
+    if not gen or not pt then return end
 
-    if gen and pt then
-        currentRepairModel = gen
-        currentRepairPoint = pt
-
-        root.CFrame = CFrame.new(pt.Position + Vector3.new(0, 2, 0))
-
-        task.wait(0.15)
-
-        repairRemote:FireServer(pt, true)
-    end
-end
-
--- Better cancel movement system (PC + Mobile)
-task.spawn(function()
-    while true do
-        task.wait(0.06)
-
-        local char = LocalPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        local hum  = char and char:FindFirstChild("Humanoid")
-
-        if root and hum and currentRepairPoint then
-            local dist = (root.Position - currentRepairPoint.Position).Magnitude
-
-            local moving =
-                hum.MoveDirection.Magnitude > 0.03
-                or root.AssemblyLinearVelocity.Magnitude > 1
-
-            if dist <= 7 and moving then
-                if not cancelWalkCooldown then
-                    cancelWalkCooldown = true
-
-                    cancelRepair()
-
-                    task.wait(0.35)
-
-                    cancelWalkCooldown = false
-                end
-            end
-        else
-            cancelWalkCooldown = false
-        end
-    end
-end)
-
--- X Cancel (PC)
-UserInputService.InputBegan:Connect(function(input, gpe)
-    if gpe then
+    -- ??? gen ??????????????? + ??????????? ? ??????? teleport ????
+    if isRepairPointValid()
+    and (root.Position - GEN.repairPoint.Position).Magnitude <= 5 then
         return
     end
 
+    GEN.repairModel = gen
+    GEN.repairPoint = pt
+    GEN.lastPos     = root.Position
+
+    root.CFrame = CFrame.new(pt.Position + Vector3.new(0, 2, 0))
+    task.wait(0.12)
+    pcall(function() repairRemote:FireServer(pt, true) end)
+end
+
+-- -- Smart movement detection ---------------------------------------------------------
+-- ??? PC + Mobile ?? 1 Heartbeat loop (?????? 2 while true ??????)
+local _movCheckAccum = 0
+local MOV_CHECK_INTERVAL = 0.07  -- ~14Hz
+
+RunService.Heartbeat:Connect(function(dt)
+    _movCheckAccum += dt
+    if _movCheckAccum < MOV_CHECK_INTERVAL then return end
+    _movCheckAccum = 0
+
+    if not isRepairPointValid() then
+        clearRepairState()
+        return
+    end
+
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum  = char and char:FindFirstChild("Humanoid")
+    if not root or not hum then return end
+
+    local dist = (root.Position - GEN.repairPoint.Position).Magnitude
+    if dist > 8 then return end   -- ????????? ? ?????????? repair
+
+    -- ??????????? position ???? (?????? velocity ??? drift ???)
+    local prevPos = GEN.lastPos or root.Position
+    local moved   = (root.Position - prevPos).Magnitude
+    GEN.lastPos   = root.Position
+
+    -- ???? MoveDirection ???? (?????? mobile joystick)
+    local isMoving = moved > GEN.MOVE_THRESH or hum.MoveDirection.Magnitude > 0.05
+
+    if isMoving and not GEN.cancelDB then
+        cancelRepair()
+    end
+end)
+
+-- -- X Cancel (PC) --------------------------------------------------------------------
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
     if input.KeyCode == Enum.KeyCode.X then
-        if currentRepairPoint and not cancelXCooldown then
-            cancelXCooldown = true
-
+        if isRepairPointValid() and not GEN.cancelDB then
             cancelRepair()
-
-            notify(
-                "Generator Cancelled",
-                "Repair cancelled successfully."
-            )
-
-            task.delay(0.4, function()
-                cancelXCooldown = false
-            end)
+            notify("Generator Cancelled", "Repair cancelled successfully.")
         end
     end
 end)
 
--- Mobile cancel support
-if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-    task.spawn(function()
-        while true do
-            task.wait(0.1)
-
-            local char = LocalPlayer.Character
-            local hum = char and char:FindFirstChild("Humanoid")
-
-            if hum and currentRepairPoint then
-                if hum.MoveDirection.Magnitude > 0.05 then
-                    if not mobileCancelHold then
-                        mobileCancelHold = true
-
-                        cancelRepair()
-
-                        task.wait(0.4)
-
-                        mobileCancelHold = false
-                    end
-                end
-            end
-        end
-    end)
-end
-
--- ── Generator Section ──
-SurTab:Section({
-    Title = "Feature Generator",
-    Icon = "zap"
-})
+-- -- Section UI -----------------------------------------------------------------------
+SurTab:Section({ Title = "Feature Generator", Icon = "zap" })
 
 local AutoSkillPerfect = Config:Get("AutoSkillPerfect", false)
 local AutoSkillNeutral = Config:Get("AutoSkillNeutral", false)
-local AutoGenRepair    = Config:Get("AutoGenRepair", false)
+local AutoGenRepair    = Config:Get("AutoGenRepair",    false)
 
--- Auto Perfect
-SurTab:Toggle({
-    Title = "Auto SkillCheck (Perfect)",
-    Desc  = "Automatically hits perfect generator skill checks",
-    Value = AutoSkillPerfect,
+-- -- Shared skill loop runner (1 instance ???????? ??? mode) --------------------------
+local _skillThread = nil
+local function startSkillLoop(mode)
+    if _skillThread then task.cancel(_skillThread); _skillThread = nil end
+    _skillThread = task.spawn(function()
+        local pGui = LocalPlayer:WaitForChild("PlayerGui")
+        local resultType = mode == "perfect" and "success" or "neutral"
+        local resultVal  = mode == "perfect" and 1 or 0
 
-    Callback = function(v)
-        AutoSkillPerfect = v
-        Config:Set("AutoSkillPerfect", v)
-        Config:Save()
-
-        if v then
-            notify(
-                "Auto Skill Perfect Enabled",
-                "Perfect skill checks are now automatic."
-            )
-
-            task.spawn(function()
-                local pGui = LocalPlayer:WaitForChild("PlayerGui")
-
-                while AutoSkillPerfect do
-                    task.wait(0.1)
-
-                    local char = LocalPlayer.Character
-                    local root = char and char:FindFirstChild("HumanoidRootPart")
-
-                    if root then
-                        local gen, pt = getClosestGeneratorPoint(root)
-
-                        if gen and pt then
-                            currentRepairModel = gen
-                            currentRepairPoint = pt
-                        end
-
-                        local gui = pGui:FindFirstChild("SkillCheckPromptGui")
-
-                        if gui then
-                            local check = gui:FindFirstChild("Check")
-
-                            if check and check.Visible and currentRepairPoint then
-                                local dist = (root.Position - currentRepairPoint.Position).Magnitude
-
-                                if dist <= 6 then
-                                    skillRemote:FireServer(
-                                        "success",
-                                        1,
-                                        currentRepairModel,
-                                        currentRepairPoint
-                                    )
-
-                                    check.Visible = false
-                                end
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-    end
-})
-
--- Auto Neutral
-SurTab:Toggle({
-    Title = "Auto SkillCheck (Not Perfect)",
-    Desc  = "Automatically hits neutral skill checks",
-    Value = AutoSkillNeutral,
-
-    Callback = function(v)
-        AutoSkillNeutral = v
-        Config:Set("AutoSkillNeutral", v)
-        Config:Save()
-
-        if v then
-            notify(
-                "Auto Skill Neutral Enabled",
-                "Neutral skill checks are now automatic."
-            )
-
-            task.spawn(function()
-                local pGui = LocalPlayer:WaitForChild("PlayerGui")
-
-                while AutoSkillNeutral do
-                    task.wait(0.1)
-
-                    local char = LocalPlayer.Character
-                    local root = char and char:FindFirstChild("HumanoidRootPart")
-
-                    if root then
-                        local gen, pt = getClosestGeneratorPoint(root)
-
-                        if gen and pt then
-                            currentRepairModel = gen
-                            currentRepairPoint = pt
-                        end
-
-                        local gui = pGui:FindFirstChild("SkillCheckPromptGui")
-
-                        if gui then
-                            local check = gui:FindFirstChild("Check")
-
-                            if check and check.Visible and currentRepairPoint then
-                                local dist = (root.Position - currentRepairPoint.Position).Magnitude
-
-                                if dist <= 6 then
-                                    skillRemote:FireServer(
-                                        "neutral",
-                                        0,
-                                        currentRepairModel,
-                                        currentRepairPoint
-                                    )
-
-                                    check.Visible = false
-                                end
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-    end
-})
-
--- Auto Generator
-SurTab:Toggle({
-    Title = "Auto Generator (Teleport + Repair)",
-    Desc  = "Teleports and repairs generators automatically",
-    Value = AutoGenRepair,
-
-    Callback = function(v)
-        AutoGenRepair = v
-        Config:Set("AutoGenRepair", v)
-        Config:Save()
-
-        if v then
-            notify(
-                "Auto Generator Enabled",
-                "Press X or move joystick to cancel repair."
-            )
-
-            task.spawn(function()
-                while AutoGenRepair do
-                    task.wait(0.3)
-
-                    local char = LocalPlayer.Character
-                    local root = char and char:FindFirstChild("HumanoidRootPart")
-
-                    if root then
-                        local killer = findNearestWeaponPlayer(root, 12.5)
-
-                        if killer and currentRepairPoint then
-                            cancelRepair()
-
-                            task.wait(0.2)
-
-                            teleportToBestGenerator()
-                        else
-                            if not currentRepairPoint
-                            or (root.Position - currentRepairPoint.Position).Magnitude > 8 then
-                                teleportToBestGenerator()
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-    end
-})
-
---[[ ── Heal Section ──
-SurTab:Section({ Title = "Feature Heal", Icon = "cross" })
-
-local function getHealth(plr)
-    if not plr.Character then return 100 end
-    local hum = plr.Character:FindFirstChild("Humanoid")
-    if hum then return hum.Health end
-    local h = plr.Character:FindFirstChild("Health")
-    if h and h.Value then return h.Value end
-    return 100
-end
-
-local function getClosestLowHPPlayer(root, maxDist)
-    local closest, closestDist = nil, maxDist or 6
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character then
-            local hrp_ = plr.Character:FindFirstChild("HumanoidRootPart")
-            if hrp_ and getHealth(plr) <= 60 then
-                local d = (root.Position - hrp_.Position).Magnitude
-                if d < closestDist then closest = plr; closestDist = d end
-            end
-        end
-    end
-    return closest
-end
-
-local autoHealEnabled  = false
-local autoHealEnabled2 = false
-
-local function runHealLoop(flagGetter, flagName)
-    task.spawn(function()
-        local pGui      = LocalPlayer:WaitForChild("PlayerGui")
-        local healRemote = ReplicatedStorage:WaitForChild("Remotes")
-            :WaitForChild("Healing")
-            :WaitForChild("SkillCheckResultEvent")
-        local lastHealTarget = nil
-        while flagGetter() do
-            task.wait(0.15)
+        while (mode == "perfect" and AutoSkillPerfect) or (mode == "neutral" and AutoSkillNeutral) do
+            task.wait(0.08)  -- ???????????? (???? 0.1)
             local char = LocalPlayer.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
-            local hum  = char and char:FindFirstChild("Humanoid")
-            if root and hum then
-                local isMoving = hum.MoveDirection.Magnitude > 0.05
-                local target   = getClosestLowHPPlayer(root)
-                if not lastHealTarget and target then lastHealTarget = target end
-                if isMoving then lastHealTarget = nil end
-                local gui = pGui:FindFirstChild("SkillCheckPromptGui")
-                if gui then
-                    local check = gui:FindFirstChild("Check")
-                    if check and check.Visible and lastHealTarget then
-                        if getHealth(lastHealTarget) <= 60 and lastHealTarget.Character then
-                            healRemote:FireServer("success", 1, lastHealTarget.Character)
-                            check.Visible = false
-                        end
-                    end
+            if not root then continue end
+
+            -- ?????? repair point ??????
+            local gen, pt = getClosestGeneratorPoint(root, 8)
+            if gen and pt then
+                GEN.repairModel = gen
+                GEN.repairPoint = pt
+            end
+
+            -- ???? SkillCheck GUI
+            local gui = pGui:FindFirstChild("SkillCheckPromptGui")
+            if not gui then continue end
+            local check = gui:FindFirstChild("Check")
+            if check and check.Visible and isRepairPointValid() then
+                local d = (root.Position - GEN.repairPoint.Position).Magnitude
+                if d <= 6 and not GEN.skillDB then
+                    GEN.skillDB = true
+                    pcall(function()
+                        skillRemote:FireServer(resultType, resultVal, GEN.repairModel, GEN.repairPoint)
+                    end)
+                    check.Visible = false
+                    task.delay(0.1, function() GEN.skillDB = false end)
                 end
             end
         end
+        _skillThread = nil
     end)
 end
 
 SurTab:Toggle({
-    Title = "Auto Heal SkillCheck (STILL BUG)",
-    Desc  = "Automatically completes healing skill checks",
-    Value = false,
+    Title    = "Auto SkillCheck (Perfect)",
+    Desc     = "Automatically hits perfect generator skill checks",
+    Value    = AutoSkillPerfect,
     Callback = function(v)
-        autoHealEnabled = v
-        if v then runHealLoop(function() return autoHealEnabled end, "autoHealEnabled") end
+        AutoSkillPerfect = v
+        Config:Set("AutoSkillPerfect", v); Config:Save()
+        if v then
+            AutoSkillNeutral = false
+            notify("Auto Skill Perfect Enabled", "Perfect skill checks are now automatic.")
+            startSkillLoop("perfect")
+        elseif _skillThread then
+            task.cancel(_skillThread); _skillThread = nil
+        end
     end
 })
-SurTab:Toggle({
-    Title = "Instant Heal (STILL BUG)",
-    Desc  = "Automatically completes healing in 1 sec",
-    Value = false,
-    Callback = function(v)
-        autoHealEnabled2 = v
-        if v then runHealLoop(function() return autoHealEnabled2 end, "autoHealEnabled2") end
-    end
-})
---]]
 
--- ── Cheat Section ──
+SurTab:Toggle({
+    Title    = "Auto SkillCheck (Not Perfect)",
+    Desc     = "Automatically hits neutral skill checks",
+    Value    = AutoSkillNeutral,
+    Callback = function(v)
+        AutoSkillNeutral = v
+        Config:Set("AutoSkillNeutral", v); Config:Save()
+        if v then
+            AutoSkillPerfect = false
+            notify("Auto Skill Neutral Enabled", "Neutral skill checks are now automatic.")
+            startSkillLoop("neutral")
+        elseif _skillThread then
+            task.cancel(_skillThread); _skillThread = nil
+        end
+    end
+})
+
+-- -- Auto Generator loop (?????? respawn + generator ?????/???) -----------------------
+local _genThread = nil
+local function startGenLoop()
+    if _genThread then task.cancel(_genThread); _genThread = nil end
+    _genThread = task.spawn(function()
+        while AutoGenRepair do
+            task.wait(0.25)  -- ??????????? (???? 0.3)
+            local char = LocalPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if not root then continue end
+
+            -- Generator ??????????? ? clear state + ?????????
+            if not isRepairPointValid() then
+                clearRepairState()
+                _invalidateGenCache()  -- force refresh cache
+            end
+
+            -- ???? killer
+            local killer = findNearestKiller(root, 12.5)
+            if killer and isRepairPointValid() then
+                cancelRepair()
+                task.wait(0.2)
+                teleportToGenerator()
+                continue
+            end
+
+            -- ????? repair point ???? ?????? generator ? ??????
+            if not isRepairPointValid()
+            or (root.Position - GEN.repairPoint.Position).Magnitude > 8 then
+                teleportToGenerator()
+            end
+        end
+        _genThread = nil
+    end)
+end
+
+-- Reset state ????? respawn
+LocalPlayer.CharacterAdded:Connect(function()
+    clearRepairState()
+    -- re-start loops ??? enabled
+    if AutoGenRepair    then task.delay(1, startGenLoop)          end
+    if AutoSkillPerfect then task.delay(1, function() startSkillLoop("perfect") end) end
+    if AutoSkillNeutral then task.delay(1, function() startSkillLoop("neutral") end) end
+end)
+
+SurTab:Toggle({
+    Title    = "Auto Generator (Teleport + Repair)",
+    Desc     = "Teleports and repairs generators automatically",
+    Value    = AutoGenRepair,
+    Callback = function(v)
+        AutoGenRepair = v
+        Config:Set("AutoGenRepair", v); Config:Save()
+        if v then
+            notify("Auto Generator Enabled", "Press X or move joystick to cancel repair.")
+            startGenLoop()
+        else
+            if _genThread then task.cancel(_genThread); _genThread = nil end
+            clearRepairState()
+        end
+    end
+})
+
+-- -- Cheat Section --------------------------------------------------------------------
 SurTab:Section({ Title = "Feature Cheat", Icon = "bug" })
 
 SurTab:Button({
@@ -1872,14 +1648,14 @@ SurTab:Button({
             Name = Name:lower()
             if Name == "all" or Name == "others" then AllBool = true; return end
             if Name == "random" then
-                local pl = Players:GetPlayers()
+                local pl  = Players:GetPlayers()
                 local idx = table.find(pl, LocalPlayer)
                 if idx then table.remove(pl, idx) end
                 return pl[math.random(#pl)]
             end
             for _, x in next, Players:GetPlayers() do
                 if x ~= LocalPlayer then
-                    if x.Name:lower():match("^" .. Name) or x.DisplayName:lower():match("^" .. Name) then return x end
+                    if x.Name:lower():match("^"..Name) or x.DisplayName:lower():match("^"..Name) then return x end
                 end
             end
         end
@@ -1896,9 +1672,9 @@ SurTab:Button({
             local THead = TC and TC:FindFirstChild("Head")
             local Acc   = TC and TC:FindFirstChildOfClass("Accessory")
             local Hand  = Acc and Acc:FindFirstChild("Handle")
-            if not (Char and Hum and Root) then return Message("Error", "Script Failed", 5) end
+            if not (Char and Hum and Root) then return Message("Error","Script Failed",5) end
             if Root.Velocity.Magnitude < 50 then getgenv().OldPos = Root.CFrame end
-            if TH and TH.Sit and not AllBool then return Message("Error", "Target is sitting", 5) end
+            if TH and TH.Sit and not AllBool then return Message("Error","Target is sitting",5) end
             if THead then Workspace.CurrentCamera.CameraSubject = THead
             elseif Hand then Workspace.CurrentCamera.CameraSubject = Hand
             elseif TH then Workspace.CurrentCamera.CameraSubject = TH end
@@ -1906,8 +1682,8 @@ SurTab:Button({
             local FPos = function(BP, Pos, Ang)
                 Root.CFrame = CFrame.new(BP.Position) * Pos * Ang
                 Char:SetPrimaryPartCFrame(CFrame.new(BP.Position) * Pos * Ang)
-                Root.Velocity    = Vector3.new(9e7, 9e7 * 10, 9e7)
-                Root.RotVelocity = Vector3.new(9e8, 9e8, 9e8)
+                Root.Velocity    = Vector3.new(9e7,9e7*10,9e7)
+                Root.RotVelocity = Vector3.new(9e8,9e8,9e8)
             end
             local SFBasePart = function(BP)
                 local Time, Angle = tick(), 0
@@ -1915,36 +1691,35 @@ SurTab:Button({
                     if Root and TH then
                         if BP.Velocity.Magnitude < 50 then
                             Angle += 100
-                            FPos(BP, CFrame.new(0, 1.5, 0) + TH.MoveDirection * BP.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle), 0, 0))
+                            FPos(BP, CFrame.new(0,1.5,0)+TH.MoveDirection*BP.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
                             task.wait()
-                            FPos(BP, CFrame.new(0, -1.5, 0) + TH.MoveDirection * BP.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle), 0, 0))
+                            FPos(BP, CFrame.new(0,-1.5,0)+TH.MoveDirection*BP.Velocity.Magnitude/1.25, CFrame.Angles(math.rad(Angle),0,0))
                             task.wait()
                         else
-                            FPos(BP, CFrame.new(0, 1.5, TR.Velocity.Magnitude / 1.25), CFrame.Angles(math.rad(90), 0, 0))
+                            FPos(BP, CFrame.new(0,1.5,TR.Velocity.Magnitude/1.25), CFrame.Angles(math.rad(90),0,0))
                             task.wait()
                         end
                     else break end
-                until BP.Velocity.Magnitude > 500 or BP.Parent ~= TargetPlayer.Character or TH.Sit or Hum.Health <= 0 or tick() > Time + 2
+                until BP.Velocity.Magnitude>500 or BP.Parent~=TargetPlayer.Character or TH.Sit or Hum.Health<=0 or tick()>Time+2
             end
-            Workspace.FallenPartsDestroyHeight = 0 / 0
+            Workspace.FallenPartsDestroyHeight = 0/0
             local BV = Instance.new("BodyVelocity")
-            BV.Name      = "DYHUB-YES"
-            BV.Parent    = Root
-            BV.Velocity  = Vector3.new(9e9, 9e9, 9e9)
-            BV.MaxForce  = Vector3.new(math.huge, math.huge, math.huge)
+            BV.Name = "DYHUB-YES"; BV.Parent = Root
+            BV.Velocity = Vector3.new(9e9,9e9,9e9)
+            BV.MaxForce = Vector3.new(math.huge,math.huge,math.huge)
             Hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
             if TR and THead then
-                if (TR.CFrame.p - THead.CFrame.p).Magnitude > 5 then SFBasePart(THead) else SFBasePart(TR) end
+                if (TR.CFrame.p-THead.CFrame.p).Magnitude > 5 then SFBasePart(THead) else SFBasePart(TR) end
             elseif TR then SFBasePart(TR)
             elseif THead then SFBasePart(THead)
             elseif Hand then SFBasePart(Hand)
-            else return Message("Error", "Target missing everything", 5) end
+            else return Message("Error","Target missing everything",5) end
             BV:Destroy()
             Hum:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
             Workspace.CurrentCamera.CameraSubject = Hum
             repeat
-                Root.CFrame = getgenv().OldPos * CFrame.new(0, 0.5, 0)
-                Char:SetPrimaryPartCFrame(getgenv().OldPos * CFrame.new(0, 0.5, 0))
+                Root.CFrame = getgenv().OldPos * CFrame.new(0,0.5,0)
+                Char:SetPrimaryPartCFrame(getgenv().OldPos * CFrame.new(0,0.5,0))
                 Hum:ChangeState("GettingUp")
                 for _, x in ipairs(Char:GetChildren()) do
                     if x:IsA("BasePart") then x.Velocity = Vector3.new(); x.RotVelocity = Vector3.new() end
@@ -1953,16 +1728,14 @@ SurTab:Button({
             until (Root.Position - getgenv().OldPos.p).Magnitude < 25
             Workspace.FallenPartsDestroyHeight = getgenv().FPDH
         end
-        if not getgenv().Welcome then Message("DYHUB | FLING", "THANK FOR USING", 6) end
+        if not getgenv().Welcome then Message("DYHUB | FLING","THANK FOR USING",6) end
         getgenv().Welcome = true
-        if AllBool then
-            for _, x in next, Players:GetPlayers() do SkidFling(x) end
-        end
+        if AllBool then for _, x in next, Players:GetPlayers() do SkidFling(x) end end
         for _, x in next, Targets do
             local TPlayer = GetPlayer(x)
             if TPlayer and TPlayer ~= LocalPlayer then
                 if TPlayer.UserId ~= 4340578793 then SkidFling(TPlayer)
-                else Message("ERROR", "CANT FLING OWNER", 8) end
+                else Message("ERROR","CANT FLING OWNER",8) end
             end
         end
     end
@@ -2002,9 +1775,9 @@ local DYHUB_mobileButton, DYHUB_mobileButton28, DYHUB_guiFolder
 local DYHUB_Settings = {
     Aimbot = {
         DragUI                 = false,
-        MobileButtonPosition   = UDim2.new(1, -40, 1, -40),
-        MobileButton28Position = UDim2.new(1, -140, 1, -40),
-        SetKeybindLock         = Config:Get("AimbotKey", "Z"),
+        MobileButtonPosition   = UDim2.new(1,-40,1,-40),
+        MobileButton28Position = UDim2.new(1,-140,1,-40),
+        SetKeybindLock         = Config:Get("AimbotKey",   "Z"),
         SetKeybindLock28       = Config:Get("AimbotKey28", "V"),
     }
 }
@@ -2013,10 +1786,8 @@ killerTab:Section({ Title = "Killer: The Veil", Icon = "target" })
 killerTab:Paragraph({
     Title = "Information: The Veil",
     Desc  = "• Aimbot is currently in BETA.\n• There is a chance of missing.\n• Aimbot will not support people at high places.",
-    Image = "rbxassetid://104487529937663",
-    ImageSize = 50,
+    Image = "rbxassetid://104487529937663", ImageSize = 50,
 })
-
 killerTab:Toggle({
     Title = "Enable Aimbot (The Veil)", Desc = "Automatically locks aim onto nearby survivors", Value = false,
     Callback = function(state)
@@ -2030,7 +1801,6 @@ killerTab:Toggle({
         end
     end
 })
-
 killerTab:Toggle({
     Title = "Enable Aimbot Charge (The Veil)", Desc = "Charge-based aimbot optimized for The Veil", Value = false,
     Callback = function(state)
@@ -2044,45 +1814,31 @@ killerTab:Toggle({
         end
     end
 })
-
 killerTab:Section({ Title = "Killer: The Veil Setting", Icon = "settings" })
 killerTab:Input({
     Title = "Set Pitch Min", Value = tostring(DYHUB_MIN_PITCH), Placeholder = "Default: -1",
-    Callback = function(v)
-        local n = tonumber(v)
-        if n then DYHUB_MIN_PITCH = n; Config:Set("DYHUB_MIN_PITCH", n); Config:Save() end
-    end
+    Callback = function(v) local n=tonumber(v); if n then DYHUB_MIN_PITCH=n; Config:Set("DYHUB_MIN_PITCH",n); Config:Save() end end
 })
 killerTab:Input({
     Title = "Set Pitch Max", Value = tostring(DYHUB_MAX_PITCH), Placeholder = "Default: 30",
-    Callback = function(v)
-        local n = tonumber(v)
-        if n then DYHUB_MAX_PITCH = n; Config:Set("DYHUB_MAX_PITCH", n); Config:Save() end
-    end
+    Callback = function(v) local n=tonumber(v); if n then DYHUB_MAX_PITCH=n; Config:Set("DYHUB_MAX_PITCH",n); Config:Save() end end
 })
 killerTab:Toggle({
     Title = "Tough Wall (The Veil)", Desc = "Allows aiming through walls", Value = DYHUB_ToughWall,
-    Callback = function(v) DYHUB_ToughWall = v; Config:Set("DYHUB_ToughWall", v); Config:Save() end
+    Callback = function(v) DYHUB_ToughWall=v; Config:Set("DYHUB_ToughWall",v); Config:Save() end
 })
 killerTab:Input({
     Title = "Set Keybind Aimbot (PC)", Value = DYHUB_Settings.Aimbot.SetKeybindLock, Placeholder = "Default: Z",
     Callback = function(v)
-        if #v == 1 then
-            DYHUB_Settings.Aimbot.SetKeybindLock = v:upper()
-            Config:Set("AimbotKey", v:upper()); Config:Save()
-        end
+        if #v==1 then DYHUB_Settings.Aimbot.SetKeybindLock=v:upper(); Config:Set("AimbotKey",v:upper()); Config:Save() end
     end
 })
 killerTab:Input({
     Title = "Set Keybind Aimbot Charge (PC)", Value = DYHUB_Settings.Aimbot.SetKeybindLock28, Placeholder = "Default: V",
     Callback = function(v)
-        if #v == 1 then
-            DYHUB_Settings.Aimbot.SetKeybindLock28 = v:upper()
-            Config:Set("AimbotKey28", v:upper()); Config:Save()
-        end
+        if #v==1 then DYHUB_Settings.Aimbot.SetKeybindLock28=v:upper(); Config:Set("AimbotKey28",v:upper()); Config:Save() end
     end
 })
-
 killerTab:Section({ Title = "Killer: The Veil GUI", Icon = "settings" })
 killerTab:Toggle({
     Title = "Enable Aimbot (Toggle GUI)", Desc = "Shows a mobile toggle button for aimbot", Value = false,
@@ -2100,13 +1856,10 @@ killerTab:Toggle({
 })
 killerTab:Toggle({
     Title = "Custom Position Drag (Toggle GUI)", Desc = "Allows dragging the mobile aimbot buttons", Value = false,
-    Callback = function(state)
-        DYHUB_Settings.Aimbot.DragUI = state
-        DYHUB_EnableDrag(state)
-    end
+    Callback = function(state) DYHUB_Settings.Aimbot.DragUI = state; DYHUB_EnableDrag(state) end
 })
 
--- ── Aimbot Helpers ──
+-- -- Aimbot helpers -------------------------------------------------------------------
 local function DYHUB_GetLocalRoot()
     local c = LocalPlayer.Character
     return c and c:FindFirstChild("HumanoidRootPart")
@@ -2124,8 +1877,8 @@ local function DYHUB_GetClosestInScreen()
             if head then
                 local pos, onScreen = Camera:WorldToViewportPoint(head.Position)
                 if onScreen then
-                    local d = (Vector2.new(pos.X, pos.Y) - mouse).Magnitude
-                    if d < minDist then minDist = d; closest = plr end
+                    local d = (Vector2.new(pos.X,pos.Y) - mouse).Magnitude
+                    if d < minDist then minDist=d; closest=plr end
                 end
             end
         end
@@ -2141,7 +1894,7 @@ local function DYHUB_GetClosestByDistance()
             local r = plr.Character:FindFirstChild("HumanoidRootPart")
             if r then
                 local d = (root.Position - r.Position).Magnitude
-                if d < distMin then distMin = d; closest = plr end
+                if d < distMin then distMin=d; closest=plr end
             end
         end
     end
@@ -2155,14 +1908,12 @@ local function DYHUB_CanSeeTarget(target)
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Blacklist
     params.FilterDescendantsInstances = { LocalPlayer.Character or {}, target.Character }
-    local result = Workspace:Raycast(root.Position + Vector3.new(0, 2, 0), head.Position - root.Position, params)
+    local result = Workspace:Raycast(root.Position + Vector3.new(0,2,0), head.Position - root.Position, params)
     return not result
 end
 local function DYHUB_GetAutoPitchMax(dist)
-    if dist >= 190 then return 45.5
-    elseif dist >= 150 then return 40.5
-    elseif dist >= 90  then return 36.5
-    else return 30.5 end
+    if dist >= 190 then return 45.5 elseif dist >= 150 then return 40.5
+    elseif dist >= 90  then return 36.5 else return 30.5 end
 end
 local function DYHUB_AimAt_Normal(target)
     if not target.Character then return end
@@ -2173,7 +1924,7 @@ local function DYHUB_AimAt_Normal(target)
     local pred     = head.Position + (hrp_.Velocity * DYHUB_PredictionTime)
     local dist     = (lr.Position - pred).Magnitude
     local pitchMax = DYHUB_GetAutoPitchMax(dist)
-    local alpha    = math.clamp((dist - DYHUB_MIN_DISTANCE) / (DYHUB_MAX_DISTANCE - DYHUB_MIN_DISTANCE), 0, 1)
+    local alpha    = math.clamp((dist-DYHUB_MIN_DISTANCE)/(DYHUB_MAX_DISTANCE-DYHUB_MIN_DISTANCE), 0, 1)
     local pitch    = DYHUB_MIN_PITCH + (pitchMax - DYHUB_MIN_PITCH) * alpha
     local dir      = (pred - Camera.CFrame.Position).Unit
     local yaw      = math.atan2(dir.X, dir.Z)
@@ -2202,7 +1953,6 @@ local function DYHUB_AimAt_28(target)
     Camera.CFrame = CFrame.new(Camera.CFrame.Position, Camera.CFrame.Position + look)
 end
 
--- Keyboard toggle aimbot
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp or input.UserInputType ~= Enum.UserInputType.Keyboard then return end
     local key = input.KeyCode.Name
@@ -2228,15 +1978,13 @@ UserInputService.InputBegan:Connect(function(input, gp)
     end
 end)
 
--- Drag system
 local DYHUB_DragConnNormal, DYHUB_DragConn28, DYHUB_DragMoveConn, DYHUB_DragMoveConn28
 local function DYHUB_ClearDragConnections()
-    if DYHUB_DragConnNormal then DYHUB_DragConnNormal:Disconnect();  DYHUB_DragConnNormal  = nil end
-    if DYHUB_DragConn28     then DYHUB_DragConn28:Disconnect();      DYHUB_DragConn28      = nil end
-    if DYHUB_DragMoveConn   then DYHUB_DragMoveConn:Disconnect();    DYHUB_DragMoveConn    = nil end
-    if DYHUB_DragMoveConn28 then DYHUB_DragMoveConn28:Disconnect();  DYHUB_DragMoveConn28  = nil end
+    if DYHUB_DragConnNormal then DYHUB_DragConnNormal:Disconnect(); DYHUB_DragConnNormal  = nil end
+    if DYHUB_DragConn28     then DYHUB_DragConn28:Disconnect();     DYHUB_DragConn28      = nil end
+    if DYHUB_DragMoveConn   then DYHUB_DragMoveConn:Disconnect();   DYHUB_DragMoveConn    = nil end
+    if DYHUB_DragMoveConn28 then DYHUB_DragMoveConn28:Disconnect(); DYHUB_DragMoveConn28  = nil end
 end
-
 function DYHUB_EnableDrag(state)
     DYHUB_ClearDragConnections()
     if not state then
@@ -2262,7 +2010,7 @@ function DYHUB_EnableDrag(state)
             if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
             or input.UserInputType == Enum.UserInputType.Touch) then
                 local delta = input.Position - startInput
-                btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+                btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset+delta.X, startPos.Y.Scale, startPos.Y.Offset+delta.Y)
             end
         end)
     end
@@ -2278,29 +2026,27 @@ local function DYHUB_EnsureGUIFolder()
         DYHUB_guiFolder.Parent       = PlayerGui
     end
 end
-
 local function DYHUB_CreateMobileButtons()
     pcall(function() if DYHUB_mobileButton   then DYHUB_mobileButton:Destroy()   end end)
     pcall(function() if DYHUB_mobileButton28 then DYHUB_mobileButton28:Destroy() end end)
     local function makeBtn(text, pos, isEnabled)
         local btn = Instance.new("TextButton")
-        btn.Size              = UDim2.new(0, 90, 0, 90)
-        btn.Position          = pos
-        btn.AnchorPoint       = Vector2.new(1, 1)
-        btn.BackgroundColor3  = isEnabled and Color3.fromRGB(60,255,60) or Color3.fromRGB(255,60,60)
-        btn.Text              = text
-        btn.TextSize          = 36
-        btn.Font              = Enum.Font.GothamBold
-        btn.TextColor3        = Color3.new(1, 1, 1)
-        btn.Visible           = false
-        btn.Parent            = DYHUB_guiFolder
+        btn.Size             = UDim2.new(0,90,0,90)
+        btn.Position         = pos
+        btn.AnchorPoint      = Vector2.new(1,1)
+        btn.BackgroundColor3 = isEnabled and Color3.fromRGB(60,255,60) or Color3.fromRGB(255,60,60)
+        btn.Text             = text
+        btn.TextSize         = 36
+        btn.Font             = Enum.Font.GothamBold
+        btn.TextColor3       = Color3.new(1,1,1)
+        btn.Visible          = false
+        btn.Parent           = DYHUB_guiFolder
         local c = Instance.new("UICorner")
-        c.CornerRadius = UDim.new(0, 45)
-        c.Parent = btn
+        c.CornerRadius = UDim.new(0,45); c.Parent = btn
         return btn
     end
-    DYHUB_mobileButton   = makeBtn("🗡️", DYHUB_Settings.Aimbot.MobileButtonPosition,   DYHUB_AimbotEnabled)
-    DYHUB_mobileButton28 = makeBtn("⚔️", DYHUB_Settings.Aimbot.MobileButton28Position, DYHUB_Aimbot28Enabled)
+    DYHUB_mobileButton   = makeBtn("???", DYHUB_Settings.Aimbot.MobileButtonPosition,   DYHUB_AimbotEnabled)
+    DYHUB_mobileButton28 = makeBtn("??", DYHUB_Settings.Aimbot.MobileButton28Position, DYHUB_Aimbot28Enabled)
     DYHUB_mobileButton.Visible   = DYHUB_AimbotToggleGUIVisible
     DYHUB_mobileButton28.Visible = DYHUB_Aimbot28ToggleGUIVisible
     DYHUB_mobileButton.MouseButton1Click:Connect(function()
@@ -2332,7 +2078,6 @@ task.spawn(function()
     end
 end)
 
--- RenderStepped: aimbot (เดิม 1 connection เท่านั้น)
 RunService.RenderStepped:Connect(function()
     if DYHUB_AimbotEnabled then
         DYHUB_LockedTarget = DYHUB_GetClosestInScreen()
@@ -2347,47 +2092,46 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ── The Masked ──
+-- -- The Masked -----------------------------------------------------------------------
 killerTab:Section({ Title = "Killer: The Masked", Icon = "venetian-mask" })
 killerTab:Paragraph({
     Title = "Information: The Masked",
     Desc  = "• Richard (No Abilities)\n• Tony (One Shot, No hold)\n• Brandon (Speed Boost)\n• Jake (Lunge Range)\n• Richter (Removes terror radius)\n• Graham (Faster Vault)\n• Alex (Chainsaw, One Shot)",
-    Image = "rbxassetid://104487529937663",
-    ImageSize = 50,
+    Image = "rbxassetid://104487529937663", ImageSize = 50,
 })
 local MaskedList    = {"Richard","Tony","Brandon","Jake","Richter","Graham","Alex"}
-local selectedMasks = Config:Get("selectedMasks", "Richard")
+local selectedMasks = Config:Get("selectedMasks","Richard")
 killerTab:Dropdown({
-    Title    = "Select Mask",
-    Values   = MaskedList,
-    Multi    = false,
-    Value    = selectedMasks,
-    Callback = function(value) selectedMasks = value; Config:Set("selectedMasks", value); Config:Save() end
+    Title = "Select Mask", Values = MaskedList, Multi = false, Value = selectedMasks,
+    Callback = function(value) selectedMasks=value; Config:Set("selectedMasks",value); Config:Save() end
 })
 killerTab:Button({
-    Title    = "Choose Mask (Selected)",
-    Desc     = "Equips the selected mask ability",
-    Callback = function()
-        ReplicatedStorage.Remotes.Killers.Masked.Activatepower:FireServer(selectedMasks)
-    end
+    Title = "Choose Mask (Selected)", Desc = "Equips the selected mask ability",
+    Callback = function() ReplicatedStorage.Remotes.Killers.Masked.Activatepower:FireServer(selectedMasks) end
 })
 killerTab:Button({
-    Title    = "Random Mask (Legit Mode)",
-    Desc     = "Chooses a random mask ability automatically",
-    Callback = function()
-        ReplicatedStorage.Remotes.Killers.Masked.Activatepower:FireServer(MaskedList[math.random(#MaskedList)])
-    end
+    Title = "Random Mask (Legit Mode)", Desc = "Chooses a random mask ability automatically",
+    Callback = function() ReplicatedStorage.Remotes.Killers.Masked.Activatepower:FireServer(MaskedList[math.random(#MaskedList)]) end
 })
 
--- ── The Stalker ──
+-- -- The Stalker -----------------------------------------------------------------------
 killerTab:Section({ Title = "Killer: The Stalker", Icon = "eye-off" })
 local Stalker = Config:Get("Stalker", false)
+
+-- Cache remote
+local _stalkerRemote
+local function getStalkerRemote()
+    if not _stalkerRemote or not _stalkerRemote.Parent then
+        _stalkerRemote = ReplicatedStorage:WaitForChild("Remotes")
+            :WaitForChild("Killers"):WaitForChild("Stalker"):WaitForChild("StartStalking")
+    end
+    return _stalkerRemote
+end
+
 killerTab:Toggle({
     Title = "Start Stalker (Raycast / Remote)", Desc = "Automatically stalks nearby survivors", Value = false,
     Callback = function(v)
-        Stalker = v
-        Config:Set("Stalker", Stalker)
-        Config:Save()
+        Stalker = v; Config:Set("Stalker", Stalker); Config:Save()
         if v then
             task.spawn(function()
                 while Stalker do
@@ -2396,6 +2140,7 @@ killerTab:Toggle({
                     local root = char and char:FindFirstChild("HumanoidRootPart")
                     if not root then continue end
                     if not char:FindFirstChild("Weapon") then continue end
+                    local remote = getStalkerRemote()
                     for _, plr in ipairs(Players:GetPlayers()) do
                         if plr ~= LocalPlayer and plr.Character then
                             local hrp_ = plr.Character:FindFirstChild("HumanoidRootPart")
@@ -2403,11 +2148,7 @@ killerTab:Toggle({
                             if hrp_ and hum then
                                 local dist = (root.Position - hrp_.Position).Magnitude
                                 if dist >= 30 and dist <= 70 and hum.Health > 20 then
-                                    ReplicatedStorage:WaitForChild("Remotes")
-                                        :WaitForChild("Killers")
-                                        :WaitForChild("Stalker")
-                                        :WaitForChild("StartStalking")
-                                        :FireServer(plr)
+                                    pcall(function() remote:FireServer(plr) end)
                                 end
                             end
                         end
@@ -2418,16 +2159,14 @@ killerTab:Toggle({
     end
 })
 
--- ── Feature Killer ──
+-- -- Feature Killer -------------------------------------------------------------------
 killerTab:Section({ Title = "Feature Killer", Icon = "swords" })
 
 local killallEnabled = Config:Get("killall", false)
 killerTab:Toggle({
     Title = "Kill All (Warning: Get Ban)", Desc = "Automatically teleport and kill all", Value = killallEnabled,
     Callback = function(v)
-        killallEnabled = v
-        Config:Set("killall", killallEnabled)
-        Config:Save()
+        killallEnabled = v; Config:Set("killall", killallEnabled); Config:Save()
         if v then
             task.spawn(function()
                 local remote    = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Attacks"):WaitForChild("BasicAttack")
@@ -2443,14 +2182,14 @@ killerTab:Toggle({
                         if plr ~= LocalPlayer and plr.Character then
                             local tr = plr.Character:FindFirstChild("HumanoidRootPart")
                             local hm = plr.Character:FindFirstChildOfClass("Humanoid")
-                            if tr and hm then table.insert(targets, {root = tr, humanoid = hm}) end
+                            if tr and hm then table.insert(targets, {root=tr, humanoid=hm}) end
                         end
                     end
                     for _, entry in ipairs(targets) do
                         if not killallEnabled then break end
                         if entry.humanoid.Health > 20 then
                             pcall(function()
-                                root.CFrame = entry.root.CFrame * CFrame.new(0, 0, 2)
+                                root.CFrame = entry.root.CFrame * CFrame.new(0,0,2)
                                 remote:FireServer()
                             end)
                             task.wait(0.15)
@@ -2471,9 +2210,7 @@ local Autocarry = Config:Get("autocarry", false)
 killerTab:Toggle({
     Title = "Auto Carry (Nearby Survivor / 2.5s)", Desc = "Automatically picks up nearby downed survivors", Value = Autocarry,
     Callback = function(v)
-        Autocarry = v
-        Config:Set("autocarry", Autocarry)
-        Config:Save()
+        Autocarry = v; Config:Set("autocarry", Autocarry); Config:Save()
         if v then
             task.spawn(function()
                 while Autocarry do
@@ -2486,8 +2223,7 @@ killerTab:Toggle({
                         if plr ~= LocalPlayer and plr.Character then
                             local hum  = plr.Character:FindFirstChild("Humanoid")
                             local oHrp = plr.Character:FindFirstChild("HumanoidRootPart")
-                            if hum and oHrp and hum.Health == 20
-                            and (hrp_.Position - oHrp.Position).Magnitude <= 10 then
+                            if hum and oHrp and hum.Health==20 and (hrp_.Position-oHrp.Position).Magnitude<=10 then
                                 table.insert(candidates, plr)
                             end
                         end
@@ -2512,9 +2248,7 @@ local AutoHook = Config:Get("autohook", false)
 killerTab:Toggle({
     Title = "Auto Hook (Nearby Hook / 2.5s)", Desc = "Automatically hook nearby survivors", Value = AutoHook,
     Callback = function(v)
-        AutoHook = v
-        Config:Set("autohook", AutoHook)
-        Config:Save()
+        AutoHook = v; Config:Set("autohook", AutoHook); Config:Save()
         if v then
             task.spawn(function()
                 while AutoHook do
@@ -2527,8 +2261,7 @@ killerTab:Toggle({
                         if target ~= LocalPlayer and target.Character then
                             local hum  = target.Character:FindFirstChild("Humanoid")
                             local thrp = target.Character:FindFirstChild("HumanoidRootPart")
-                            if hum and thrp and hum.Health == 20
-                            and (hrp_.Position - thrp.Position).Magnitude <= 10 then
+                            if hum and thrp and hum.Health==20 and (hrp_.Position-thrp.Position).Magnitude<=10 then
                                 table.insert(candidates, target)
                             end
                         end
@@ -2538,7 +2271,7 @@ killerTab:Toggle({
                     for _, desc in ipairs(Workspace:GetDescendants()) do
                         if desc.Name == "HookPoint" then
                             local d = (hrp_.Position - desc.Position).Magnitude
-                            if d <= nearestDist then nearestDist = d; nearestHook = desc end
+                            if d <= nearestDist then nearestDist=d; nearestHook=desc end
                         end
                     end
                     if not nearestHook then continue end
@@ -2550,13 +2283,13 @@ killerTab:Toggle({
     end
 })
 
--- ── Feature Fun ──
+-- -- Feature Fun ----------------------------------------------------------------------
 killerTab:Section({ Title = "Feature Fun", Icon = "crown" })
 local GrabKey = Config:Get("GrabKey", "C")
 killerTab:Input({
     Title = "Set Keybind Grab (PC ONLY)", Value = GrabKey, Placeholder = "Grab (Default: C)",
     Callback = function(text)
-        if type(text) == "string" and #text > 0 then
+        if type(text)=="string" and #text>0 then
             GrabKey = text:upper(); Config:Set("GrabKey", GrabKey); Config:Save()
         end
     end
@@ -2571,7 +2304,7 @@ local function DoGrab()
         if target ~= LocalPlayer and target.Character then
             local hum  = target.Character:FindFirstChild("Humanoid")
             local thrp = target.Character:FindFirstChild("HumanoidRootPart")
-            if hum and thrp and (hrp_.Position - thrp.Position).Magnitude <= 20 and hum.Health ~= 20 then
+            if hum and thrp and (hrp_.Position-thrp.Position).Magnitude<=20 and hum.Health~=20 then
                 table.insert(candidates, target)
             end
         end
@@ -2593,9 +2326,7 @@ local nocooldownskillEnabled = Config:Get("autoattack", false)
 killerTab:Toggle({
     Title = "Auto Attack (No Animation)", Desc = "Automatically attack the player", Value = nocooldownskillEnabled,
     Callback = function(v)
-        nocooldownskillEnabled = v
-        Config:Set("autoattack", nocooldownskillEnabled)
-        Config:Save()
+        nocooldownskillEnabled = v; Config:Set("autoattack", nocooldownskillEnabled); Config:Save()
         if v then
             task.spawn(function()
                 local remote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Attacks"):WaitForChild("BasicAttack")
@@ -2603,49 +2334,40 @@ killerTab:Toggle({
                     task.wait(0.1)
                     local char = LocalPlayer.Character
                     local root = char and char:FindFirstChild("HumanoidRootPart")
-                    if root then
-                        local closest, closestDist = nil, 10
-                        for _, plr in ipairs(Players:GetPlayers()) do
-                            if plr ~= LocalPlayer and plr.Character then
-                                local tr = plr.Character:FindFirstChild("HumanoidRootPart")
-                                local hm = plr.Character:FindFirstChildOfClass("Humanoid")
-                                if tr and hm then
-                                    local d = (root.Position - tr.Position).Magnitude
-                                    if d <= closestDist and hm.Health > 20 then
-                                        closestDist = d; closest = plr.Character
-                                    end
+                    if not root then continue end
+                    local closest, closestDist = nil, 10
+                    for _, plr in ipairs(Players:GetPlayers()) do
+                        if plr ~= LocalPlayer and plr.Character then
+                            local tr = plr.Character:FindFirstChild("HumanoidRootPart")
+                            local hm = plr.Character:FindFirstChildOfClass("Humanoid")
+                            if tr and hm then
+                                local d = (root.Position - tr.Position).Magnitude
+                                if d <= closestDist and hm.Health > 20 then
+                                    closestDist=d; closest=plr.Character
                                 end
                             end
                         end
-                        if closest then remote:FireServer() end
                     end
+                    if closest then remote:FireServer() end
                 end
             end)
         end
     end
 })
 
--- ── Feature Cheat ──
+-- -- Feature Cheat ---------------------------------------------------------------------
 killerTab:Section({ Title = "Feature Cheat", Icon = "bug" })
 
 local noFlashlightEnabled = Config:Get("noblind", false)
 killerTab:Toggle({
     Title = "No Flashlight", Desc = "Prevents blind from using flash", Value = noFlashlightEnabled,
-    Callback = function(state) noFlashlightEnabled = state; Config:Set("noblind", noFlashlightEnabled); Config:Save() end
+    Callback = function(state) noFlashlightEnabled=state; Config:Set("noblind",noFlashlightEnabled); Config:Save() end
 })
 
--- No Flashlight loop (1 loop เท่านั้น ไม่ซ้ำ)
-task.spawn(function()
-    while true do
-        task.wait(0.5)
-        if noFlashlightEnabled then
-            local pg = LocalPlayer:FindFirstChild("PlayerGui")
-            if pg then
-                for _, desc in pairs(pg:GetDescendants()) do
-                    if desc:IsA("GuiObject") and desc.Name == "Blind" then desc:Destroy() end
-                end
-            end
-        end
+-- No Flashlight: ??? signal-based ??? polling loop
+PlayerGui.DescendantAdded:Connect(function(desc)
+    if noFlashlightEnabled and desc:IsA("GuiObject") and desc.Name == "Blind" then
+        pcall(function() desc:Destroy() end)
     end
 end)
 
@@ -2653,9 +2375,7 @@ local destroyPalletwrong = Config:Get("destroyPalletwrong", false)
 killerTab:Toggle({
     Title = "Remove Palletwrong (All)", Desc = "Removes all Palletwrong objects around the map", Value = destroyPalletwrong,
     Callback = function(v)
-        destroyPalletwrong = v
-        Config:Set("destroyPalletwrong", destroyPalletwrong)
-        Config:Save()
+        destroyPalletwrong = v; Config:Set("destroyPalletwrong", destroyPalletwrong); Config:Save()
         if v then
             task.spawn(function()
                 while destroyPalletwrong do
@@ -2670,8 +2390,7 @@ killerTab:Toggle({
 })
 
 killerTab:Button({
-    Title    = "Fix Cam (3rd Person Camera)",
-    Desc     = "Changes the camera from first person to third person view",
+    Title = "Fix Cam (3rd Person Camera)", Desc = "Changes the camera from first person to third person view",
     Callback = function()
         local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
         local humanoid  = character:FindFirstChildOfClass("Humanoid")
@@ -2698,9 +2417,7 @@ PlayerTab:Slider({
     Title = "Set Speed (Legit = 3)",
     Value = { Min = 1, Max = 677, Value = flyNoclipSpeed },
     Step  = 1,
-    Callback = function(val)
-        flyNoclipSpeed = val; Config:Set("SpeedWalk", flyNoclipSpeed); Config:Save()
-    end
+    Callback = function(val) flyNoclipSpeed=val; Config:Set("SpeedWalk",flyNoclipSpeed); Config:Save() end
 })
 PlayerTab:Toggle({
     Title = "Enable Speed", Desc = "Adjusts your character movement speed using a slider", Value = false,
@@ -2754,7 +2471,6 @@ PlayerTab:Toggle({
 -- No Fall
 local NoFallEnabled = false
 local FallRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Mechanics"):WaitForChild("Fall")
-
 local mt = getrawmetatable(game)
 local oldNamecall = mt.__namecall
 setreadonly(mt, false)
@@ -2784,7 +2500,7 @@ local function getAllGenerators()
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj.Name == "Generator" and (obj:IsA("Model") or obj:IsA("BasePart")) then
             count += 1
-            table.insert(list, { Name = "Generator " .. count, Object = obj })
+            table.insert(list, { Name = "Generator "..count, Object = obj })
         end
     end
     return list
@@ -2793,22 +2509,21 @@ end
 TeleportTab:Section({ Title = "Teleport: Place", Icon = "map" })
 local SelectedPlace
 TeleportTab:Dropdown({
-    Title = "Select Place", Values = {"Lobby", "Game"},
+    Title = "Select Place", Values = {"Lobby","Game"},
     Callback = function(v) SelectedPlace = v end
 })
 TeleportTab:Button({
-    Title    = "Teleport",
-    Desc     = "Teleports your character to the place selected",
+    Title = "Teleport", Desc = "Teleports your character to the place selected",
     Callback = function()
         if SelectedPlace == "Lobby" then
             local spawn = Workspace:FindFirstChild("SpawnLocation")
             if spawn and LocalPlayer.Character then
-                LocalPlayer.Character:PivotTo(spawn.CFrame + Vector3.new(0, 1, 0))
+                LocalPlayer.Character:PivotTo(spawn.CFrame + Vector3.new(0,1,0))
             end
         elseif SelectedPlace == "Game" then
             for _, p in ipairs(Players:GetPlayers()) do
                 if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Weapon") then
-                    LocalPlayer.Character:PivotTo(p.Character.PrimaryPart.CFrame * CFrame.new(0, 0, 200))
+                    LocalPlayer.Character:PivotTo(p.Character.PrimaryPart.CFrame * CFrame.new(0,0,200))
                     break
                 end
             end
@@ -2835,15 +2550,11 @@ local GenDropdown = TeleportTab:Dropdown({
 })
 
 TeleportTab:Button({
-    Title    = "Teleport",
-    Desc     = "Teleports your character to the generator selected",
-    Callback = function()
-        if GenTarget then LocalPlayer.Character:PivotTo(getCFrame(GenTarget)) end
-    end
+    Title = "Teleport", Desc = "Teleports your character to the generator selected",
+    Callback = function() if GenTarget then LocalPlayer.Character:PivotTo(getCFrame(GenTarget)) end end
 })
 TeleportTab:Button({
-    Title    = "Refresh Generator",
-    Desc     = "Updates the dropdown with newly spawned generators on the map",
+    Title = "Refresh Generator", Desc = "Updates the dropdown with newly spawned generators on the map",
     Callback = function()
         generatorList = getAllGenerators()
         local t = {}
@@ -2854,8 +2565,7 @@ TeleportTab:Button({
 
 TeleportTab:Section({ Title = "Teleport: Refresh", Icon = "loader" })
 TeleportTab:Button({
-    Title    = "Refresh All",
-    Desc     = "Updates the dropdown with newly spawned objects on the map",
+    Title = "Refresh All", Desc = "Updates the dropdown with newly spawned objects on the map",
     Callback = function()
         generatorList = getAllGenerators()
         if GenDropdown then
@@ -2864,6 +2574,7 @@ TeleportTab:Button({
             GenDropdown:Update(t)
         end
         GenTarget = nil
+        _invalidateGenCache()
         print("[DYHUB] Refresh All completed")
     end
 })
@@ -2871,8 +2582,7 @@ TeleportTab:Button({
 -- ====================== SETTINGS TAB ======================
 Main3:Section({ Title = "Save Config", Icon = "save" })
 Main3:Button({
-    Title    = "Save Config (NOW)",
-    Desc     = "Saves all current settings to config file immediately.",
+    Title = "Save Config (NOW)", Desc = "Saves all current settings to config file immediately.",
     Callback = function()
         Config:Save()
         WindUI:Notify({ Title = "Config Saved", Content = "Config saved successfully!", Duration = 2, Icon = "save" })
@@ -2905,8 +2615,7 @@ Main3:Input({
 
 Main3:Section({ Title = "Server Status", Icon = "server" })
 Main3:Button({
-    Title    = "Serverhop",
-    Desc     = "Teleports you to a different random server of this game.",
+    Title = "Serverhop", Desc = "Teleports you to a different random server of this game.",
     Callback = function()
         local servers = {}
         local success, result = pcall(function()
@@ -2924,15 +2633,14 @@ Main3:Button({
         if #servers > 0 then
             WindUI:Notify({ Title = "Serverhop", Content = "Teleporting to another server...", Duration = 2, Icon = "server" })
             task.wait(1)
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], LocalPlayer)
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1,#servers)], LocalPlayer)
         else
             WindUI:Notify({ Title = "Serverhop Failed", Content = "No available servers found.", Duration = 3, Icon = "alert-triangle" })
         end
     end
 })
 Main3:Button({
-    Title    = "Rejoin",
-    Desc     = "Rejoins the current game server.",
+    Title = "Rejoin", Desc = "Rejoins the current game server.",
     Callback = function()
         WindUI:Notify({ Title = "Rejoin", Content = "Rejoining server...", Duration = 2, Icon = "refresh-cw" })
         task.wait(1)
@@ -2942,15 +2650,14 @@ Main3:Button({
 
 -- ====================== INFORMATION TAB ======================
 local Info = InfoTab
-
 if not ui then ui = {} end
 if not ui.Creator then ui.Creator = {} end
 
 Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 05/22/2026 | CL: " .. ver,
-    Desc  = "- [ Rework ] Full ESP Core Rebuilt\n- [ New ] Auto Parry (BETA)\n- [ New ] ESP Distance (0-5000)\n- [ New ] ESP Patient for SCP-049\n- [ Fixed ] ESP Render Gate, Hook, Pallet, Window\n- [ Fixed ] ESP Distance with Survivor, Killer\n- [ Fixed ] ESP Distance Check for all object types\n- [ Fixed ] Duplicate ESP / Memory Leak\n- [ Fixed ] Character Respawn ESP refresh\n- [ Improved ] Config Save / Load stability\n- [ Improved ] Service caching\n- [ Removed ] Hitbox size Rebuilt\n- [ Optimized ] FullBright / NoFog",
+    Title = "Update: 05/23/2026 | CL: " .. ver,
+    Desc  = "- [ Rework ] Auto Parry v3 — Heartbeat scan + AnimationPlayed dual-layer\n- [ Rework ] Generator System — Smart cancel, 1 loop, position-based movement\n- [ Fixed ] Auto Parry mode dropdown (string/table fix)\n- [ Fixed ] Generator false cancel (velocity ? position delta)\n- [ Fixed ] Duplicate skill loops on toggle\n- [ Fixed ] Stale generator reference after round end\n- [ Fixed ] ESP ???????? object ????? HP\n- [ Improved ] Cache invalidation throttle (?? event spam)\n- [ Improved ] No Flashlight — event-based ??? polling\n- [ Improved ] Generator reconnect ???? respawn\n- [ Optimized ] ?? Heartbeat connections (??? loop)\n- [ Optimized ] findNearestKiller ??? Players list ??? GetDescendants",
 })
 Info:Divider()
 
@@ -2966,11 +2673,11 @@ ui.Creator.Request = function(requestData)
             return { Body = body, StatusCode = 200, Success = true }
         end
     end)
-    if success then return result else error("HTTP Request failed: " .. tostring(result)) end
+    if success then return result else error("HTTP Request failed: "..tostring(result)) end
 end
 
 local InviteCode = "jWNDPNMmyB"
-local DiscordAPI = "https://discord.com/api/v10/invites/" .. InviteCode .. "?with_counts=true&with_expiration=true"
+local DiscordAPI = "https://discord.com/api/v10/invites/"..InviteCode.."?with_counts=true&with_expiration=true"
 
 local function LoadDiscordInfo()
     local success, result = pcall(function()
@@ -2982,9 +2689,9 @@ local function LoadDiscordInfo()
     if success and result and result.guild then
         local DiscordInfo = Info:Paragraph({
             Title = result.guild.name,
-            Desc  = ' <font color="#52525b">●</font> Member Count : ' .. tostring(result.approximate_member_count) ..
-                    '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(result.approximate_presence_count),
-            Image = "https://cdn.discordapp.com/icons/" .. result.guild.id .. "/" .. result.guild.icon .. ".png?size=1024",
+            Desc  = ' <font color="#52525b">?</font> Member Count : '..tostring(result.approximate_member_count)..
+                    '\n <font color="#16a34a">?</font> Online Count : '..tostring(result.approximate_presence_count),
+            Image = "https://cdn.discordapp.com/icons/"..result.guild.id.."/"..result.guild.icon..".png?size=1024",
             ImageSize = 42,
         })
         Info:Button({
@@ -2995,8 +2702,8 @@ local function LoadDiscordInfo()
                 end)
                 if ok and r and r.guild then
                     DiscordInfo:SetDesc(
-                        ' <font color="#52525b">●</font> Member Count : ' .. tostring(r.approximate_member_count) ..
-                        '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(r.approximate_presence_count)
+                        ' <font color="#52525b">?</font> Member Count : '..tostring(r.approximate_member_count)..
+                        '\n <font color="#16a34a">?</font> Online Count : '..tostring(r.approximate_presence_count)
                     )
                     WindUI:Notify({ Title = "Discord Info Updated", Content = "Refreshed!", Duration = 2, Icon = "refresh-cw" })
                 else
@@ -3028,12 +2735,12 @@ Info:Paragraph({ Title = "Main Owner", Desc = "@dyumraisgoodguy#8888", Image = "
 Info:Paragraph({
     Title = "Social", Desc = "Copy link social media for follow!",
     Image = "rbxassetid://104487529937663", ImageSize = 30,
-    Buttons = {{ Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://guns.lol/DYHUB") end }}
+    Buttons = {{ Icon="copy", Title="Copy Link", Callback=function() setclipboard("https://guns.lol/DYHUB") end }}
 })
 Info:Paragraph({
     Title = "Discord", Desc = "Join our discord for more scripts!",
     Image = "rbxassetid://104487529937663", ImageSize = 30,
-    Buttons = {{ Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://discord.gg/jWNDPNMmyB") end }}
+    Buttons = {{ Icon="copy", Title="Copy Link", Callback=function() setclipboard("https://discord.gg/jWNDPNMmyB") end }}
 })
 
 -- ====================== AUTO RESTORE ON LOAD ======================
@@ -3047,6 +2754,11 @@ if NoClipEnabled then
         end
     end)
 end
+
+-- Re-start generator loops ??? config ??? enabled
+if AutoGenRepair    then startGenLoop() end
+if AutoSkillPerfect then startSkillLoop("perfect") end
+if AutoSkillNeutral then startSkillLoop("neutral") end
 
 print("[DYHUB] " .. version .. " " .. ver .. " loaded successfully!")
 print("[DYHUB] Config system active | Auto saving every " .. tostring(AutoSaveDelay) .. " seconds")
