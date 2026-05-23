@@ -1,6 +1,7 @@
 -- Powered by dyumra | v445 (Reworked)
 -- =========================
-local version = "TEST | v341"
+local version = "TEST"
+local ver     = "v014.09"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -46,8 +47,8 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 end)
 
 -- ====================== VERSION CHECK ======================
-local FreeVersion    = "TEST"
-local PremiumVersion = "TEST"
+local FreeVersion    = "Free Version"
+local PremiumVersion = "Premium Version"
 
 local function checkVersion(playerName)
     local url = "https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/listpremium.lua"
@@ -97,7 +98,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/con2321321321321fig_TESTV5.json"
+    self.ConfigPath = ConfigFolder .. "/config_TESTV5.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -154,8 +155,31 @@ if Config:Get("AutoSaveEnabled", true) then
 end
 
 -- ====================== TABS ======================
-local SurTab      = Window:Tab({ Title = "test",    Icon = "rocket" })
+local InfoTab     = Window:Tab({ Title = "Information", Icon = "info" })
+local _D1         = Window:Divider()
+local SurTab      = Window:Tab({ Title = "Survivor",    Icon = "user-check" })
+local killerTab   = Window:Tab({ Title = "Killer",      Icon = "swords" })
+local _D2         = Window:Divider()
+local MainTab     = Window:Tab({ Title = "Main",        Icon = "rocket" })
+local EspTab      = Window:Tab({ Title = "Esp",         Icon = "eye" })
+local PlayerTab   = Window:Tab({ Title = "Player",      Icon = "user" })
+local TeleportTab = Window:Tab({ Title = "Teleport",    Icon = "map-pin" })
+local _D3         = Window:Divider()
+local Main3       = Window:Tab({ Title = "Settings",    Icon = "settings" })
+
 Window:SelectTab(1)
+
+local Info = InfoTab
+if not ui then ui = {} end
+if not ui.Creator then ui.Creator = {} end
+
+Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
+Info:Divider()
+Info:Paragraph({
+    Title = "Update: 05/24/2026 | CL: " .. ver,
+    Desc  = "• [ Rework ] Auto Parry v2 (Heartbeat scan + AnimationPlayed dual-layer)\n• [ Rework ] Generator System (Smart cancel, position-based movement)\n• [ Fixed ] Auto Parry mode (string/table fix)\n• [ Fixed ] Generator false cancel (velocity, position delta)\n• [ Fixed ] Duplicate skill loops on toggle\n• [ Fixed ] Stale generator reference after round end\n• [ Improved ] Cache invalidation throttle (Reduce event spam)\n• [ Improved ] No Flashlight (event-based instead polling)\n• [ Improved ] Generator reconnect behind before respawn\n• [ Optimized ] Reduce Heartbeat connections (together loop)",
+})
+Info:Divider()
 
 -- =====================================================================================
 --  AUTO PARRY SYSTEM v4  |  DYHUB  |  dyumra
