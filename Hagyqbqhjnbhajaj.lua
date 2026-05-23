@@ -2603,8 +2603,8 @@ local function LoadDiscordInfo()
     if success and result and result.guild then
         local DiscordInfo = Info:Paragraph({
             Title = result.guild.name,
-            Desc  = ' <font color="#52525b">?</font> Member Count : '..tostring(result.approximate_member_count)..
-                    '\n <font color="#16a34a">?</font> Online Count : '..tostring(result.approximate_presence_count),
+            Desc  = ' <font color="#52525b">●</font> Member Count : '..tostring(result.approximate_member_count)..
+                    '\n <font color="#16a34a">●</font> Online Count : '..tostring(result.approximate_presence_count),
             Image = "https://cdn.discordapp.com/icons/"..result.guild.id.."/"..result.guild.icon..".png?size=1024",
             ImageSize = 42,
         })
