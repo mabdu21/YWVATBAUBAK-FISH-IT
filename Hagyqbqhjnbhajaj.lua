@@ -1,6 +1,6 @@
 -- Powered by dyumra | v445 (Reworked)
 -- =========================
-local version = "Rework"
+local version = "TEST"
 local ver     = "v014.08"
 -- =========================
 
@@ -195,7 +195,7 @@ _G.AutoParryMode    = Config:Get("autoparrymode",    {"Fast"})   -- "Fast" | "Sm
 _G.AutoParryRange   = Config:Get("autoparryrange",   20)        -- studs
 
 local LastParry     = 0
-local PARRY_CD      = 0.3   -- cooldown ?????????????? parry (??) — ??????? spam
+local PARRY_CD      = 0.2   -- cooldown ?????????????? parry (??) — ??????? spam
 local Hooked        = {}     -- [char] = true
 
 -- -- GUI Path -----------------------------------------------------------------------
@@ -277,25 +277,25 @@ end
 --  format: [animId] = { delay=??, window=??_???_parry_?????? }
 local ANIM_HITFRAME = {
     -- ?? swing 1 (????)
-    ["rbxassetid://139369275981139"] = { delay=0.20, window=0.25 },
-    ["rbxassetid://110355011987939"] = { delay=0.20, window=0.25 },
-    ["rbxassetid://135002183282873"] = { delay=0.20, window=0.25 },
-    ["rbxassetid://121216847022485"] = { delay=0.20, window=0.25 },
+    ["rbxassetid://139369275981139"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://110355011987939"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://135002183282873"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://121216847022485"] = { delay=0.18, window=0.22 },
     -- ?? swing 2 (????????)
-    ["rbxassetid://105374834496520"] = { delay=0.22, window=0.22 },
-    ["rbxassetid://111920872708571"] = { delay=0.22, window=0.22 },
-    ["rbxassetid://118907603246885"] = { delay=0.22, window=0.22 },
-    ["rbxassetid://78432063483146"]  = { delay=0.22, window=0.22 },
+    ["rbxassetid://105374834496520"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://111920872708571"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://118907603246885"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://78432063483146"]  = { delay=0.18, window=0.22 },
     -- ?? lunge / dash (???????)
-    ["rbxassetid://113255068724446"] = { delay=0.15, window=0.20 },
-    ["rbxassetid://74968262036854"]  = { delay=0.15, window=0.20 },
-    ["rbxassetid://129784271201071"] = { delay=0.15, window=0.20 },
+    ["rbxassetid://113255068724446"] = { delay=0.15, window=0.22 },
+    ["rbxassetid://74968262036854"]  = { delay=0.15, window=0.22 },
+    ["rbxassetid://129784271201071"] = { delay=0.15, window=0.22 },
     -- heavy / slam
-    ["rbxassetid://132817836308238"] = { delay=0.22, window=0.22 },
-    ["rbxassetid://112166042383605"] = { delay=0.22, window=0.22 },
-    ["rbxassetid://122812055447896"] = { delay=0.22, window=0.22 },
-    ["rbxassetid://117042998468241"] = { delay=0.22, window=0.22 },
-    ["rbxassetid://133963973694098"] = { delay=0.22, window=0.22 },
+    ["rbxassetid://132817836308238"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://112166042383605"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://122812055447896"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://117042998468241"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://133963973694098"] = { delay=0.18, window=0.22 },
 }
 
 -- -- Mode: Fast — parry ???????? detect (no delay, aggressive) ---------------------
@@ -311,7 +311,7 @@ end
 
 -- -- Mode: Smart — delay ??? hitframe table ----------------------------------------
 local function doParrySmart(killerChar, animId, track)
-    local info = ANIM_HITFRAME[animId] or { delay=0.18, window=0.20 }
+    local info = ANIM_HITFRAME[animId] or { delay=0.18, window=0.22 }
     local startTime = os.clock()
 
     task.spawn(function()
@@ -341,7 +341,7 @@ end
 
 -- -- Mode: Predict — ??? animation speed ????? scale delay -----------------------
 local function doParryPredict(killerChar, animId, track)
-    local info = ANIM_HITFRAME[animId] or { delay=0.18, window=0.20 }
+    local info = ANIM_HITFRAME[animId] or { delay=0.18, window=0.22 }
 
     -- ??? animation speed ??? track
     local speed = 1
@@ -423,7 +423,7 @@ Players.PlayerAdded:Connect(hookPlayer)
 -- -- UI ---------------------------------------------------------------------------
 SurTab:Paragraph({
     Title = "Information: Parry Mode",
-    Desc = "- Fast = Instant, no delay \n- Smart = Delay based on hitframe \n- Predict = Calculated from animation speed",
+    Desc = "• Fast = Instant, no delay \n• Smart = Delay based on hitframe \n• Predict = Calculated from animation speed",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
