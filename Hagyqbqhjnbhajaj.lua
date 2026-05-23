@@ -1,8 +1,7 @@
-
--- Powered by dyumra | v345 (Reworked)
+-- Powered by dyumra | v445 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.12"
+local ver     = "v014.08"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -99,7 +98,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config_TEST.json"
+    self.ConfigPath = ConfigFolder .. "/config_TESTV2.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -170,10 +169,21 @@ local Main3       = Window:Tab({ Title = "Settings",    Icon = "settings" })
 
 Window:SelectTab(1)
 
+local Info = InfoTab
+if not ui then ui = {} end
+if not ui.Creator then ui.Creator = {} end
+
+Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
+Info:Divider()
+Info:Paragraph({
+    Title = "Update: 05/23/2026 | CL: " .. ver,
+    Desc  = "• [ Rework ] Auto Parry v2 (Heartbeat scan + AnimationPlayed dual-layer)\n• [ Rework ] Generator System (Smart cancel, position-based movement)\n• [ Fixed ] Auto Parry mode (string/table fix)\n• [ Fixed ] Generator false cancel (velocity, position delta)\n• [ Fixed ] Duplicate skill loops on toggle\n• [ Fixed ] Stale generator reference after round end\n• [ Improved ] Cache invalidation throttle (Reduce event spam)\n• [ Improved ] No Flashlight (event-based instead polling)\n• [ Improved ] Generator reconnect behind before respawn\n• [ Optimized ] Reduce Heartbeat connections (together loop)",
+})
+Info:Divider()
+
 -- =====================================================================================
 --  AUTO PARRY SYSTEM v3  |  DYHUB  |  dyumra
 -- =====================================================================================
-
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
 local Vim               = game:GetService("VirtualInputManager")
@@ -185,7 +195,7 @@ _G.AutoParryMode    = Config:Get("autoparrymode",    {"Fast"})   -- "Fast" | "Sm
 _G.AutoParryRange   = Config:Get("autoparryrange",   20)        -- studs
 
 local LastParry     = 0
-local PARRY_CD      = 0.25   -- cooldown ?????????????? parry (??) — ??????? spam
+local PARRY_CD      = 0.3   -- cooldown ?????????????? parry (??) — ??????? spam
 local Hooked        = {}     -- [char] = true
 
 -- -- GUI Path -----------------------------------------------------------------------
@@ -462,7 +472,6 @@ SurTab:Slider({
         Config:Save()
     end
 })
-
 
 -- =====================================================================================
 --  ESP SYSTEM  (?????? Respawn / Map Reload / ??? Leak)
@@ -2565,17 +2574,6 @@ Main3:Button({
 })
 
 -- ====================== INFORMATION TAB ======================
-local Info = InfoTab
-if not ui then ui = {} end
-if not ui.Creator then ui.Creator = {} end
-
-Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
-Info:Divider()
-Info:Paragraph({
-    Title = "Update: 05/23/2026 | CL: " .. ver,
-    Desc  = "- [ Rework ] Auto Parry v3 — Heartbeat scan + AnimationPlayed dual-layer\n- [ Rework ] Generator System — Smart cancel, 1 loop, position-based movement\n- [ Fixed ] Auto Parry mode dropdown (string/table fix)\n- [ Fixed ] Generator false cancel (velocity ? position delta)\n- [ Fixed ] Duplicate skill loops on toggle\n- [ Fixed ] Stale generator reference after round end\n- [ Fixed ] ESP ???????? object ????? HP\n- [ Improved ] Cache invalidation throttle (?? event spam)\n- [ Improved ] No Flashlight — event-based ??? polling\n- [ Improved ] Generator reconnect ???? respawn\n- [ Optimized ] ?? Heartbeat connections (??? loop)\n- [ Optimized ] findNearestKiller ??? Players list ??? GetDescendants",
-})
-Info:Divider()
 
 ui.Creator.Request = function(requestData)
     local success, result = pcall(function()
