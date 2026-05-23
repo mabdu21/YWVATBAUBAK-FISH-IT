@@ -1,7 +1,7 @@
--- Powered by dyumra | v425 (Reworked)
+-- Powered by dyumra | v445 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.12"
+local ver     = "v014.04"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -35,7 +35,7 @@ local LocalPlayer = Players.LocalPlayer
 local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
 local Camera      = Workspace.CurrentCamera
 
--- ====================== CHARACTER CACHE (รองรับ Respawn) ======================
+-- ====================== CHARACTER CACHE (?????? Respawn) ======================
 local Character        = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local Humanoid         = Character:WaitForChild("Humanoid")
 local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
@@ -98,7 +98,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config.json"
+    self.ConfigPath = ConfigFolder .. "/configtestv4.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -169,334 +169,277 @@ local Main3       = Window:Tab({ Title = "Settings",    Icon = "settings" })
 
 Window:SelectTab(1)
 
+local Info = InfoTab
+if not ui then ui = {} end
+if not ui.Creator then ui.Creator = {} end
+
+Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
+Info:Divider()
+Info:Paragraph({
+    Title = "Update: 05/23/2026 | CL: " .. ver,
+    Desc  = "• [ Rework ] Auto Parry v2 (Heartbeat scan + AnimationPlayed dual-layer)\n• [ Rework ] Generator System (Smart cancel, position-based movement)\n• [ Fixed ] Auto Parry mode (string/table fix)\n• [ Fixed ] Generator false cancel (velocity, position delta)\n• [ Fixed ] Duplicate skill loops on toggle\n• [ Fixed ] Stale generator reference after round end\n• [ Improved ] Cache invalidation throttle (Reduce event spam)\n• [ Improved ] No Flashlight (event-based instead polling)\n• [ Improved ] Generator reconnect behind before respawn\n• [ Optimized ] Reduce Heartbeat connections (together loop)",
+})
+Info:Divider()
+
 -- =====================================================================================
---  AUTO PARRY SYSTEM v4  |  DYHUB  |  dyumra
---  ─ PC   : MouseButton2 via VirtualInputManager / mouse2press fallback
---  ─ Mobile: task.spawn tap (press+release ทันที) ไม่ block Thumbstick/Camera
---  ─ Perf : event-driven หลัก | Heartbeat scan เฉพาะ Fast mode | object cache
---  ─ Safe : single cooldown gate | stale-coroutine guard | auto cleanup on respawn
+--  AUTO PARRY SYSTEM v3  |  DYHUB  |  dyumra
 -- =====================================================================================
+local Players           = game:GetService("Players")
+local RunService        = game:GetService("RunService")
+local Vim               = game:GetService("VirtualInputManager")
+local UIS               = game:GetService("UserInputService")
+local LP                = Players.LocalPlayer
 
-_G.AutoParry      = Config:Get("autoparry",      false)
-_G.AutoParryMode  = Config:Get("autoparrymode",  "Smart")
-_G.AutoParryRange = Config:Get("autoparryrange", 12)
+-- -- State --------------------------------------------------------------------------
+_G.AutoParry        = Config:Get("autoparry",        false)
+_G.AutoParryMode    = Config:Get("autoparrymode",    {"Fast"})
+_G.AutoParryRange   = Config:Get("autoparryrange",   20)
 
--- ── Constants ─────────────────────────────────────────────────────────────────────
-local PARRY_CD      = 0.22          -- cooldown ขั้นต่ำ (วิ)
-local PARRY_IMAGE   = "rbxassetid://101288986880844"
-local SCAN_INTERVAL = 1 / 30        -- Heartbeat scan ~30 Hz (Fast mode only)
-local BTN_TTL       = 0.5           -- อายุ button cache (วิ)
-local IS_MOBILE     = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+local LastParry     = 0
+local PARRY_CD      = 0.2
+local Hooked        = {}
 
--- ── State ─────────────────────────────────────────────────────────────────────────
-local AP = {
-    lastParry  = 0,
-    hookedChars = {},  -- [char] = { connections = {…} }
-    btnCache   = nil,
-    btnCacheAt = 0,
-    pending    = false,
-    pendingGen = 0,
-    firing     = false, -- กัน double-fire ใน frame เดียวกัน
-}
+-- -- Platform Detection -------------------------------------------------------------
+local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
 
--- ── Hitframe table ────────────────────────────────────────────────────────────────
--- delay  = รอกี่วิหลัง anim start แล้วค่อย fire
--- window = ยัง parry ทันถ้า elapsed ≤ window
-local ANIM_HF = {
-    -- fast swing
-    ["rbxassetid://139369275981139"] = { delay=0.17, window=0.25 },
-    ["rbxassetid://110355011987939"] = { delay=0.17, window=0.25 },
-    ["rbxassetid://135002183282873"] = { delay=0.18, window=0.25 },
-    ["rbxassetid://121216847022485"] = { delay=0.17, window=0.25 },
-    -- normal swing
-    ["rbxassetid://105374834496520"] = { delay=0.21, window=0.29 },
-    ["rbxassetid://111920872708571"] = { delay=0.21, window=0.29 },
-    ["rbxassetid://118907603246885"] = { delay=0.20, window=0.27 },
-    ["rbxassetid://78432063483146"]  = { delay=0.19, window=0.27 },
-    -- lunge / dash (เร็วมาก)
-    ["rbxassetid://113255068724446"] = { delay=0.11, window=0.17 },
-    ["rbxassetid://74968262036854"]  = { delay=0.11, window=0.17 },
-    ["rbxassetid://129784271201071"] = { delay=0.14, window=0.20 },
-    -- heavy / slam
-    ["rbxassetid://132817836308238"] = { delay=0.27, window=0.35 },
-    ["rbxassetid://112166042383605"] = { delay=0.25, window=0.32 },
-    ["rbxassetid://122812055447896"] = { delay=0.25, window=0.32 },
-    ["rbxassetid://117042998468241"] = { delay=0.27, window=0.35 },
-    ["rbxassetid://133963973694098"] = { delay=0.27, window=0.35 },
-}
-
--- ── Button cache ──────────────────────────────────────────────────────────────────
-local function _fetchParryBtn()
-    local pg = LocalPlayer:FindFirstChild("PlayerGui");   if not pg then return end
-    local s  = pg:FindFirstChild("Survivor-mob");          if not s  then return end
-    local c  = s:FindFirstChild("Controls");               if not c  then return end
+-- -- GUI Path -----------------------------------------------------------------------
+local function getParryBtn()
+    local pg = LP:FindFirstChild("PlayerGui");     if not pg then return end
+    local s  = pg:FindFirstChild("Survivor-mob");  if not s  then return end
+    local c  = s:FindFirstChild("Controls");       if not c  then return end
     return c:FindFirstChild("Gui-mob")
 end
 
-local function getParryBtn()
-    local now = os.clock()
-    if AP.btnCache and AP.btnCache.Parent and (now - AP.btnCacheAt) < BTN_TTL then
-        return AP.btnCache
-    end
-    AP.btnCache   = _fetchParryBtn()
-    AP.btnCacheAt = now
-    return AP.btnCache
-end
-
+-- -- ??????? parry ??????????? (??????? icon ImageColor3) -----------------------
+--   ??? icon ???? 77,77,77 = ???????????? = ???? parry
+--   ????????????? = parry ????? = ?????
 local function isParryReady()
     local btn = getParryBtn()
-    return btn ~= nil and tostring(btn.Image) == PARRY_IMAGE
+    if not btn then return false end
+
+    local icon = btn:FindFirstChild("icon")
+    if not icon then
+        -- fallback: ???????? child "icon" ?????????? btn ???
+        icon = btn
+    end
+
+    -- ???? ImageColor3 — 77,77,77 (RGB 77/255 ˜ 0.302)
+    local col = icon.ImageColor3
+    local r   = math.round(col.R * 255)
+    local g   = math.round(col.G * 255)
+    local b   = math.round(col.B * 255)
+
+    if r == 77 and g == 77 and b == 77 then
+        return false   -- ????????? active / cooldown — ???? parry
+    end
+
+    return true
 end
 
--- ── ████  FIRE PARRY  ████ ────────────────────────────────────────────────────────
---
---  PC   → MouseButton2 (Right Click) ผ่าน VirtualInputManager
---         fallback: mouse2press / mouse2release (บาง executor)
---
---  Mobile → tap เฉพาะปุ่ม Parry โดยตรง (press+release ทันที, ไม่ hold)
---           ใช้ task.spawn แยก thread → ไม่บล็อก Thumbstick / Camera
--- ─────────────────────────────────────────────────────────────────────────────────
-local function _fireMobile()
-    -- tap ที่ตำแหน่งปุ่ม parry เท่านั้น → ไม่กระทบ movement region
+-- -- Click / Input fire -------------------------------------------------------------
+local function fireParryBtn()
+    -- [PC] Right Click
+    if not isMobile then
+        pcall(function()
+            Vim:SendMouseButtonEvent(0, 0, 1, true,  game, 1)   -- RMB down
+            task.wait()
+            Vim:SendMouseButtonEvent(0, 0, 1, false, game, 1)   -- RMB up
+        end)
+        return   -- PC ??? RMB ?????????? ?????????? GUI
+    end
+
+    -- [Mobile] ??? GUI button ??????????
     local btn = getParryBtn()
     if not btn then return end
-    local p  = btn.AbsolutePosition
-    local sz = btn.AbsoluteSize
-    local cx = p.X + sz.X * 0.5
-    local cy = p.Y + sz.Y * 0.5
-    -- press → release ทันที (ไม่ hold → ไม่ freeze joystick)
-    pcall(function() VIM:SendTouchEvent(cx, cy, true,  game) end)
-    pcall(function() VIM:SendTouchEvent(cx, cy, false, game) end)
-    -- firesignal เป็น backup
-    pcall(function() firesignal(btn.MouseButton1Click) end)
-    pcall(function() firesignal(btn.Activated) end)
-end
 
-local function _firePC()
-    -- Method 1: VirtualInputManager Right Click (ไว้สุด, ไม่ต้องพึ่ง GUI)
-    local ok1 = pcall(function()
-        VIM:SendMouseButtonEvent(0, 0, 1, true,  game, 1)   -- button=1 → right
-        VIM:SendMouseButtonEvent(0, 0, 1, false, game, 1)
+    pcall(function()
+        firesignal(btn.MouseButton1Click)
+        firesignal(btn.Activated)
     end)
-    -- Method 2: mouse2press / mouse2release (executor native)
-    if not ok1 then
-        pcall(function()
-            mouse2press()
-            task.delay(0.03, function() pcall(mouse2release) end)
-        end)
-    end
-    -- Method 3: firesignal ปุ่ม (fallback สุดท้าย)
-    local btn = getParryBtn()
-    if btn then
-        pcall(function() firesignal(btn.MouseButton1Click) end)
-        pcall(function() firesignal(btn.Activated) end)
-    end
-end
 
-local function fireParry()
-    if AP.firing then return end
-    AP.firing = true
-    -- แยก thread → ไม่บล็อก caller (สำคัญมากสำหรับ Mobile)
-    task.spawn(function()
-        if IS_MOBILE then
-            _fireMobile()
-        else
-            _firePC()
-        end
-        task.wait(0.05) -- micro-delay ก่อน unlock (ป้องกัน double-fire ภายใน frame)
-        AP.firing = false
+    pcall(function() btn:Activate() end)
+
+    pcall(function()
+        local p  = btn.AbsolutePosition
+        local sz = btn.AbsoluteSize
+        local x  = p.X + sz.X * 0.5
+        local y  = p.Y + sz.Y * 0.5
+        Vim:SendMouseButtonEvent(x, y, 0, true,  game, 1)
+        task.wait()
+        Vim:SendMouseButtonEvent(x, y, 0, false, game, 1)
     end)
 end
 
--- ── Threat score ──────────────────────────────────────────────────────────────────
-local function getThreat(killerChar)
-    local my = LocalPlayer.Character
+-- -- Distance + Direction check ----------------------------------------------------
+local function getThreatLevel(killerChar)
+    local my = LP.Character
     if not my then return 0 end
-    local myHRP = my:FindFirstChild("HumanoidRootPart")
-    local ksHRP = killerChar:FindFirstChild("HumanoidRootPart")
+
+    local myHRP  = my:FindFirstChild("HumanoidRootPart")
+    local ksHRP  = killerChar:FindFirstChild("HumanoidRootPart")
     if not myHRP or not ksHRP then return 0 end
 
-    local vel  = ksHRP.AssemblyLinearVelocity
-    local spd  = vel.Magnitude
-    local pred = ksHRP.Position + vel * 0.083   -- predict 2 frames
-    local dist = (myHRP.Position - pred).Magnitude
+    local vel     = ksHRP.AssemblyLinearVelocity
+    local speed   = vel.Magnitude
+
+    local frameDt   = 0.1
+    local predicted = ksHRP.Position + vel * frameDt
+    local dist      = (myHRP.Position - predicted).Magnitude
+
     if dist > _G.AutoParryRange then return 0 end
 
-    local toMe  = myHRP.Position - ksHRP.Position
-    local dot   = ksHRP.CFrame.LookVector:Dot(
-                      toMe.Magnitude > 0 and toMe.Unit or Vector3.zero)
+    local toMe = (myHRP.Position - ksHRP.Position).Unit
+    local dot  = ksHRP.CFrame.LookVector:Dot(toMe)
 
-    local dScore = 1 - math.clamp(dist / _G.AutoParryRange, 0, 1)
-    local fScore = math.clamp((dot + 1) * 0.5, 0, 1)
-    local sScore = math.clamp(spd / 28, 0, 1)
-    return dScore * 0.50 + fScore * 0.35 + sScore * 0.15
+    local distScore  = 1 - math.clamp(dist / _G.AutoParryRange, 0, 1)
+    local dotScore   = math.clamp((dot + 1) * 0.5, 0, 1)
+    local speedScore = math.clamp(speed / 25, 0, 1)
+
+    return (distScore * 0.5) + (dotScore * 0.35) + (speedScore * 0.15)
 end
 
--- ── Cooldown gate (ป้องกัน spam) ─────────────────────────────────────────────────
-local function tryFire(killerChar)
-    if not _G.AutoParry            then return end
-    if not isParryReady()          then return end
-    if getThreat(killerChar) <= 0  then return end
+-- -- Hitframe timing table ---------------------------------------------------------
+local ANIM_HITFRAME = {
+    ["rbxassetid://139369275981139"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://110355011987939"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://135002183282873"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://121216847022485"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://105374834496520"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://111920872708571"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://118907603246885"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://78432063483146"]  = { delay=0.18, window=0.22 },
+    ["rbxassetid://113255068724446"] = { delay=0.15, window=0.22 },
+    ["rbxassetid://74968262036854"]  = { delay=0.15, window=0.22 },
+    ["rbxassetid://129784271201071"] = { delay=0.15, window=0.22 },
+    ["rbxassetid://132817836308238"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://112166042383605"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://122812055447896"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://117042998468241"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://133963973694098"] = { delay=0.18, window=0.22 },
+}
+
+-- -- Mode: Fast -------------------------------------------------------------------
+local function doParryFast(killerChar)
+    if not isParryReady() then return end
+    local threat = getThreatLevel(killerChar)
+    if threat <= 0 then return end
     local now = os.clock()
-    if now - AP.lastParry < PARRY_CD then return end
-    AP.lastParry = now
-    fireParry()
+    if now - LastParry < PARRY_CD then return end
+    LastParry = now
+    fireParryBtn()
 end
 
--- ── Parry modes ───────────────────────────────────────────────────────────────────
-local function doFast(killerChar)
-    tryFire(killerChar)
-end
+-- -- Mode: Smart ------------------------------------------------------------------
+local function doParrySmart(killerChar, animId, track)
+    local info = ANIM_HITFRAME[animId] or { delay=0.18, window=0.22 }
+    local startTime = os.clock()
 
-local function doSmart(killerChar, animId)
-    local info = ANIM_HF[animId] or { delay=0.19, window=0.26 }
-    local gen  = AP.pendingGen + 1
-    AP.pendingGen = gen
-    AP.pending    = true
-    task.delay(info.delay, function()
-        AP.pending = false
-        if AP.pendingGen ~= gen then return end  -- stale coroutine → skip
-        tryFire(killerChar)
+    task.spawn(function()
+        task.wait(info.delay)
+
+        local elapsed = os.clock() - startTime
+        if elapsed > info.window then return end
+        if not _G.AutoParry then return end
+
+        local threat = getThreatLevel(killerChar)
+        if threat <= 0 then return end
+
+        local now = os.clock()
+        if now - LastParry < PARRY_CD then return end
+
+        if not isParryReady() then return end
+        LastParry = now
+        fireParryBtn()
     end)
 end
 
-local function doPredict(killerChar, animId, track)
-    local info  = ANIM_HF[animId] or { delay=0.19, window=0.26 }
+-- -- Mode: Predict ----------------------------------------------------------------
+local function doParryPredict(killerChar, animId, track)
+    local info = ANIM_HITFRAME[animId] or { delay=0.18, window=0.22 }
+
     local speed = 1
     pcall(function() speed = math.max(track.Speed, 0.1) end)
+
     local realDelay  = info.delay  / speed
     local realWindow = info.window / speed
     local startTime  = os.clock()
-    local gen        = AP.pendingGen + 1
-    AP.pendingGen = gen
-    AP.pending    = true
-    task.delay(realDelay, function()
-        AP.pending = false
-        if AP.pendingGen ~= gen then return end
-        if os.clock() - startTime > realWindow then return end
-        tryFire(killerChar)
+
+    task.spawn(function()
+        task.wait(realDelay)
+
+        local elapsed = os.clock() - startTime
+        if elapsed > realWindow then return end
+        if not _G.AutoParry then return end
+
+        local threat = getThreatLevel(killerChar)
+        if threat <= 0 then return end
+
+        local now = os.clock()
+        if now - LastParry < PARRY_CD then return end
+
+        if not isParryReady() then return end
+        LastParry = now
+        fireParryBtn()
     end)
 end
 
--- ── Dispatch ──────────────────────────────────────────────────────────────────────
-local function onAttack(killerChar, animId, track)
+-- -- Dispatch ---------------------------------------------------------------------
+local function onAttackAnim(killerChar, animId, track)
     if not _G.AutoParry then return end
-    local mode = type(_G.AutoParryMode) == "table"
-                 and _G.AutoParryMode[1]
-                 or  _G.AutoParryMode
+    local mode = _G.AutoParryMode or "Smart"
     if mode == "Fast" then
-        doFast(killerChar)
+        doParryFast(killerChar)
     elseif mode == "Predict" then
-        doPredict(killerChar, animId, track)
+        doParryPredict(killerChar, animId, track)
     else
-        doSmart(killerChar, animId)
+        doParrySmart(killerChar, animId, track)
     end
 end
 
--- ── Cleanup char connections ──────────────────────────────────────────────────────
-local function cleanupChar(char)
-    local entry = AP.hookedChars[char]
-    if not entry then return end
-    for _, conn in ipairs(entry.connections) do
-        pcall(function() conn:Disconnect() end)
-    end
-    AP.hookedChars[char] = nil
-end
-
--- ── Hook character ────────────────────────────────────────────────────────────────
+-- -- Hook character ---------------------------------------------------------------
 local function hookChar(char)
-    if AP.hookedChars[char] then return end
-    local hum = char:WaitForChild("Humanoid", 5)
+    if Hooked[char] then return end
+    Hooked[char] = true
+
+    local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum then return end
 
-    local conns = {}
-
-    -- AnimationPlayed → hitframe parry (event-driven, ไม่ loop)
-    conns[#conns+1] = hum.AnimationPlayed:Connect(function(track)
+    hum.AnimationPlayed:Connect(function(track)
         local anim = track and track.Animation
         if not anim then return end
         local id = tostring(anim.AnimationId)
-        if ANIM_HF[id] then
-            onAttack(char, id, track)
+        if ANIM_HITFRAME[id] then
+            onAttackAnim(char, id, track)
         end
     end)
-
-    -- AncestryChanged → cleanup เมื่อ char destroy
-    conns[#conns+1] = char.AncestryChanged:Connect(function()
-        if not char.Parent then cleanupChar(char) end
-    end)
-
-    AP.hookedChars[char] = { connections = conns }
 end
 
--- ── Heartbeat: Fast-mode proximity scan ──────────────────────────────────────────
--- ใช้เฉพาะ Fast mode เพื่อจับ instant attack ที่ anim event อาจ miss
--- Smart / Predict ใช้ AnimationPlayed เพียงพอ → ไม่ต้องสแกน
-local _scanAccum = 0
-RunService.Heartbeat:Connect(function(dt)
-    if not _G.AutoParry then return end
-    local mode = type(_G.AutoParryMode) == "table"
-                 and _G.AutoParryMode[1]
-                 or  _G.AutoParryMode
-    if mode ~= "Fast" then return end
-
-    _scanAccum += dt
-    if _scanAccum < SCAN_INTERVAL then return end
-    _scanAccum = 0
-
-    local my    = LocalPlayer.Character
-    local myHRP = my and my:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return end
-
-    local thresh = _G.AutoParryRange * 0.6
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr == LocalPlayer then continue end
-        local char  = plr.Character
-        local ksHRP = char and char:FindFirstChild("HumanoidRootPart")
-        if not ksHRP then continue end
-        if (myHRP.Position - ksHRP.Position).Magnitude <= thresh then
-            tryFire(char)
-            break  -- fire ครั้งเดียวต่อ scan cycle
-        end
-    end
-end)
-
--- ── Hook player ───────────────────────────────────────────────────────────────────
+-- -- Hook player ------------------------------------------------------------------
 local function hookPlayer(plr)
-    if plr == LocalPlayer then return end
+    if plr == LP then return end
+
     local function onChar(char)
-        cleanupChar(char)
-        task.delay(0.4, function()
-            if char and char.Parent then hookChar(char) end
-        end)
+        Hooked[char] = nil
+        task.wait(0.5)
+        hookChar(char)
     end
+
     if plr.Character then onChar(plr.Character) end
     plr.CharacterAdded:Connect(onChar)
-    plr.CharacterRemoving:Connect(function(char) cleanupChar(char) end)
 end
 
--- ── Local player respawn → reset state ────────────────────────────────────────────
-LocalPlayer.CharacterAdded:Connect(function()
-    AP.btnCache   = nil
-    AP.btnCacheAt = 0
-    AP.lastParry  = 0
-    AP.pendingGen = AP.pendingGen + 1  -- cancel pending coroutines
-    AP.pending    = false
-    AP.firing     = false
-end)
-
--- ── Init ──────────────────────────────────────────────────────────────────────────
-for _, plr in ipairs(Players:GetPlayers()) do hookPlayer(plr) end
+for _, plr in pairs(Players:GetPlayers()) do hookPlayer(plr) end
 Players.PlayerAdded:Connect(hookPlayer)
 
--- ── UI ─────────────────────────────────────────────────────────────────────────────
+-- -- UI ---------------------------------------------------------------------------
 SurTab:Paragraph({
-    Title     = "Information: Auto Parry",
-    Desc      = "- Fast = Instant fire + Heartbeat proximity scan\n- Smart = Hitframe-timed delay (animation table)\n- Predict = Hitframe adjusted by animation speed\n- Support: PC & Mobile",
-    Image     = "rbxassetid://104487529937663",
+    Title = "Information: Parry Mode",
+    Desc  = "• Fast = Instant, no delay\n• Smart = Delay based on hitframe\n• Predict = Calculated from animation speed",
+    Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
 SurTab:Divider()
+
 SurTab:Section({ Title = "Feature Survivor", Icon = "user" })
 
 SurTab:Toggle({
@@ -504,19 +447,16 @@ SurTab:Toggle({
     Desc     = "Parries killer attacks automatically at the correct hitframe",
     Value    = _G.AutoParry,
     Callback = function(v)
-        _G.AutoParry      = v
-        AP.lastParry      = 0
-        AP.pendingGen     = AP.pendingGen + 1
-        AP.pending        = false
+        _G.AutoParry = v
         Config:Set("autoparry", v)
         Config:Save()
         WindUI:Notify({
-            Title    = "Auto Parry",
+            Title    = "Auto Parry (BETA)",
             Content  = v and "Enabled" or "Disabled",
             Duration = 3,
-            Icon     = v and "shield" or "shield-off",
+            Icon     = v and "shield" or "shield-off"
         })
-    end,
+    end
 })
 
 SurTab:Dropdown({
@@ -525,12 +465,11 @@ SurTab:Dropdown({
     Multi    = false,
     Value    = _G.AutoParryMode,
     Callback = function(v)
-        if type(v) == "table" then v = v[1] end
-        _G.AutoParryMode = v or "Smart"
-        Config:Set("autoparrymode", _G.AutoParryMode)
+        _G.AutoParryMode = v
+        Config:Set("autoparrymode", v)
         Config:Save()
-        WindUI:Notify({ Title = "Parry Mode", Content = _G.AutoParryMode, Duration = 2, Icon = "settings" })
-    end,
+        WindUI:Notify({ Title = "Parry Mode", Content = v, Duration = 2, Icon = "settings" })
+    end
 })
 
 SurTab:Slider({
@@ -542,14 +481,14 @@ SurTab:Slider({
         _G.AutoParryRange = v
         Config:Set("autoparryrange", v)
         Config:Save()
-    end,
+    end
 })
 
 -- =====================================================================================
---  ESP SYSTEM  (รองรับ Respawn / Map Reload / ไม่ Leak)
+--  ESP SYSTEM  (?????? Respawn / Map Reload / ??? Leak)
 -- =====================================================================================
 
--- ── สี ──────────────────────────────────────────────────────────────────────────────
+-- -- ?? ------------------------------------------------------------------------------
 local COLOR_SURVIVOR       = Color3.fromRGB(0,     0,  255)
 local COLOR_MURDERER       = Color3.fromRGB(255,   0,    0)
 local COLOR_GENERATOR_DONE = Color3.fromRGB(0,   255,    0)
@@ -560,7 +499,7 @@ local COLOR_WINDOW         = Color3.fromRGB(175, 215,  230)
 local COLOR_HOOK           = Color3.fromRGB(255,   0,    0)
 local COLOR_PATIENT        = Color3.fromRGB(255, 165,    0)
 
--- ── State ───────────────────────────────────────────────────────────────────────────
+-- -- State ---------------------------------------------------------------------------
 local espEnabled       = Config:Get("espEnabled",       false)
 local espSurvivor      = Config:Get("espSurvivor",      false)
 local espMurder        = Config:Get("espMurder",        false)
@@ -580,13 +519,13 @@ local ESP_MAX_DISTANCE = Config:Get("ESP_MAX_DISTANCE", 1500)
 -- key = Instance, value = { highlight, bill, nameLabel, hpLabel, distLabel, color }
 local espObjects = {}
 
--- ── Generator Cache ──────────────────────────────────────────────────────────────────
+-- -- Generator Cache ------------------------------------------------------------------
 local _cachedGenFolders  = nil
 
 local function _invalidateGenCache()
     _cachedGenFolders = nil
 end
--- Batch invalidate ผ่าน throttle (ลดการยิงทุก event)
+-- Batch invalidate ???? throttle (??????????? event)
 local _invalidateScheduled = false
 Workspace.DescendantAdded:Connect(function()
     if not _invalidateScheduled then
@@ -619,7 +558,7 @@ local function getFolderGenerator()
     return list
 end
 
--- ── ESP helpers ──────────────────────────────────────────────────────────────────────
+-- -- ESP helpers ----------------------------------------------------------------------
 local function removeESP(obj)
     local data = espObjects[obj]
     if not data then return end
@@ -633,7 +572,7 @@ local function createESP(obj, baseColor)
     if obj.Name == "Lobby" then return end
     local data = espObjects[obj]
     if data then
-        -- update color เท่านั้น
+        -- update color ????????
         if data.highlight then
             data.highlight.FillColor    = baseColor
             data.highlight.OutlineColor = baseColor
@@ -696,7 +635,7 @@ local function createESP(obj, baseColor)
     }
 end
 
--- ── Object labels (ไม่มี HP → 2 แถวชิดกัน) ──────────────────────────────────────────
+-- -- Object labels (????? HP ? 2 ?????????) ------------------------------------------
 local function setObjectLabels(data, col, nameText, showName, distText, showDist)
     if not data then return end
     data.nameLabel.Text      = nameText or ""
@@ -711,7 +650,7 @@ local function setObjectLabels(data, col, nameText, showName, distText, showDist
     data.distLabel.TextColor3 = col
 end
 
--- ── Generator progress ────────────────────────────────────────────────────────────────
+-- -- Generator progress ----------------------------------------------------------------
 local function getGeneratorProgress(gen)
     local progress = 0
     if gen:GetAttribute("Progress") then
@@ -748,7 +687,7 @@ local function generatorFinished(gen)
         or gen:FindFirstChild("Repaired") ~= nil
 end
 
--- ── Main ESP Update ───────────────────────────────────────────────────────────────────
+-- -- Main ESP Update -------------------------------------------------------------------
 local _espAccum    = 0
 local ESP_INTERVAL = 0.5
 
@@ -1143,7 +1082,7 @@ MainTab:Button({
     end
 })
 
--- ── Crosshair ────────────────────────────────────────────────────────────────────────
+-- -- Crosshair ------------------------------------------------------------------------
 local CrosshairEnabled = Config:Get("CrosshairEnabled", false)
 
 local function CreateCrosshair()
@@ -1191,7 +1130,7 @@ MainTab:Toggle({
     end
 })
 
--- ── Bypass Gate ──────────────────────────────────────────────────────────────────────
+-- -- Bypass Gate ----------------------------------------------------------------------
 local bypassGateEnabled = Config:Get("bypassGateEnabled", false)
 
 local function gatherGates()
@@ -1241,7 +1180,7 @@ MainTab:Toggle({
     end
 })
 
--- ── Visual ────────────────────────────────────────────────────────────────────────────
+-- -- Visual ----------------------------------------------------------------------------
 local fullBrightEnabled = Config:Get("fullBrightEnabled", false)
 local noFogEnabled      = Config:Get("noFogEnabled", false)
 local _fullBrightConn, _noFogConn
@@ -1293,7 +1232,7 @@ MainTab:Toggle({
     end
 })
 
--- ── Anti AFK ─────────────────────────────────────────────────────────────────────────
+-- -- Anti AFK -------------------------------------------------------------------------
 MainTab:Section({ Title = "Misc", Icon = "settings" })
 local AntiAFK_main = Config:Get("AntiAFK_main", true)
 local _antiAfkThread
@@ -1324,12 +1263,12 @@ MainTab:Toggle({
 })
 
 -- ====================== GENERATOR SYSTEM ======================
--- ── Remote refs ──────────────────────────────────────────────────────────────────────
+-- -- Remote refs ----------------------------------------------------------------------
 local GeneratorRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Generator")
 local skillRemote      = GeneratorRemotes:WaitForChild("SkillCheckResultEvent")
 local repairRemote     = GeneratorRemotes:WaitForChild("RepairEvent")
 
--- ── Repair state ─────────────────────────────────────────────────────────────────────
+-- -- Repair state ---------------------------------------------------------------------
 local GEN = {
     repairPoint = nil,   -- current GeneratorPoint BasePart
     repairModel = nil,   -- current Generator Model
@@ -1338,14 +1277,14 @@ local GEN = {
     skillDB     = false,
     -- Cached last HRP position for movement threshold
     lastPos     = nil,
-    MOVE_THRESH = 0.9,   -- studs ที่ถือว่า "ขยับจริง" (ลด false cancel)
+    MOVE_THRESH = 0.9,   -- studs ????????? "????????" (?? false cancel)
 }
 
 local function notify(title, content)
     WindUI:Notify({ Title = title, Content = content, Duration = 5, Icon = "triangle-alert" })
 end
 
--- ── Validate repair point ยังอยู่ในโลกไหม ────────────────────────────────────────────
+-- -- Validate repair point ??????????????? --------------------------------------------
 local function isRepairPointValid()
     return GEN.repairPoint
         and GEN.repairPoint.Parent
@@ -1354,14 +1293,14 @@ local function isRepairPointValid()
         and not generatorFinished(GEN.repairModel)
 end
 
--- ── Clear repair state ────────────────────────────────────────────────────────────────
+-- -- Clear repair state ----------------------------------------------------------------
 local function clearRepairState()
     GEN.repairPoint = nil
     GEN.repairModel = nil
     GEN.lastPos     = nil
 end
 
--- ── Safe cancel (fire 1 ครั้ง + ยืนยัน ไม่ spam) ──────────────────────────────────
+-- -- Safe cancel (fire 1 ????? + ?????? ??? spam) ----------------------------------
 local function cancelRepair()
     if not isRepairPointValid() then clearRepairState(); return end
     if GEN.cancelDB then return end
@@ -1370,7 +1309,7 @@ local function cancelRepair()
     task.delay(0.4, function() GEN.cancelDB = false end)
 end
 
--- ── Generator point finder ────────────────────────────────────────────────────────────
+-- -- Generator point finder ------------------------------------------------------------
 local function getClosestGeneratorPoint(root, maxDist)
     local gens                    = getFolderGenerator()
     local bestGen, bestPt, bestD  = nil, nil, maxDist or 999
@@ -1392,7 +1331,7 @@ local function getClosestGeneratorPoint(root, maxDist)
     return bestGen, bestPt, bestD
 end
 
--- ── Killer proximity check (ใช้ Players list แทน GetDescendants ทั้งหมด) ───────────
+-- -- Killer proximity check (??? Players list ??? GetDescendants ???????) -----------
 local function findNearestKiller(root, maxDist)
     local nearest, nearestDist = nil, maxDist or 12.5
     for _, plr in ipairs(Players:GetPlayers()) do
@@ -1411,7 +1350,7 @@ local function findNearestKiller(root, maxDist)
     return nearest, nearestDist
 end
 
--- ── Teleport to best generator + start repair ────────────────────────────────────────
+-- -- Teleport to best generator + start repair ----------------------------------------
 local function teleportToGenerator()
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -1420,7 +1359,7 @@ local function teleportToGenerator()
     local gen, pt = getClosestGeneratorPoint(root)
     if not gen or not pt then return end
 
-    -- ถ้า gen เดิมยังไม่เสร็จ + เราอยู่ใกล้ → ไม่ต้อง teleport ใหม่
+    -- ??? gen ??????????????? + ??????????? ? ??????? teleport ????
     if isRepairPointValid()
     and (root.Position - GEN.repairPoint.Position).Magnitude <= 5 then
         return
@@ -1435,8 +1374,8 @@ local function teleportToGenerator()
     pcall(function() repairRemote:FireServer(pt, true) end)
 end
 
--- ── Smart movement detection ─────────────────────────────────────────────────────────
--- รวม PC + Mobile ใน 1 Heartbeat loop (ไม่ใช้ 2 while true แยกกัน)
+-- -- Smart movement detection ---------------------------------------------------------
+-- ??? PC + Mobile ?? 1 Heartbeat loop (?????? 2 while true ??????)
 local _movCheckAccum = 0
 local MOV_CHECK_INTERVAL = 0.07  -- ~14Hz
 
@@ -1456,14 +1395,14 @@ RunService.Heartbeat:Connect(function(dt)
     if not root or not hum then return end
 
     local dist = (root.Position - GEN.repairPoint.Position).Magnitude
-    if dist > 8 then return end   -- ไกลเกินไป → ไม่ใช่ช่วง repair
+    if dist > 8 then return end   -- ????????? ? ?????????? repair
 
-    -- เปรียบเทียบ position จริง (ไม่ใช้ velocity ที่ drift ได้)
+    -- ??????????? position ???? (?????? velocity ??? drift ???)
     local prevPos = GEN.lastPos or root.Position
     local moved   = (root.Position - prevPos).Magnitude
     GEN.lastPos   = root.Position
 
-    -- ตรวจ MoveDirection ด้วย (รองรับ mobile joystick)
+    -- ???? MoveDirection ???? (?????? mobile joystick)
     local isMoving = moved > GEN.MOVE_THRESH or hum.MoveDirection.Magnitude > 0.05
 
     if isMoving and not GEN.cancelDB then
@@ -1471,7 +1410,7 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
--- ── X Cancel (PC) ────────────────────────────────────────────────────────────────────
+-- -- X Cancel (PC) --------------------------------------------------------------------
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.KeyCode == Enum.KeyCode.X then
@@ -1482,14 +1421,14 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     end
 end)
 
--- ── Section UI ───────────────────────────────────────────────────────────────────────
+-- -- Section UI -----------------------------------------------------------------------
 SurTab:Section({ Title = "Feature Generator", Icon = "zap" })
 
 local AutoSkillPerfect = Config:Get("AutoSkillPerfect", false)
 local AutoSkillNeutral = Config:Get("AutoSkillNeutral", false)
 local AutoGenRepair    = Config:Get("AutoGenRepair",    false)
 
--- ── Shared skill loop runner (1 instance เท่านั้น ต่อ mode) ──────────────────────────
+-- -- Shared skill loop runner (1 instance ???????? ??? mode) --------------------------
 local _skillThread = nil
 local function startSkillLoop(mode)
     if _skillThread then task.cancel(_skillThread); _skillThread = nil end
@@ -1499,19 +1438,19 @@ local function startSkillLoop(mode)
         local resultVal  = mode == "perfect" and 1 or 0
 
         while (mode == "perfect" and AutoSkillPerfect) or (mode == "neutral" and AutoSkillNeutral) do
-            task.wait(0.08)  -- ตรวจบ่อยขึ้น (เดิม 0.1)
+            task.wait(0.08)  -- ???????????? (???? 0.1)
             local char = LocalPlayer.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
             if not root then continue end
 
-            -- อัปเดต repair point ล่าสุด
+            -- ?????? repair point ??????
             local gen, pt = getClosestGeneratorPoint(root, 8)
             if gen and pt then
                 GEN.repairModel = gen
                 GEN.repairPoint = pt
             end
 
-            -- ตรวจ SkillCheck GUI
+            -- ???? SkillCheck GUI
             local gui = pGui:FindFirstChild("SkillCheckPromptGui")
             if not gui then continue end
             local check = gui:FindFirstChild("Check")
@@ -1565,24 +1504,24 @@ SurTab:Toggle({
     end
 })
 
--- ── Auto Generator loop (รองรับ respawn + generator เสร็จ/หมด) ───────────────────────
+-- -- Auto Generator loop (?????? respawn + generator ?????/???) -----------------------
 local _genThread = nil
 local function startGenLoop()
     if _genThread then task.cancel(_genThread); _genThread = nil end
     _genThread = task.spawn(function()
         while AutoGenRepair do
-            task.wait(0.25)  -- ตรวจถี่ขึ้น (เดิม 0.3)
+            task.wait(0.25)  -- ??????????? (???? 0.3)
             local char = LocalPlayer.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
             if not root then continue end
 
-            -- Generator เสร็จไปแล้ว → clear state + หาอันใหม่
+            -- Generator ??????????? ? clear state + ?????????
             if not isRepairPointValid() then
                 clearRepairState()
                 _invalidateGenCache()  -- force refresh cache
             end
 
-            -- ตรวจ killer
+            -- ???? killer
             local killer = findNearestKiller(root, 12.5)
             if killer and isRepairPointValid() then
                 cancelRepair()
@@ -1591,7 +1530,7 @@ local function startGenLoop()
                 continue
             end
 
-            -- ไม่มี repair point หรือ ออกจาก generator → หาใหม่
+            -- ????? repair point ???? ?????? generator ? ??????
             if not isRepairPointValid()
             or (root.Position - GEN.repairPoint.Position).Magnitude > 8 then
                 teleportToGenerator()
@@ -1601,10 +1540,10 @@ local function startGenLoop()
     end)
 end
 
--- Reset state เมื่อ respawn
+-- Reset state ????? respawn
 LocalPlayer.CharacterAdded:Connect(function()
     clearRepairState()
-    -- re-start loops ถ้า enabled
+    -- re-start loops ??? enabled
     if AutoGenRepair    then task.delay(1, startGenLoop)          end
     if AutoSkillPerfect then task.delay(1, function() startSkillLoop("perfect") end) end
     if AutoSkillNeutral then task.delay(1, function() startSkillLoop("neutral") end) end
@@ -1627,7 +1566,7 @@ SurTab:Toggle({
     end
 })
 
--- ── Cheat Section ────────────────────────────────────────────────────────────────────
+-- -- Cheat Section --------------------------------------------------------------------
 SurTab:Section({ Title = "Feature Cheat", Icon = "bug" })
 
 SurTab:Button({
@@ -1856,7 +1795,7 @@ killerTab:Toggle({
     Callback = function(state) DYHUB_Settings.Aimbot.DragUI = state; DYHUB_EnableDrag(state) end
 })
 
--- ── Aimbot helpers ───────────────────────────────────────────────────────────────────
+-- -- Aimbot helpers -------------------------------------------------------------------
 local function DYHUB_GetLocalRoot()
     local c = LocalPlayer.Character
     return c and c:FindFirstChild("HumanoidRootPart")
@@ -2042,8 +1981,8 @@ local function DYHUB_CreateMobileButtons()
         c.CornerRadius = UDim.new(0,45); c.Parent = btn
         return btn
     end
-    DYHUB_mobileButton   = makeBtn("🗡️", DYHUB_Settings.Aimbot.MobileButtonPosition,   DYHUB_AimbotEnabled)
-    DYHUB_mobileButton28 = makeBtn("⚔️", DYHUB_Settings.Aimbot.MobileButton28Position, DYHUB_Aimbot28Enabled)
+    DYHUB_mobileButton   = makeBtn("???", DYHUB_Settings.Aimbot.MobileButtonPosition,   DYHUB_AimbotEnabled)
+    DYHUB_mobileButton28 = makeBtn("??", DYHUB_Settings.Aimbot.MobileButton28Position, DYHUB_Aimbot28Enabled)
     DYHUB_mobileButton.Visible   = DYHUB_AimbotToggleGUIVisible
     DYHUB_mobileButton28.Visible = DYHUB_Aimbot28ToggleGUIVisible
     DYHUB_mobileButton.MouseButton1Click:Connect(function()
@@ -2089,7 +2028,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ── The Masked ───────────────────────────────────────────────────────────────────────
+-- -- The Masked -----------------------------------------------------------------------
 killerTab:Section({ Title = "Killer: The Masked", Icon = "venetian-mask" })
 killerTab:Paragraph({
     Title = "Information: The Masked",
@@ -2111,7 +2050,7 @@ killerTab:Button({
     Callback = function() ReplicatedStorage.Remotes.Killers.Masked.Activatepower:FireServer(MaskedList[math.random(#MaskedList)]) end
 })
 
--- ── The Stalker ───────────────────────────────────────────────────────────────────────
+-- -- The Stalker -----------------------------------------------------------------------
 killerTab:Section({ Title = "Killer: The Stalker", Icon = "eye-off" })
 local Stalker = Config:Get("Stalker", false)
 
@@ -2156,7 +2095,7 @@ killerTab:Toggle({
     end
 })
 
--- ── Feature Killer ───────────────────────────────────────────────────────────────────
+-- -- Feature Killer -------------------------------------------------------------------
 killerTab:Section({ Title = "Feature Killer", Icon = "swords" })
 
 local killallEnabled = Config:Get("killall", false)
@@ -2280,7 +2219,7 @@ killerTab:Toggle({
     end
 })
 
--- ── Feature Fun ──────────────────────────────────────────────────────────────────────
+-- -- Feature Fun ----------------------------------------------------------------------
 killerTab:Section({ Title = "Feature Fun", Icon = "crown" })
 local GrabKey = Config:Get("GrabKey", "C")
 killerTab:Input({
@@ -2352,7 +2291,7 @@ killerTab:Toggle({
     end
 })
 
--- ── Feature Cheat ─────────────────────────────────────────────────────────────────────
+-- -- Feature Cheat ---------------------------------------------------------------------
 killerTab:Section({ Title = "Feature Cheat", Icon = "bug" })
 
 local noFlashlightEnabled = Config:Get("noblind", false)
@@ -2361,7 +2300,7 @@ killerTab:Toggle({
     Callback = function(state) noFlashlightEnabled=state; Config:Set("noblind",noFlashlightEnabled); Config:Save() end
 })
 
--- No Flashlight: ใช้ signal-based แทน polling loop
+-- No Flashlight: ??? signal-based ??? polling loop
 PlayerGui.DescendantAdded:Connect(function(desc)
     if noFlashlightEnabled and desc:IsA("GuiObject") and desc.Name == "Blind" then
         pcall(function() desc:Destroy() end)
@@ -2404,29 +2343,22 @@ killerTab:Button({
 })
 
 -- ====================== PLAYER TAB ======================
-local speedEnabled   = Config:Set("enablespeed", false)
-local flyNoclipSpeed = Config:Get("ishowspeedimeanspeedwalk", 3)
+local speedEnabled   = false
+local flyNoclipSpeed = Config:Get("SpeedWalk", 3)
 local NoClipEnabled  = Config:Get("NoClipEnabled", false)
 local speedConnection, noclipConnection
 
 PlayerTab:Section({ Title = "Feature Player", Icon = "rabbit" })
 PlayerTab:Slider({
-    Title    = "Set Speed Walk (Legit = 3)",
-    Desc     = "Speed for player (cframe)",
-    Value    = { Min = 3, Max = 999, Default = flyNoclipSpeed },
-    Step     = 1,
-    Callback = function(v)
-        flyNoclipSpeed = v
-        Config:Set("ishowspeedimeanspeedwalk", v)
-        Config:Save()
-    end
+    Title = "Set Speed (Legit = 3)",
+    Value = { Min = 1, Max = 677, Value = flyNoclipSpeed },
+    Step  = 1,
+    Callback = function(val) flyNoclipSpeed=val; Config:Set("SpeedWalk",flyNoclipSpeed); Config:Save() end
 })
 PlayerTab:Toggle({
-    Title = "Enable Speed", Desc = "Adjusts your character movement speed using a slider", Value = speedEnabled,
+    Title = "Enable Speed", Desc = "Adjusts your character movement speed using a slider", Value = false,
     Callback = function(v)
         speedEnabled = v
-        Config:Set("enablespeed", v)
-        Config:Save()
         if speedEnabled then
             if speedConnection then speedConnection:Disconnect() end
             speedConnection = RunService.RenderStepped:Connect(function()
@@ -2473,7 +2405,7 @@ PlayerTab:Toggle({
 })
 
 -- No Fall
-local NoFallEnabled = Config:Set("nofall", false)
+local NoFallEnabled = false
 local FallRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Mechanics"):WaitForChild("Fall")
 local mt = getrawmetatable(game)
 local oldNamecall = mt.__namecall
@@ -2487,7 +2419,7 @@ setreadonly(mt, true)
 
 PlayerTab:Toggle({
     Title = "No Fall (Beta)", Desc = "Prevents movement slowdown after falling from heights", Value = false,
-    Callback = function(v) NoFallEnabled = v; Config:Set("nofall", v); Config:Save() end
+    Callback = function(v) NoFallEnabled = v end
 })
 
 -- ====================== TELEPORT TAB ======================
@@ -2653,17 +2585,6 @@ Main3:Button({
 })
 
 -- ====================== INFORMATION TAB ======================
-local Info = InfoTab
-if not ui then ui = {} end
-if not ui.Creator then ui.Creator = {} end
-
-Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
-Info:Divider()
-Info:Paragraph({
-    Title = "Update: 05/23/2026 | CL: " .. ver,
-    Desc  = "- [ Rework ] Auto Parry v2 (Heartbeat scan + AnimationPlayed dual-layer)\n- [ Rework ] Generator System (Smart cancel, position-based movement)\n- [ Fixed ] Auto Parry mode (string/table fix)\n- [ Fixed ] Generator false cancel (velocity, position delta)\n- [ Fixed ] Duplicate skill loops on toggle\n- [ Fixed ] Stale generator reference after round end\n- [ Improved ] Cache invalidation throttle (Reduce event spam)\n- [ Improved ] No Flashlight (event-based instead polling)\n- [ Improved ] Generator reconnect behind before respawn\n- [ Optimized ] Reduce Heartbeat connections (together loop)",
-})
-Info:Divider()
 
 ui.Creator.Request = function(requestData)
     local success, result = pcall(function()
@@ -2693,8 +2614,8 @@ local function LoadDiscordInfo()
     if success and result and result.guild then
         local DiscordInfo = Info:Paragraph({
             Title = result.guild.name,
-            Desc  = ' <font color="#52525b">●</font> Member Count : '..tostring(result.approximate_member_count)..
-                    '\n <font color="#16a34a">●</font> Online Count : '..tostring(result.approximate_presence_count),
+            Desc  = ' <font color="#52525b">?</font> Member Count : '..tostring(result.approximate_member_count)..
+                    '\n <font color="#16a34a">?</font> Online Count : '..tostring(result.approximate_presence_count),
             Image = "https://cdn.discordapp.com/icons/"..result.guild.id.."/"..result.guild.icon..".png?size=1024",
             ImageSize = 42,
         })
@@ -2706,8 +2627,8 @@ local function LoadDiscordInfo()
                 end)
                 if ok and r and r.guild then
                     DiscordInfo:SetDesc(
-                        ' <font color="#52525b">●</font> Member Count : '..tostring(r.approximate_member_count)..
-                        '\n <font color="#16a34a">●</font> Online Count : '..tostring(r.approximate_presence_count)
+                        ' <font color="#52525b">?</font> Member Count : '..tostring(r.approximate_member_count)..
+                        '\n <font color="#16a34a">?</font> Online Count : '..tostring(r.approximate_presence_count)
                     )
                     WindUI:Notify({ Title = "Discord Info Updated", Content = "Refreshed!", Duration = 2, Icon = "refresh-cw" })
                 else
@@ -2759,7 +2680,7 @@ if NoClipEnabled then
     end)
 end
 
--- Re-start generator loops ถ้า config บอก enabled
+-- Re-start generator loops ??? config ??? enabled
 if AutoGenRepair    then startGenLoop() end
 if AutoSkillPerfect then startSkillLoop("perfect") end
 if AutoSkillNeutral then startSkillLoop("neutral") end
