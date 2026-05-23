@@ -2,7 +2,7 @@
 -- Powered by dyumra | v345 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.00"
+local ver     = "v014.01"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -173,80 +173,37 @@ Window:SelectTab(1)
 -- =====================================================================================
 --  AUTO PARRY SYSTEM v3  |  DYHUB  |  dyumra
 --  Architecture:
---    • Heartbeat-based continuous threat scan
+--    • Heartbeat-based continuous threat scan (??????? AnimationPlayed ???????????????)
 --    • AnimationPlayed ? immediate hitframe-timed coroutine
 --    • Connection pool + auto-cleanup ????? char ??? / respawn
---    • Btn cache ??? 0.5s
+--    • Btn cache ???? 0.5s (?? FindFirstChild spam)
 --    • Single cooldown gate ??????? double-fire
---    • PC = Right-click | Mobile = ButtonSystem:Click()
 -- =====================================================================================
 
 _G.AutoParry      = Config:Get("autoparry",      false)
-_G.AutoParryMode  = Config:Get("autoparrymode",  "Smart")
+_G.AutoParryMode  = Config:Get("autoparrymode",  "Smart") -- string ????????
 _G.AutoParryRange = Config:Get("autoparryrange", 15)
 
 -- -- Constants ---------------------------------------------------------------------
-local PARRY_CD       = 0.25
+local PARRY_CD       = 0.30   -- ?? cooldown ???????
 local PARRY_IMAGE    = "rbxassetid://101288986880844"
-local SCAN_INTERVAL  = 1/30
-
--- -- ButtonSystem (Mobile) ----------------------------------------------------------
-local ButtonSystem = {}
-ButtonSystem.Path = 'game:GetService("Players").LocalPlayer.PlayerGui["Survivor-mob"].Controls["Gui-mob"]'
-
-function ButtonSystem:GetButton(path)
-    local ok, result = pcall(function()
-        return loadstring("return "..(path or self.Path))()
-    end)
-    if ok and result then return result end
-end
-
-function ButtonSystem:Click(btn)
-    if not btn then return false end
-    if btn:IsA("ImageButton") or btn:IsA("TextButton") then
-        pcall(function()
-            if firesignal then
-                firesignal(btn.MouseButton1Click)
-                firesignal(btn.Activated)
-            else
-                btn:Activate()
-            end
-        end)
-        return true
-    end
-    return false
-end
-
-function ButtonSystem:ClickFromPath(path)
-    local btn = self:GetButton(path)
-    return self:Click(btn)
-end
-
--- -- Platform detection -------------------------------------------------------------
-local isMobile = (function()
-    -- ????? VIM = PC ???????, ?? VIM = PC-exploit ???? mobile executor
-    -- ???? UserInputService.TouchEnabled ???? primary check
-    local ok, UIS = pcall(function()
-        return game:GetService("UserInputService")
-    end)
-    if ok and UIS then
-        return UIS.TouchEnabled
-    end
-    return false
-end)()
+local SCAN_INTERVAL  = 1/30   -- Heartbeat scan ~30Hz (?????? RenderStepped ??????? GPU load)
 
 -- -- State -------------------------------------------------------------------------
 local AP = {
     lastParry   = 0,
-    hookedChars = {},
-    btnCache    = nil,
-    btnCacheAt  = 0,
-    BTN_TTL     = 0.5,
-    pending     = false,
-    pendingGen  = 0,
+    hookedChars = {},   -- [char] = { connections = {RBXSignalConnection,...} }
+    btnCache    = nil,  -- cached parry button
+    btnCacheAt  = 0,    -- os.clock() ??? cache ??????
+    BTN_TTL     = 0.5,  -- ???? cache (??)
+    pending     = false, -- ?? coroutine ????? wait ??????? (?? stack)
+    pendingGen  = 0,     -- generation id ??????? stale coroutine
 }
 
 -- -- Hitframe timing ---------------------------------------------------------------
+-- [animId] = { delay=??, window=?? }
+-- delay  = ??????????? anim ????? ????? fire parry
+-- window = parry ????????? elapsed <= window
 local ANIM_HF = {
     -- swing fast
     ["rbxassetid://139369275981139"] = { delay=0.18, window=0.26 },
@@ -258,7 +215,7 @@ local ANIM_HF = {
     ["rbxassetid://111920872708571"] = { delay=0.22, window=0.30 },
     ["rbxassetid://118907603246885"] = { delay=0.21, window=0.28 },
     ["rbxassetid://78432063483146"]  = { delay=0.20, window=0.28 },
-    -- lunge / dash
+    -- lunge / dash (??????? ? delay ????)
     ["rbxassetid://113255068724446"] = { delay=0.12, window=0.18 },
     ["rbxassetid://74968262036854"]  = { delay=0.12, window=0.18 },
     ["rbxassetid://129784271201071"] = { delay=0.15, window=0.21 },
@@ -270,7 +227,7 @@ local ANIM_HF = {
     ["rbxassetid://133963973694098"] = { delay=0.28, window=0.36 },
 }
 
--- -- Cached button fetch (Mobile only) ---------------------------------------------
+-- -- Cached button fetch ------------------------------------------------------------
 local function _fetchParryBtn()
     local pg = LocalPlayer:FindFirstChild("PlayerGui");    if not pg then return end
     local s  = pg:FindFirstChild("Survivor-mob");          if not s  then return end
@@ -279,50 +236,44 @@ local function _fetchParryBtn()
 end
 
 local function getParryBtn()
-    if not isMobile then return nil end  -- PC ?????????? GUI button
     local now = os.clock()
     if AP.btnCache and AP.btnCache.Parent and (now - AP.btnCacheAt) < AP.BTN_TTL then
         return AP.btnCache
     end
-    AP.btnCache   = _fetchParryBtn()
+    AP.btnCache  = _fetchParryBtn()
     AP.btnCacheAt = now
     return AP.btnCache
 end
 
 local function isParryReady()
-    if isMobile then
-        local btn = getParryBtn()
-        return btn and tostring(btn.Image) == PARRY_IMAGE
-    else
-        -- PC: ????? GUI — ?????? ready ???? (???? cooldown ?????????)
-        return true
-    end
+    local btn = getParryBtn()
+    return btn and tostring(btn.Image) == PARRY_IMAGE
 end
 
 -- -- Multi-method fire --------------------------------------------------------------
--- PC  ? Right-click ???? VIM (mouse button 1 = right)
--- Mobile ? ButtonSystem:Click() ??? GUI button
 local function fireParry()
-    if isMobile then
-        -- === MOBILE: ??? ButtonSystem ===
-        local btn = getParryBtn()
-        if btn then
-            ButtonSystem:Click(btn)
-        else
-            -- fallback: ClickFromPath ??? cache miss
-            ButtonSystem:ClickFromPath(nil)
-        end
-    else
-        -- === PC: Right-click ???? VIM ===
-        pcall(function()
-            -- VIM mouse button index: 0=left, 1=right
-            VIM:SendMouseButtonEvent(0, 0, 1, true,  game, 1)
-            VIM:SendMouseButtonEvent(0, 0, 1, false, game, 1)
-        end)
-    end
+    local btn = getParryBtn()
+    if not btn then return end
+
+    -- Method 1: firesignal (exploit-level, ??????)
+    pcall(function()
+        firesignal(btn.MouseButton1Click)
+        firesignal(btn.Activated)
+    end)
+    -- Method 2: Activate
+    pcall(function() btn:Activate() end)
+    -- Method 3: VIM tap (mobile fallback)
+    pcall(function()
+        local p  = btn.AbsolutePosition
+        local sz = btn.AbsoluteSize
+        local x  = p.X + sz.X * 0.5
+        local y  = p.Y + sz.Y * 0.5
+        VIM:SendMouseButtonEvent(x, y, 0, true,  game, 1)
+        VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
+    end)
 end
 
--- -- Threat calculator -------------------------------------------------------------
+-- -- Threat calculator (0 = ?????????, >0 = ??????) --------------------------------
 local function getThreat(killerChar)
     local my = LocalPlayer.Character
     if not my then return 0 end
@@ -332,13 +283,14 @@ local function getThreat(killerChar)
 
     local vel   = ksHRP.AssemblyLinearVelocity
     local spd   = vel.Magnitude
+    -- predict 2 frames ahead
     local pred  = ksHRP.Position + vel * 0.083
     local dist  = (myHRP.Position - pred).Magnitude
     if dist > _G.AutoParryRange then return 0 end
 
     local toMe     = (myHRP.Position - ksHRP.Position)
     local toMeUnit = toMe.Magnitude > 0 and toMe.Unit or Vector3.zero
-    local dot      = ksHRP.CFrame.LookVector:Dot(toMeUnit)
+    local dot      = ksHRP.CFrame.LookVector:Dot(toMeUnit) -- 1=???????? -1=??????
 
     local dScore = 1 - math.clamp(dist / _G.AutoParryRange, 0, 1)
     local fScore = math.clamp((dot + 1) * 0.5, 0, 1)
@@ -369,7 +321,7 @@ local function doSmart(killerChar, animId)
     AP.pending = true
     task.delay(info.delay, function()
         AP.pending = false
-        if AP.pendingGen ~= gen then return end
+        if AP.pendingGen ~= gen then return end   -- stale ? ??????
         if os.clock() - (AP.lastParry + info.delay) > (info.window - info.delay) then return end
         tryFire(killerChar)
     end)
@@ -401,12 +353,12 @@ local function onAttack(killerChar, animId, track)
         doFast(killerChar)
     elseif mode == "Predict" then
         doPredict(killerChar, animId, track)
-    else
+    else -- Smart (default)
         doSmart(killerChar, animId)
     end
 end
 
--- -- Cleanup / Hook -----------------------------------------------------------------
+-- -- Cleanup char connections -------------------------------------------------------
 local function cleanupChar(char)
     local entry = AP.hookedChars[char]
     if not entry then return end
@@ -416,6 +368,7 @@ local function cleanupChar(char)
     AP.hookedChars[char] = nil
 end
 
+-- -- Hook character -----------------------------------------------------------------
 local function hookChar(char)
     if AP.hookedChars[char] then return end
     local hum = char:WaitForChild("Humanoid", 5)
@@ -423,6 +376,7 @@ local function hookChar(char)
 
     local conns = {}
 
+    -- AnimationPlayed ? hitframe-timed parry
     conns[#conns+1] = hum.AnimationPlayed:Connect(function(track)
         local anim = track and track.Animation
         if not anim then return end
@@ -432,6 +386,7 @@ local function hookChar(char)
         end
     end)
 
+    -- ????? char ?????? destroy ? cleanup
     conns[#conns+1] = char.AncestryChanged:Connect(function()
         if not char.Parent then
             cleanupChar(char)
@@ -441,49 +396,55 @@ local function hookChar(char)
     AP.hookedChars[char] = { connections = conns }
 end
 
--- -- Heartbeat scan (Fast mode only) -----------------------------------------------
+-- -- Heartbeat: continuous scan (?????? instant attack ??? anim event ??? miss) ----
+-- scan ??? SCAN_INTERVAL ????? detect killer ????????????????? ??? trigger fast parry
 local _scanAccum = 0
 RunService.Heartbeat:Connect(function(dt)
     if not _G.AutoParry then return end
-    if _G.AutoParryMode ~= "Fast" then return end
+    if _G.AutoParryMode ~= "Fast" then return end -- Smart/Predict ??? anim event ???????
     _scanAccum += dt
     if _scanAccum < SCAN_INTERVAL then return end
     _scanAccum = 0
 
-    local my    = LocalPlayer.Character
+    local my = LocalPlayer.Character
     local myHRP = my and my:FindFirstChild("HumanoidRootPart")
     if not myHRP then return end
 
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr == LocalPlayer then continue end
-        local char  = plr.Character
+        local char = plr.Character
         if not char then continue end
         local ksHRP = char:FindFirstChild("HumanoidRootPart")
         if not ksHRP then continue end
         local dist = (myHRP.Position - ksHRP.Position).Magnitude
-        if dist <= _G.AutoParryRange * 0.6 then
+        if dist <= _G.AutoParryRange * 0.6 then   -- ??????????? ? fast fire
             tryFire(char)
-            break
+            break -- fire ??????????/scan
         end
     end
 end)
 
--- -- Hook players ------------------------------------------------------------------
+-- -- Hook player --------------------------------------------------------------------
 local function hookPlayer(plr)
     if plr == LocalPlayer then return end
     local function onChar(char)
         cleanupChar(char)
-        task.delay(0.4, function()
-            if char and char.Parent then hookChar(char) end
+        task.delay(0.4, function()   -- ?? char load ????? (?? task.wait)
+            if char and char.Parent then
+                hookChar(char)
+            end
         end)
     end
     if plr.Character then onChar(plr.Character) end
     plr.CharacterAdded:Connect(onChar)
+    -- cleanup ????? player ???
     plr.CharacterRemoving:Connect(function(char)
         cleanupChar(char)
     end)
 end
 
+-- -- Reconnect ???? respawn (local player) -----------------------------------------
+-- ???????????/respawn — invalidate btn cache
 LocalPlayer.CharacterAdded:Connect(function()
     AP.btnCache   = nil
     AP.btnCacheAt = 0
@@ -496,7 +457,7 @@ Players.PlayerAdded:Connect(hookPlayer)
 -- -- UI -----------------------------------------------------------------------------
 SurTab:Paragraph({
     Title = "Information: Parry Mode",
-    Desc  = "- Fast = Instant + Heartbeat scan\n- Smart = Delay based on hitframe table\n- Predict = Adjust to animation speed",
+    Desc  = "- Fast = Instant + Heartbeat scan\n- Smart = Delay ??? hitframe table\n- Predict = ???????? animation speed",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
@@ -510,7 +471,7 @@ SurTab:Toggle({
     Callback = function(v)
         _G.AutoParry  = v
         AP.lastParry  = 0
-        AP.pendingGen += 1
+        AP.pendingGen += 1  -- cancel pending coroutines
         Config:Set("autoparry", v)
         Config:Save()
         WindUI:Notify({
@@ -528,6 +489,7 @@ SurTab:Dropdown({
     Multi    = false,
     Value    = _G.AutoParryMode,
     Callback = function(v)
+        -- v ????????? table (Multi=false ??? return table ?? WindUI ????????)
         if type(v) == "table" then v = v[1] end
         _G.AutoParryMode = v or "Smart"
         Config:Set("autoparrymode", _G.AutoParryMode)
@@ -538,7 +500,7 @@ SurTab:Dropdown({
 
 SurTab:Slider({
     Title    = "Parry Range",
-    Desc     = "Range for parrying (studs)",
+    Desc     = "Range for parrying (studs) — ????? 12–18",
     Value    = { Min = 5, Max = 35, Default = _G.AutoParryRange },
     Step     = 1,
     Callback = function(v)
