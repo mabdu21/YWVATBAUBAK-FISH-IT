@@ -1,8 +1,7 @@
-
--- Powered by dyumra | v345 (Reworked)
+-- Powered by dyumra | v445 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.02"
+local ver     = "v014.05"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -99,7 +98,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config2.json"
+    self.ConfigPath = ConfigFolder .. "/configtestv67.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -170,6 +169,18 @@ local Main3       = Window:Tab({ Title = "Settings",    Icon = "settings" })
 
 Window:SelectTab(1)
 
+local Info = InfoTab
+if not ui then ui = {} end
+if not ui.Creator then ui.Creator = {} end
+
+Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
+Info:Divider()
+Info:Paragraph({
+    Title = "Update: 05/23/2026 | CL: " .. ver,
+    Desc  = "• [ Rework ] Auto Parry v2 (Heartbeat scan + AnimationPlayed dual-layer)\n• [ Rework ] Generator System (Smart cancel, position-based movement)\n• [ Fixed ] Auto Parry mode (string/table fix)\n• [ Fixed ] Generator false cancel (velocity, position delta)\n• [ Fixed ] Duplicate skill loops on toggle\n• [ Fixed ] Stale generator reference after round end\n• [ Improved ] Cache invalidation throttle (Reduce event spam)\n• [ Improved ] No Flashlight (event-based instead polling)\n• [ Improved ] Generator reconnect behind before respawn\n• [ Optimized ] Reduce Heartbeat connections (together loop)",
+})
+Info:Divider()
+
 -- =====================================================================================
 --  AUTO PARRY SYSTEM v3  |  DYHUB  |  dyumra
 -- =====================================================================================
@@ -178,16 +189,16 @@ local RunService        = game:GetService("RunService")
 local Vim               = game:GetService("VirtualInputManager")
 local LP                = Players.LocalPlayer
 
--- -- State --------------------------------------------------------------------------
+-- ── State ──────────────────────────────────────────────────────────────────────────
 _G.AutoParry        = Config:Get("autoparry",        false)
 _G.AutoParryMode    = Config:Get("autoparrymode",    {"Fast"})   -- "Fast" | "Smart" | "Predict"
 _G.AutoParryRange   = Config:Get("autoparryrange",   20)        -- studs
 
 local LastParry     = 0
-local PARRY_CD      = 0.2   -- cooldown ?????????????? parry (??) — ??????? spam
+local PARRY_CD      = 0.22   -- cooldown ขั้นต่ำระหว่าง parry (วิ) — ป้องกัน spam
 local Hooked        = {}     -- [char] = true
 
--- -- GUI Path -----------------------------------------------------------------------
+-- ── GUI Path ───────────────────────────────────────────────────────────────────────
 local PARRY_IMAGE   = "rbxassetid://101288986880844"
 
 local function getParryBtn()
@@ -202,7 +213,7 @@ local function isParryReady()
     return btn and tostring(btn.Image) == PARRY_IMAGE
 end
 
--- -- Multi-method click (????????? exploit) ----------------------------------------
+-- ── Multi-method click (รองรับทุก exploit) ────────────────────────────────────────
 local function fireParryBtn()
     local btn = getParryBtn()
     if not btn then return end
@@ -228,7 +239,7 @@ local function fireParryBtn()
     end)
 end
 
--- -- Distance + Direction check ----------------------------------------------------
+-- ── Distance + Direction check ────────────────────────────────────────────────────
 local function getThreatLevel(killerChar)
     local my = LP.Character
     if not my then return 0 end
@@ -245,80 +256,80 @@ local function getThreatLevel(killerChar)
     local predicted = ksHRP.Position + vel * frameDt
     local dist      = (myHRP.Position - predicted).Magnitude
 
-    -- ??????????????? ? ?????
+    -- ถ้าไกลเกินกำหนด → ไม่ทำ
     if dist > _G.AutoParryRange then return 0 end
 
-    -- ??? killer ???????? (dot > 0 = ???)
+    -- หัน killer มาหาเรา? (dot > 0 = หัน)
     local toMe = (myHRP.Position - ksHRP.Position).Unit
     local dot  = ksHRP.CFrame.LookVector:Dot(toMe)
 
-    -- ????? threat 0–1
+    -- คำนวณ threat 0–1
     local distScore  = 1 - math.clamp(dist / _G.AutoParryRange, 0, 1)
-    local dotScore   = math.clamp((dot + 1) * 0.5, 0, 1)         -- remap -1…1 ? 0…1
+    local dotScore   = math.clamp((dot + 1) * 0.5, 0, 1)         -- remap -1…1 → 0…1
     local speedScore = math.clamp(speed / 25, 0, 1)
 
     return (distScore * 0.5) + (dotScore * 0.35) + (speedScore * 0.15)
 end
 
--- -- Hitframe timing table ---------------------------------------------------------
---  ?????????? parry ???? animation ????? (??)
---  ??????? animation speed / game ???
---  format: [animId] = { delay=??, window=??_???_parry_?????? }
+-- ── Hitframe timing table ─────────────────────────────────────────────────────────
+--  เวลาที่ควร parry หลัง animation เริ่ม (วิ)
+--  ปรับตาม animation speed / game ได้
+--  format: [animId] = { delay=วิ, window=วิ_ที่_parry_ยังทัน }
 local ANIM_HITFRAME = {
-    -- ?? swing 1 (????)
-    ["rbxassetid://139369275981139"] = { delay=0.18, window=0.22 },
-    ["rbxassetid://110355011987939"] = { delay=0.18, window=0.22 },
-    ["rbxassetid://135002183282873"] = { delay=0.18, window=0.22 },
-    ["rbxassetid://121216847022485"] = { delay=0.18, window=0.22 },
-    -- ?? swing 2 (????????)
-    ["rbxassetid://105374834496520"] = { delay=0.18, window=0.22 },
-    ["rbxassetid://111920872708571"] = { delay=0.18, window=0.22 },
-    ["rbxassetid://118907603246885"] = { delay=0.18, window=0.22 },
-    ["rbxassetid://78432063483146"]  = { delay=0.18, window=0.22 },
-    -- ?? lunge / dash (???????)
-    ["rbxassetid://113255068724446"] = { delay=0.18, window=0.22 },
-    ["rbxassetid://74968262036854"]  = { delay=0.18, window=0.22 },
-    ["rbxassetid://129784271201071"] = { delay=0.18, window=0.22 },
+    -- ตี swing 1 (เร็ว)
+    ["rbxassetid://139369275981139"] = { delay=0.15, window=0.20 },
+    ["rbxassetid://110355011987939"] = { delay=0.15, window=0.20 },
+    ["rbxassetid://135002183282873"] = { delay=0.15, window=0.20 },
+    ["rbxassetid://121216847022485"] = { delay=0.15, window=0.20 },
+    -- ตี swing 2 (ช้าลงนิด)
+    ["rbxassetid://105374834496520"] = { delay=0.15, window=0.20 },
+    ["rbxassetid://111920872708571"] = { delay=0.15, window=0.20 },
+    ["rbxassetid://118907603246885"] = { delay=0.15, window=0.20 },
+    ["rbxassetid://78432063483146"]  = { delay=0.15, window=0.20 },
+    -- ตี lunge / dash (เร็วมาก)
+    ["rbxassetid://113255068724446"] = { delay=0.15, window=0.20 },
+    ["rbxassetid://74968262036854"]  = { delay=0.15, window=0.20 },
+    ["rbxassetid://129784271201071"] = { delay=0.15, window=0.20 },
     -- heavy / slam
-    ["rbxassetid://132817836308238"] = { delay=0.18, window=0.22 },
-    ["rbxassetid://112166042383605"] = { delay=0.18, window=0.22 },
-    ["rbxassetid://122812055447896"] = { delay=0.18, window=0.22 },
-    ["rbxassetid://117042998468241"] = { delay=0.18, window=0.22 },
-    ["rbxassetid://133963973694098"] = { delay=0.18, window=0.22 },
+    ["rbxassetid://132817836308238"] = { delay=0.15, window=0.20 },
+    ["rbxassetid://112166042383605"] = { delay=0.15, window=0.20 },
+    ["rbxassetid://122812055447896"] = { delay=0.15, window=0.20 },
+    ["rbxassetid://117042998468241"] = { delay=0.15, window=0.20 },
+    ["rbxassetid://133963973694098"] = { delay=0.15, window=0.20 },
 }
 
--- -- Mode: Fast — parry ???????? detect (no delay, aggressive) ---------------------
+-- ── Mode: Fast — parry ทันทีที่ detect (no delay, aggressive) ─────────────────────
 local function doParryFast(killerChar)
     if not isParryReady() then return end
     local threat = getThreatLevel(killerChar)
-    if threat <= 0 then return end   -- ????????????????
+    if threat <= 0 then return end   -- ไม่ได้อยู่ในระยะ
     local now = os.clock()
     if now - LastParry < PARRY_CD then return end
     LastParry = now
     fireParryBtn()
 end
 
--- -- Mode: Smart — delay ??? hitframe table ----------------------------------------
+-- ── Mode: Smart — delay ตาม hitframe table ────────────────────────────────────────
 local function doParrySmart(killerChar, animId, track)
-    local info = ANIM_HITFRAME[animId] or { delay=0.18, window=0.22 }
+    local info = ANIM_HITFRAME[animId] or { delay=0.15, window=0.20 }
     local startTime = os.clock()
 
     task.spawn(function()
-        -- ????? hitframe
+        -- รอถึง hitframe
         task.wait(info.delay)
 
-        -- ????????? window ????
+        -- ยังอยู่ใน window ไหม?
         local elapsed = os.clock() - startTime
         if elapsed > info.window then return end
 
-        -- ??? enabled ????
+        -- ยัง enabled ไหม?
         if not _G.AutoParry then return end
 
-        -- ???? threat ???????? (killer ????????????????)
+        -- ตรวจ threat อีกครั้ง (killer อาจวิ่งออกไปแล้ว)
         local threat = getThreatLevel(killerChar)
         if threat <= 0 then return end
 
-        -- ??? cooldown ????
+        -- ยัง cooldown ไหม?
         local now = os.clock()
         if now - LastParry < PARRY_CD then return end
 
@@ -328,15 +339,15 @@ local function doParrySmart(killerChar, animId, track)
     end)
 end
 
--- -- Mode: Predict — ??? animation speed ????? scale delay -----------------------
+-- ── Mode: Predict — ใช้ animation speed เพื่อ scale delay ───────────────────────
 local function doParryPredict(killerChar, animId, track)
-    local info = ANIM_HITFRAME[animId] or { delay=0.18, window=0.22 }
+    local info = ANIM_HITFRAME[animId] or { delay=0.15, window=0.20 }
 
-    -- ??? animation speed ??? track
+    -- ดึง animation speed จาก track
     local speed = 1
     pcall(function() speed = math.max(track.Speed, 0.1) end)
 
-    -- hitframe ???? = delay / speed (???? speed ??? = ?????? = delay ????)
+    -- hitframe จริง = delay / speed (ยิ่ง speed สูง = ตีเร็ว = delay สั้น)
     local realDelay  = info.delay  / speed
     local realWindow = info.window / speed
 
@@ -361,7 +372,7 @@ local function doParryPredict(killerChar, animId, track)
     end)
 end
 
--- -- Dispatch ----------------------------------------------------------------------
+-- ── Dispatch ──────────────────────────────────────────────────────────────────────
 local function onAttackAnim(killerChar, animId, track)
     if not _G.AutoParry then return end
     local mode = _G.AutoParryMode or "Smart"
@@ -374,7 +385,7 @@ local function onAttackAnim(killerChar, animId, track)
     end
 end
 
--- -- Hook character ----------------------------------------------------------------
+-- ── Hook character ────────────────────────────────────────────────────────────────
 local function hookChar(char)
     if Hooked[char] then return end
     Hooked[char] = true
@@ -392,13 +403,13 @@ local function hookChar(char)
     end)
 end
 
--- -- Hook player -------------------------------------------------------------------
+-- ── Hook player ───────────────────────────────────────────────────────────────────
 local function hookPlayer(plr)
     if plr == LP then return end
 
     local function onChar(char)
         Hooked[char] = nil
-        task.wait(0.5)   -- ?? character load
+        task.wait(0.5)   -- รอ character load
         hookChar(char)
     end
 
@@ -409,7 +420,7 @@ end
 for _, plr in pairs(Players:GetPlayers()) do hookPlayer(plr) end
 Players.PlayerAdded:Connect(hookPlayer)
 
--- -- UI ---------------------------------------------------------------------------
+-- ── UI ───────────────────────────────────────────────────────────────────────────
 SurTab:Paragraph({
     Title = "Information: Parry Mode",
     Desc = "- Fast = Instant, no delay \n- Smart = Delay based on hitframe \n- Predict = Calculated from animation speed",
@@ -1959,8 +1970,8 @@ local function DYHUB_CreateMobileButtons()
         c.CornerRadius = UDim.new(0,45); c.Parent = btn
         return btn
     end
-    DYHUB_mobileButton   = makeBtn("???", DYHUB_Settings.Aimbot.MobileButtonPosition,   DYHUB_AimbotEnabled)
-    DYHUB_mobileButton28 = makeBtn("??", DYHUB_Settings.Aimbot.MobileButton28Position, DYHUB_Aimbot28Enabled)
+    DYHUB_mobileButton   = makeBtn("🗡️", DYHUB_Settings.Aimbot.MobileButtonPosition,   DYHUB_AimbotEnabled)
+    DYHUB_mobileButton28 = makeBtn("⚔️", DYHUB_Settings.Aimbot.MobileButton28Position, DYHUB_Aimbot28Enabled)
     DYHUB_mobileButton.Visible   = DYHUB_AimbotToggleGUIVisible
     DYHUB_mobileButton28.Visible = DYHUB_Aimbot28ToggleGUIVisible
     DYHUB_mobileButton.MouseButton1Click:Connect(function()
@@ -2563,17 +2574,6 @@ Main3:Button({
 })
 
 -- ====================== INFORMATION TAB ======================
-local Info = InfoTab
-if not ui then ui = {} end
-if not ui.Creator then ui.Creator = {} end
-
-Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
-Info:Divider()
-Info:Paragraph({
-    Title = "Update: 05/23/2026 | CL: " .. ver,
-    Desc  = "- [ Rework ] Auto Parry v3 — Heartbeat scan + AnimationPlayed dual-layer\n- [ Rework ] Generator System — Smart cancel, 1 loop, position-based movement\n- [ Fixed ] Auto Parry mode dropdown (string/table fix)\n- [ Fixed ] Generator false cancel (velocity ? position delta)\n- [ Fixed ] Duplicate skill loops on toggle\n- [ Fixed ] Stale generator reference after round end\n- [ Fixed ] ESP ???????? object ????? HP\n- [ Improved ] Cache invalidation throttle (?? event spam)\n- [ Improved ] No Flashlight — event-based ??? polling\n- [ Improved ] Generator reconnect ???? respawn\n- [ Optimized ] ?? Heartbeat connections (??? loop)\n- [ Optimized ] findNearestKiller ??? Players list ??? GetDescendants",
-})
-Info:Divider()
 
 ui.Creator.Request = function(requestData)
     local success, result = pcall(function()
@@ -2616,8 +2616,8 @@ local function LoadDiscordInfo()
                 end)
                 if ok and r and r.guild then
                     DiscordInfo:SetDesc(
-                        ' <font color="#52525b">?</font> Member Count : '..tostring(r.approximate_member_count)..
-                        '\n <font color="#16a34a">?</font> Online Count : '..tostring(r.approximate_presence_count)
+                        ' <font color="#52525b">●</font> Member Count : '..tostring(r.approximate_member_count)..
+                        '\n <font color="#16a34a">●</font> Online Count : '..tostring(r.approximate_presence_count)
                     )
                     WindUI:Notify({ Title = "Discord Info Updated", Content = "Refreshed!", Duration = 2, Icon = "refresh-cw" })
                 else
