@@ -1,4 +1,4 @@
--- Powered by dyumra | v445 (Reworked)
+-- Powered by dyumra | v448 (Reworked)
 -- =========================
 local version = "Rework"
 local ver     = "v014.16"
@@ -192,7 +192,7 @@ local LP                = Players.LocalPlayer
 
 -- ── Config (persist) ───────────────────────────────────────────────────────────────
 _G.AutoParry        = Config:Get("autoparry",        false)
-_G.AutoParryMode    = Config:Get("autoparrymode",    "Smart")   -- "Fast" | "Smart" | "Predict"
+_G.AutoParryMode    = Config:Get("autoparrymode",    "Fast")   -- "Fast" | "Smart" | "Predict"
 _G.AutoParryRange   = Config:Get("autoparryrange",   20)        -- studs
 
 -- ── State ──────────────────────────────────────────────────────────────────────────
@@ -364,8 +364,8 @@ local ANIM_HITFRAME = {
     -- swing 1
     ["rbxassetid://139369275981139"] = { preDelay=0.00, hitAt=0.20 },
     ["rbxassetid://110355011987939"] = { preDelay=0.00, hitAt=0.20 },
-    ["rbxassetid://135002183282873"] = { preDelay=0.00, hitAt=0.20 },
-    ["rbxassetid://121216847022485"] = { preDelay=0.00, hitAt=0.20 },
+    ["rbxassetid://135002183282873"] = { preDelay=0.00, hitAt=0.14 },
+    ["rbxassetid://121216847022485"] = { preDelay=0.00, hitAt=0.14 },
     -- swing 2
     ["rbxassetid://105374834496520"] = { preDelay=0.00, hitAt=0.20 },
     ["rbxassetid://111920872708571"] = { preDelay=0.00, hitAt=0.20 },
@@ -403,7 +403,7 @@ end
 --   preDelay ควรเป็น 0 เสมอ เพราะเราต้องการ parry ก่อนโดนตี
 local function doParrySmart(killerChar, animId, track)
     if not _G.AutoParry then return end
-    local info = ANIM_HITFRAME[animId] or { preDelay=0.00, hitAt=0.18 }
+    local info = ANIM_HITFRAME[animId] or { preDelay=0.00, hitAt=0.12 }
 
     task.spawn(function()
         if info.preDelay > 0 then task.wait(info.preDelay) end
@@ -427,7 +427,7 @@ end
 --   ดังนั้น window = hitAt / speed  (ยิ่ง speed สูง window ยิ่งสั้น)
 local function doParryPredict(killerChar, animId, track)
     if not _G.AutoParry then return end
-    local info = ANIM_HITFRAME[animId] or { preDelay=0.00, hitAt=0.18 }
+    local info = ANIM_HITFRAME[animId] or { preDelay=0.00, hitAt=0.14 }
 
     local speed = 1
     pcall(function() speed = math.max(track.Speed, 0.1) end)
