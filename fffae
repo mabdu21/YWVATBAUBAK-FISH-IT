@@ -98,7 +98,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config_TESTV6.json"
+    self.ConfigPath = ConfigFolder .. "/config_FREE.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
