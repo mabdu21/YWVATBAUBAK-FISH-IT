@@ -2,13 +2,13 @@
 -- SKIBIDI | Version: Rework | v023.6
 -- =========================================================
 local version = "Rework"
-local ver     = "v023.6"
-
--- ====================== LOAD UI ======================
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+local ver     = "v023.65"
 
 -- ====================== GAME LOAD ======================
 repeat task.wait() until game:IsLoaded()
+
+-- ====================== LOAD UI ======================
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 -- ====================== SERVICES (cached once) ======================
 local Players            = game:GetService("Players")
