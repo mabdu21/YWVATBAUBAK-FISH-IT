@@ -1,6 +1,5 @@
 -- =========================================================
--- DYHUB | Version: Rework | v023.5
--- Refactored: Performance + Stability + Astro Priority
+-- SKIBIDI | Version: Rework | v023.5
 -- =========================================================
 local version = "Rework"
 local ver     = "v023.5"
@@ -65,7 +64,7 @@ end
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 -- [IMPROVED] Added dirty-flag to prevent save spam
 -- [IMPROVED] Added value validation on load
-local ConfigFolder = "DYHUB_STBB_V0234"
+local ConfigFolder = "DYHUB_STBB"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
@@ -73,7 +72,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData  = {}
-    self.ConfigPath  = ConfigFolder .. "/config.json"
+    self.ConfigPath  = ConfigFolder .. "/config_update_001.json"
     self._dirty      = false
     self._lastSave   = 0
     self._saveMinInterval = 2 -- minimum seconds between saves
@@ -223,7 +222,7 @@ Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/24/2026 | CL: " .. ver,
-    Desc  = "• [ New ] Astro Priority System (Highest priority target)\n• [ New ] Synchronized Auto Vote + Auto Start system\n• [ Rework ] Priority system (Astro→GiantST→Heli→HighHP→Nearest)\n• [ Rework ] Interrupt system (instant switch on higher priority)\n• [ Improved ] Config save spam protection (dirty flag + min interval)\n• [ Improved ] Config value validation on load\n• [ Improved ] Delete Map loop uses DescendantAdded (no polling spam)\n• [ Improved ] All connections properly disconnected on disable\n• [ Improved ] Character respawn handling (stale ref protection)\n• [ Fixed ] Duplicate Auto Attack / Skill loops on toggle\n• [ Fixed ] Auto Buy weapon/misc loops not stopping on disable\n• [ Fixed ] NoClip Stepped loop memory leak\n• [ Fixed ] AutoFarm tween conflict on mob switch\n• [ Fixed ] Vote+Start race condition (Vote fires first, Start waits)\n• [ Fixed ] FPS loop re-apply scan every 3s optimized\n• [ Optimized ] Reduced Heartbeat/RenderStepped connections\n• [ Optimized ] Cached Living folder reference in mob scans\n• [ Optimized ] ESP tick counter reset safely at 3660",
+    Desc  = "• [ New ] Astro Priority System (Highest priority target)\n• [ New ] Synchronized Auto Vote + Auto Start system\n• [ New ] Priority system (Mob +1)\n• [ Rework ] Interrupt system (instant switch on higher priority)\n• [ Improved ] Config save spam protection (dirty flag + min interval)\n• [ Improved ] Config value validation on load\n• [ Improved ] Delete Map loop uses DescendantAdded (no polling spam)\n• [ Improved ] All connections properly disconnected on disable\n• [ Improved ] Character respawn handling (stale ref protection)\n• [ Fixed ] Duplicate Auto Attack / Skill loops on toggle\n• [ Fixed ] Auto Buy weapon/misc loops not stopping on disable\n• [ Fixed ] NoClip Stepped loop memory leak\n• [ Fixed ] AutoFarm tween conflict on mob switch\n• [ Fixed ] Vote+Start race condition (Vote fires first, Start waits)\n• [ Fixed ] FPS loop re-apply scan every 3s optimized\n• [ Optimized ] Reduced Heartbeat/RenderStepped connections\n• [ Optimized ] Cached Living folder reference in mob scans\n• [ Optimized ] ESP tick counter reset safely at 3660",
     Image     = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
@@ -1502,7 +1501,7 @@ Main:Section({ Title = "Auto Farm", Icon = "package" })
 
 AutoFarmToggle = Main:Toggle({
     Title = "Auto Farm",
-    Desc  = "Automatically farms mobs based on priority system (Astro→GiantST→Heli→HighHP→Nearest).",
+    Desc  = "Automatically farms mobs based on priority system.",
     Value = AutoFarmEnabled,
     Callback = function(state)
         AutoFarmEnabled = state
