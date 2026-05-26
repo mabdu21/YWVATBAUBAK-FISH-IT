@@ -1,7 +1,7 @@
 -- Powered by nig | v455 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.21"
+local ver     = "v014.22"
 -- =========================
 -- CHANGELOG v014.19
 -- [New]     Auto Parry: ไม่ทำ parry ถ้า HP = 20 (downed)
@@ -1257,9 +1257,18 @@ MainTab:Toggle({
 })
 
 -- ====================== GENERATOR SYSTEM ======================
-local GeneratorRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Generator")
-local skillRemote      = GeneratorRemotes:WaitForChild("SkillCheckResultEvent")
-local repairRemote     = GeneratorRemotes:WaitForChild("RepairEvent")
+-- [FIX] ใช้ FindFirstChild แทน WaitForChild เพื่อกัน script ค้างถ้า remote ยังไม่โหลด / ไม่มี
+local RemotesFolder    = ReplicatedStorage:FindFirstChild("Remotes")
+local GeneratorRemotes = RemotesFolder and RemotesFolder:FindFirstChild("Generator")
+
+local skillRemote      = GeneratorRemotes and GeneratorRemotes:FindFirstChild("SkillCheckResultEvent")
+local repairRemote     = GeneratorRemotes and GeneratorRemotes:FindFirstChild("RepairEvent")
+
+local GENERATOR_AVAILABLE = skillRemote and repairRemote
+
+if not GENERATOR_AVAILABLE then
+    warn("[DYHUB] Generator remotes not found. Auto Generator disabled.")
+end
 
 local GEN = {
     repairPoint = nil,
@@ -1378,7 +1387,7 @@ local function cancelRepair()
     GEN.cancelDB = true
 
     pcall(function()
-        repairRemote:FireServer(GEN.repairPoint, false)
+        if repairRemote then repairRemote:FireServer(GEN.repairPoint, false) end
     end)
 
     task.delay(0.35, function()
@@ -1487,7 +1496,7 @@ local function teleportToGenerator(ignoreGen)
     task.wait(0.15)
 
     pcall(function()
-        repairRemote:FireServer(pt, true)
+        if repairRemote then repairRemote:FireServer(pt, true) end
     end)
 
     return true
@@ -1601,12 +1610,14 @@ local function startSkillLoop(mode)
                     or 0
 
                 pcall(function()
-                    skillRemote:FireServer(
-                        resultType,
-                        resultVal,
-                        GEN.repairModel,
-                        GEN.repairPoint
-                    )
+                    if skillRemote then
+                        skillRemote:FireServer(
+                            resultType,
+                            resultVal,
+                            GEN.repairModel,
+                            GEN.repairPoint
+                        )
+                    end
                 end)
 
                 check.Visible = false
