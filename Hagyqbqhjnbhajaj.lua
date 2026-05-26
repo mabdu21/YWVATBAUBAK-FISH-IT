@@ -1,7 +1,7 @@
--- Powered by nig | v455 (Reworked)
+-- Powered by nig | v4522 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.22"
+local ver     = "v014.21"
 -- =========================
 -- CHANGELOG v014.19
 -- [New]     Auto Parry: ไม่ทำ parry ถ้า HP = 20 (downed)
@@ -1224,7 +1224,7 @@ MainTab:Section({ Title = "Feature Visual", Icon = "lightbulb" })
 MainTab:Toggle({
     Title = "Full Bright",
     Desc = "Brightens the entire map for better visibility", Value = fullBrightEnabled,
-    Callback = function(v) fullBrightEnabled = v; Config:Set("fullBrightEnabled", v); Config:Save(); if v then startFullBright() else stopFullBright() end end
+    Callback = function(v) fullBrightEnabled = v; Config:Set("fullBrightEnabled", v); Config:Save(); if v and GENERATOR_AVAILABLE then startFullBright() else stopFullBright() end end
 })
 MainTab:Toggle({
     Title = "No Fog",
@@ -1257,6 +1257,10 @@ MainTab:Toggle({
 })
 
 -- ====================== GENERATOR SYSTEM ======================
+-- [PATCH FIX]
+-- ป้องกันสคริปพังเวลาระบบ Generator โหลดไม่ครบ / Remote ไม่มี
+-- และป้องกัน loop ของ Auto Generator รันตอน map ยังไม่พร้อม
+
 -- [FIX] ใช้ FindFirstChild แทน WaitForChild เพื่อกัน script ค้างถ้า remote ยังไม่โหลด / ไม่มี
 local RemotesFolder    = ReplicatedStorage:FindFirstChild("Remotes")
 local GeneratorRemotes = RemotesFolder and RemotesFolder:FindFirstChild("Generator")
@@ -1264,7 +1268,7 @@ local GeneratorRemotes = RemotesFolder and RemotesFolder:FindFirstChild("Generat
 local skillRemote      = GeneratorRemotes and GeneratorRemotes:FindFirstChild("SkillCheckResultEvent")
 local repairRemote     = GeneratorRemotes and GeneratorRemotes:FindFirstChild("RepairEvent")
 
-local GENERATOR_AVAILABLE = skillRemote and repairRemote
+local GENERATOR_AVAILABLE = (skillRemote ~= nil and repairRemote ~= nil)
 
 if not GENERATOR_AVAILABLE then
     warn("[DYHUB] Generator remotes not found. Auto Generator disabled.")
@@ -1491,7 +1495,7 @@ local function teleportToGenerator(ignoreGen)
         safePos.Z
     ))
 
-    root.CFrame = CFrame.new(safePos)
+    pcall(function() root.CFrame = CFrame.new(safePos) end)
 
     task.wait(0.15)
 
@@ -1513,7 +1517,7 @@ RunService.Heartbeat:Connect(function(dt)
 
     _movCheckAccum = 0
 
-    if not AutoGenRepair then
+    if not GENERATOR_AVAILABLE or not AutoGenRepair then
         return
     end
 
@@ -1530,7 +1534,7 @@ RunService.Heartbeat:Connect(function(dt)
     end
 
     local targetPos = Vector3.new(
-        GEN.repairPoint.Position.X,
+        (GEN.repairPoint and GEN.repairPoint.Position.X or root.Position.X),
         SAFE_Y_LEVEL,
         GEN.repairPoint.Position.Z
     )
@@ -1683,7 +1687,7 @@ local function startGenLoop()
     end
 
     _genThread = task.spawn(function()
-        while AutoGenRepair do
+        while AutoGenRepair and GENERATOR_AVAILABLE do
             task.wait(0.2)
 
             local char = LocalPlayer.Character
