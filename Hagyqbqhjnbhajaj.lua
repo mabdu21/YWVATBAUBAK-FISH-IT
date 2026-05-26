@@ -1,7 +1,7 @@
 -- Powered by nig | v450 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.21"
+local ver     = "v014.22"
 -- =========================
 -- CHANGELOG v014.19
 -- [New]     Auto Parry: ไม่ทำ parry ถ้า HP = 20 (downed)
@@ -1400,15 +1400,15 @@ SurTab:Toggle({
     Title = "Auto SkillCheck (Perfect)", Desc = "Automatically hits perfect generator skill checks", Value = AutoSkillPerfect,
     Callback = function(v)
         AutoSkillPerfect = v; Config:Set("AutoSkillPerfect", v); Config:Save()
-        if v then AutoSkillNeutral = false; notify("Auto Skill Perfect Enabled", "Active."); startSkillLoop("perfect")
+        if v then AutoSkillNeutral = false; notify("Auto Generator Perfect | Enabled", "Press X or move joystick to cancel."); startSkillLoop("perfect")
         elseif _skillThread then task.cancel(_skillThread); _skillThread = nil end
     end
 })
 SurTab:Toggle({
-    Title = "Auto SkillCheck (Not Perfect)", Desc = "Automatically hits neutral skill checks", Value = AutoSkillNeutral,
+    Title = "Auto SkillCheck (Neutral)", Desc = "Automatically hits neutral generator skill checks", Value = AutoSkillNeutral,
     Callback = function(v)
         AutoSkillNeutral = v; Config:Set("AutoSkillNeutral", v); Config:Save()
-        if v then AutoSkillPerfect = false; notify("Auto Skill Neutral Enabled", "Active."); startSkillLoop("neutral")
+        if v then AutoSkillPerfect = false; notify("Auto Generator Neutral | Enabled", "Press X or move joystick to cancel."); startSkillLoop("neutral")
         elseif _skillThread then task.cancel(_skillThread); _skillThread = nil end
     end
 })
@@ -1444,7 +1444,7 @@ LocalPlayer.CharacterAdded:Connect(function()
 end)
 
 SurTab:Toggle({
-    Title = "Auto Generator (Teleport + Repair)", Desc = "Teleports and repairs generators automatically", Value = AutoGenRepair,
+    Title = "Auto Generator (BETA)", Desc = "Automatically teleports and repairs generators.", Value = AutoGenRepair,
     Callback = function(v)
         AutoGenRepair = v; Config:Set("AutoGenRepair", v); Config:Save()
         if v then notify("Auto Generator Enabled", "Press X or move joystick to cancel."); startGenLoop()
