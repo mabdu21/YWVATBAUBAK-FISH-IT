@@ -1,4 +1,4 @@
--- Powered by dyumra | v449 (Reworked)
+-- Powered by nig | v450 (Reworked)
 -- =========================
 local version = "Rework"
 local ver     = "v014.19"
@@ -454,7 +454,7 @@ SurTab:Section({ Title = "Feature Survivor", Icon = "user" })
 if isPremium then
     SurTab:Paragraph({
         Title = "Information: Parry Mode",
-        Desc  = "• Fast = Instant on anim start\n• Smart = Delay based on hitframe\n• Predict = Scaled by anim speed\n\n• Safety: HP=20 (down) = skip\n• Safety: HP≤60 near Hook = skip",
+        Desc  = "• Fast = Instant on anim start\n• Smart = Delay based on hitframe\n• Predict = Scaled by anim speed\n\n• Ping: 60 - 100ms",
         Image = "rbxassetid://104487529937663", ImageSize = 30,
     })
     SurTab:Toggle({
