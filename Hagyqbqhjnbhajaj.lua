@@ -1,7 +1,7 @@
--- Powered by nig | v4522 (Reworked)
+-- Powered by nig | v455 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.21"
+local ver     = "v014.22"
 -- =========================
 -- CHANGELOG v014.19
 -- [New]     Auto Parry: ไม่ทำ parry ถ้า HP = 20 (downed)
@@ -1224,7 +1224,7 @@ MainTab:Section({ Title = "Feature Visual", Icon = "lightbulb" })
 MainTab:Toggle({
     Title = "Full Bright",
     Desc = "Brightens the entire map for better visibility", Value = fullBrightEnabled,
-    Callback = function(v) fullBrightEnabled = v; Config:Set("fullBrightEnabled", v); Config:Save(); if v and GENERATOR_AVAILABLE then startFullBright() else stopFullBright() end end
+    Callback = function(v) fullBrightEnabled = v; Config:Set("fullBrightEnabled", v); Config:Save(); if v then startFullBright() else stopFullBright() end end
 })
 MainTab:Toggle({
     Title = "No Fog",
@@ -1256,93 +1256,68 @@ MainTab:Toggle({
     end
 })
 
+
 -- ====================== GENERATOR SYSTEM ======================
--- [PATCH FIX]
--- ป้องกันสคริปพังเวลาระบบ Generator โหลดไม่ครบ / Remote ไม่มี
--- และป้องกัน loop ของ Auto Generator รันตอน map ยังไม่พร้อม
+local GeneratorRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Generator")
+local skillRemote      = GeneratorRemotes:WaitForChild("SkillCheckResultEvent")
+local repairRemote     = GeneratorRemotes:WaitForChild("RepairEvent")
 
--- [FIX] ใช้ FindFirstChild แทน WaitForChild เพื่อกัน script ค้างถ้า remote ยังไม่โหลด / ไม่มี
-local RemotesFolder    = ReplicatedStorage:FindFirstChild("Remotes")
-local GeneratorRemotes = RemotesFolder and RemotesFolder:FindFirstChild("Generator")
+-- =====================================================================================
+--  AUTO GENERATOR v4 (Reworked)
+--  • Teleport to closest unfinished generator
+--  • Float at Y+500 with anti fall platform
+--  • Auto switch generator if killer near
+--  • Ignore completed generators (100%)
+--  • Return to old position when toggle off
+--  • Fixed mobile movement cancel spam
+-- =====================================================================================
 
-local skillRemote      = GeneratorRemotes and GeneratorRemotes:FindFirstChild("SkillCheckResultEvent")
-local repairRemote     = GeneratorRemotes and GeneratorRemotes:FindFirstChild("RepairEvent")
-
-local GENERATOR_AVAILABLE = (skillRemote ~= nil and repairRemote ~= nil)
-
-if not GENERATOR_AVAILABLE then
-    warn("[DYHUB] Generator remotes not found. Auto Generator disabled.")
-end
+local AUTO_GEN_KILLER_DISTANCE = 30
+local AUTO_GEN_HEIGHT          = 500
+local AUTO_GEN_REPAIR_DELAY    = 0.15
 
 local GEN = {
     repairPoint = nil,
     repairModel = nil,
-    cancelDB    = false,
     skillDB     = false,
-    lastPos     = nil,
-    MOVE_THRESH = 0.9,
-
+    enabled     = false,
+    lastGenSwap = 0,
     oldCFrame   = nil,
-    flyPlatform = nil,
-    currentTarget = nil,
+    platform    = nil,
 }
 
-local SAFE_Y_LEVEL      = 500
-local KILLER_ESCAPE_DIST= 30
-local REPAIR_DISTANCE   = 8
-
 local function notify(title, content)
-    WindUI:Notify({
-        Title = title,
-        Content = content,
-        Duration = 5,
-        Icon = "triangle-alert"
-    })
+    WindUI:Notify({ Title=title, Content=content, Duration=5, Icon="triangle-alert" })
 end
 
-local function getGeneratorProgress(gen)
-    local progress = 0
-
-    if gen:GetAttribute("Progress") then
-        progress = gen:GetAttribute("Progress")
-
-    elseif gen:GetAttribute("RepairProgress") then
-        progress = gen:GetAttribute("RepairProgress")
-
-    else
-        for _, child in ipairs(gen:GetDescendants()) do
-            if child:IsA("NumberValue") or child:IsA("IntValue") then
-                local n = child.Name:lower()
-
-                if n:find("progress")
-                or n:find("repair")
-                or n:find("percent") then
-                    progress = child.Value
-                    break
-                end
-            end
-        end
+local function createSkyPlatform(pos)
+    if GEN.platform and GEN.platform.Parent then
+        GEN.platform.Position = pos - Vector3.new(0, 3.5, 0)
+        return
     end
 
-    progress = progress > 1 and progress / 100 or progress
-    return math.clamp(progress, 0, 1)
+    local p = Instance.new("Part")
+    p.Name = "DYHUB_GeneratorPlatform"
+    p.Anchored = true
+    p.CanCollide = true
+    p.Transparency = 1
+    p.Size = Vector3.new(18, 1, 18)
+    p.Position = pos - Vector3.new(0, 3.5, 0)
+    p.Parent = Workspace
+
+    GEN.platform = p
 end
 
-local function generatorFinished(gen)
-    if not gen or not gen.Parent then
-        return true
+local function removeSkyPlatform()
+    if GEN.platform then
+        pcall(function() GEN.platform:Destroy() end)
     end
-
-    return getGeneratorProgress(gen) >= 0.99
-        or gen:FindFirstChild("Finished")
-        or gen:FindFirstChild("Repaired")
+    GEN.platform = nil
 end
 
 local function clearRepairState()
-    GEN.repairPoint  = nil
-    GEN.repairModel  = nil
-    GEN.currentTarget= nil
-    GEN.lastPos      = nil
+    GEN.repairPoint = nil
+    GEN.repairModel = nil
 end
 
 local function isRepairPointValid()
@@ -1353,109 +1328,25 @@ local function isRepairPointValid()
         and not generatorFinished(GEN.repairModel)
 end
 
-local function createFlyPlatform(pos)
-    if GEN.flyPlatform and GEN.flyPlatform.Parent then
-        GEN.flyPlatform:Destroy()
+local function stopRepair()
+    if isRepairPointValid() then
+        pcall(function()
+            repairRemote:FireServer(GEN.repairPoint, false)
+        end)
     end
-
-    local p = Instance.new("Part")
-    p.Name = "DYHUB_GeneratorPlatform"
-    p.Size = Vector3.new(18, 1, 18)
-    p.Anchored = true
-    p.CanCollide = true
-    p.Transparency = 0.35
-    p.Position = pos
-    p.Parent = Workspace
-
-    GEN.flyPlatform = p
-end
-
-local function removeFlyPlatform()
-    if GEN.flyPlatform and GEN.flyPlatform.Parent then
-        GEN.flyPlatform:Destroy()
-    end
-
-    GEN.flyPlatform = nil
-end
-
-local function cancelRepair()
-    if not isRepairPointValid() then
-        clearRepairState()
-        return
-    end
-
-    if GEN.cancelDB then
-        return
-    end
-
-    GEN.cancelDB = true
-
-    pcall(function()
-        if repairRemote then repairRemote:FireServer(GEN.repairPoint, false) end
-    end)
-
-    task.delay(0.35, function()
-        GEN.cancelDB = false
-    end)
-end
-
-local function getClosestGeneratorPoint(root, blacklistGen)
-    local gens = getFolderGenerator()
-
-    local bestGen = nil
-    local bestPt  = nil
-    local bestDist= math.huge
-
-    for _, gen in ipairs(gens) do
-        if gen ~= blacklistGen
-        and gen.Parent
-        and not generatorFinished(gen) then
-
-            for i = 1, 4 do
-                local pt = gen:FindFirstChild("GeneratorPoint"..i)
-
-                if pt then
-                    local dist = (root.Position - pt.Position).Magnitude
-
-                    if dist < bestDist then
-                        bestDist = dist
-                        bestGen  = gen
-                        bestPt   = pt
-                    end
-                end
-            end
-        end
-    end
-
-    return bestGen, bestPt, bestDist
-end
-
-local function allGeneratorsFinished()
-    local gens = getFolderGenerator()
-
-    for _, gen in ipairs(gens) do
-        if gen.Parent and not generatorFinished(gen) then
-            return false
-        end
-    end
-
-    return true
 end
 
 local function findNearestKiller(root, maxDist)
-    local nearest = nil
-    local nearestDist = maxDist or KILLER_ESCAPE_DIST
+    local nearest, nearestDist = nil, maxDist or AUTO_GEN_KILLER_DISTANCE
 
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character then
-            local oHRP = plr.Character:FindFirstChild("HumanoidRootPart")
-
-            if oHRP and isKillerChar(plr.Character) then
-                local d = (root.Position - oHRP.Position).Magnitude
-
+        if plr ~= LocalPlayer and plr.Character and isKillerChar(plr.Character) then
+            local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local d = (root.Position - hrp.Position).Magnitude
                 if d < nearestDist then
-                    nearestDist = d
                     nearest = plr.Character
+                    nearestDist = d
                 end
             end
         end
@@ -1464,118 +1355,80 @@ local function findNearestKiller(root, maxDist)
     return nearest, nearestDist
 end
 
-local function teleportToGenerator(ignoreGen)
+local function getClosestGeneratorPoint(root, blacklist)
+    local bestGen, bestPoint, bestDist = nil, nil, math.huge
+
+    for _, gen in ipairs(getFolderGenerator()) do
+        if gen
+        and gen.Parent
+        and gen ~= blacklist
+        and not generatorFinished(gen)
+        and getGeneratorProgress(gen) < 0.99 then
+
+            for i = 1, 4 do
+                local pt = gen:FindFirstChild("GeneratorPoint"..i)
+                if pt and pt:IsA("BasePart") then
+                    local d = (root.Position - pt.Position).Magnitude
+                    if d < bestDist then
+                        bestDist = d
+                        bestGen = gen
+                        bestPoint = pt
+                    end
+                end
+            end
+        end
+    end
+
+    return bestGen, bestPoint, bestDist
+end
+
+local function teleportAndRepair(gen, point)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root or not gen or not point then return false end
 
-    if not root then
-        return false
-    end
+    local skyPos = Vector3.new(point.Position.X, AUTO_GEN_HEIGHT, point.Position.Z)
 
-    local gen, pt = getClosestGeneratorPoint(root, ignoreGen)
+    root.AssemblyLinearVelocity = Vector3.zero
+    root.AssemblyAngularVelocity = Vector3.zero
+    root.CFrame = CFrame.new(skyPos)
 
-    if not gen or not pt then
-        return false
-    end
+    createSkyPlatform(skyPos)
 
-    GEN.repairModel  = gen
-    GEN.repairPoint  = pt
-    GEN.currentTarget= gen
-    GEN.lastPos      = root.Position
+    GEN.repairModel = gen
+    GEN.repairPoint = point
 
-    local safePos = Vector3.new(
-        pt.Position.X,
-        SAFE_Y_LEVEL,
-        pt.Position.Z
-    )
-
-    createFlyPlatform(Vector3.new(
-        safePos.X,
-        SAFE_Y_LEVEL - 3,
-        safePos.Z
-    ))
-
-    pcall(function() root.CFrame = CFrame.new(safePos) end)
-
-    task.wait(0.15)
+    task.wait(AUTO_GEN_REPAIR_DELAY)
 
     pcall(function()
-        if repairRemote then repairRemote:FireServer(pt, true) end
+        repairRemote:FireServer(point, true)
     end)
 
     return true
 end
 
-local _movCheckAccum = 0
-
-RunService.Heartbeat:Connect(function(dt)
-    _movCheckAccum += dt
-
-    if _movCheckAccum < 0.07 then
-        return
-    end
-
-    _movCheckAccum = 0
-
-    if not GENERATOR_AVAILABLE or not AutoGenRepair then
-        return
-    end
-
-    if not isRepairPointValid() then
-        clearRepairState()
-        return
-    end
-
+local function gotoNextGenerator(ignoreCurrent)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
 
-    if not root then
+    local blacklist = ignoreCurrent and GEN.repairModel or nil
+    local gen, point = getClosestGeneratorPoint(root, blacklist)
+
+    if not gen or not point then
+        notify("Auto Generator", "All generators completed.")
         return
     end
 
-    local targetPos = Vector3.new(
-        (GEN.repairPoint and GEN.repairPoint.Position.X or root.Position.X),
-        SAFE_Y_LEVEL,
-        GEN.repairPoint.Position.Z
-    )
-
-    if (root.Position - targetPos).Magnitude > 20 then
-        root.CFrame = CFrame.new(targetPos)
-    end
-
-    if GEN.flyPlatform and GEN.flyPlatform.Parent then
-        GEN.flyPlatform.Position = Vector3.new(
-            targetPos.X,
-            SAFE_Y_LEVEL - 3,
-            targetPos.Z
-        )
-    end
-end)
-
-UserInputService.InputBegan:Connect(function(input, gpe)
-    if gpe then
-        return
-    end
-
-    if input.KeyCode == Enum.KeyCode.X then
-        if isRepairPointValid() then
-            cancelRepair()
-            notify("Generator", "Repair cancelled.")
-        end
-    end
-end)
-
-SurTab:Section({
-    Title = "Feature Generator",
-    Icon = "zap"
-})
+    stopRepair()
+    teleportAndRepair(gen, point)
+end
 
 local AutoSkillPerfect = Config:Get("AutoSkillPerfect", false)
 local AutoSkillNeutral = Config:Get("AutoSkillNeutral", false)
 local AutoGenRepair    = Config:Get("AutoGenRepair", false)
 
 local _skillThread = nil
-
 local function startSkillLoop(mode)
     if _skillThread then
         task.cancel(_skillThread)
@@ -1588,40 +1441,29 @@ local function startSkillLoop(mode)
         while (mode == "perfect" and AutoSkillPerfect)
         or (mode == "neutral" and AutoSkillNeutral) do
 
-            task.wait(0.08)
+            task.wait(0.05)
 
-            local gui = pGui:FindFirstChild("SkillCheckPromptGui")
-
-            if not gui then
+            if not isRepairPointValid() then
                 continue
             end
 
+            local gui = pGui:FindFirstChild("SkillCheckPromptGui")
+            if not gui then continue end
+
             local check = gui:FindFirstChild("Check")
-
-            if check
-            and check.Visible
-            and isRepairPointValid()
-            and not GEN.skillDB then
-
+            if check and check.Visible and not GEN.skillDB then
                 GEN.skillDB = true
 
-                local resultType = mode == "perfect"
-                    and "success"
-                    or "neutral"
-
-                local resultVal = mode == "perfect"
-                    and 1
-                    or 0
+                local resultType = mode == "perfect" and "success" or "neutral"
+                local resultVal  = mode == "perfect" and 1 or 0
 
                 pcall(function()
-                    if skillRemote then
-                        skillRemote:FireServer(
-                            resultType,
-                            resultVal,
-                            GEN.repairModel,
-                            GEN.repairPoint
-                        )
-                    end
+                    skillRemote:FireServer(
+                        resultType,
+                        resultVal,
+                        GEN.repairModel,
+                        GEN.repairPoint
+                    )
                 end)
 
                 check.Visible = false
@@ -1636,14 +1478,142 @@ local function startSkillLoop(mode)
     end)
 end
 
+local _genThread = nil
+local function startGenLoop()
+    if _genThread then
+        task.cancel(_genThread)
+        _genThread = nil
+    end
+
+    _genThread = task.spawn(function()
+        GEN.enabled = true
+
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+
+        if root and not GEN.oldCFrame then
+            GEN.oldCFrame = root.CFrame
+        end
+
+        while AutoGenRepair do
+            task.wait(0.2)
+
+            char = LocalPlayer.Character
+            root = char and char:FindFirstChild("HumanoidRootPart")
+
+            if not root then
+                continue
+            end
+
+            if not GEN.oldCFrame then
+                GEN.oldCFrame = root.CFrame
+            end
+
+            if GEN.platform then
+                GEN.platform.Position = Vector3.new(
+                    root.Position.X,
+                    AUTO_GEN_HEIGHT - 3.5,
+                    root.Position.Z
+                )
+            end
+
+            if isRepairPointValid() and generatorFinished(GEN.repairModel) then
+                gotoNextGenerator(true)
+                continue
+            end
+
+            local killer = findNearestKiller(root, AUTO_GEN_KILLER_DISTANCE)
+
+            if killer and tick() - GEN.lastGenSwap > 1 then
+                GEN.lastGenSwap = tick()
+                gotoNextGenerator(true)
+                continue
+            end
+
+            if not isRepairPointValid() then
+                gotoNextGenerator(false)
+                continue
+            end
+
+            if (root.Position.Y < AUTO_GEN_HEIGHT - 25) then
+                local p = GEN.repairPoint
+                if p then
+                    root.CFrame = CFrame.new(
+                        p.Position.X,
+                        AUTO_GEN_HEIGHT,
+                        p.Position.Z
+                    )
+                end
+            end
+
+            pcall(function()
+                repairRemote:FireServer(GEN.repairPoint, true)
+            end)
+        end
+
+        GEN.enabled = false
+        _genThread = nil
+    end)
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+    clearRepairState()
+
+    if AutoGenRepair then
+        task.delay(1, function()
+            startGenLoop()
+        end)
+    end
+
+    if AutoSkillPerfect then
+        task.delay(1, function()
+            startSkillLoop("perfect")
+        end)
+    end
+
+    if AutoSkillNeutral then
+        task.delay(1, function()
+            startSkillLoop("neutral")
+        end)
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+
+    if input.KeyCode == Enum.KeyCode.X then
+        stopRepair()
+        AutoGenRepair = false
+        Config:Set("AutoGenRepair", false)
+        Config:Save()
+
+        if _genThread then
+            task.cancel(_genThread)
+            _genThread = nil
+        end
+
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+
+        if root and GEN.oldCFrame then
+            root.CFrame = GEN.oldCFrame
+        end
+
+        removeSkyPlatform()
+        clearRepairState()
+
+        notify("Auto Generator", "Stopped and returned to old position.")
+    end
+end)
+
+SurTab:Section({ Title = "Feature Generator", Icon = "zap" })
+
 SurTab:Toggle({
     Title = "Auto SkillCheck (Perfect)",
     Desc = "Automatically hits perfect generator skill checks",
     Value = AutoSkillPerfect,
-
     Callback = function(v)
         AutoSkillPerfect = v
-
         Config:Set("AutoSkillPerfect", v)
         Config:Save()
 
@@ -1659,12 +1629,10 @@ SurTab:Toggle({
 
 SurTab:Toggle({
     Title = "Auto SkillCheck (Not Perfect)",
-    Desc = "Automatically hits neutral generator skill checks",
+    Desc = "Automatically hits neutral skill checks",
     Value = AutoSkillNeutral,
-
     Callback = function(v)
         AutoSkillNeutral = v
-
         Config:Set("AutoSkillNeutral", v)
         Config:Save()
 
@@ -1678,122 +1646,38 @@ SurTab:Toggle({
     end
 })
 
-local _genThread = nil
-
-local function startGenLoop()
-    if _genThread then
-        task.cancel(_genThread)
-        _genThread = nil
-    end
-
-    _genThread = task.spawn(function()
-        while AutoGenRepair and GENERATOR_AVAILABLE do
-            task.wait(0.2)
-
-            local char = LocalPlayer.Character
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-
-            if not root then
-                continue
-            end
-
-            if allGeneratorsFinished() then
-                notify("Generator", "All generators completed.")
-                AutoGenRepair = false
-                break
-            end
-
-            local killer = findNearestKiller(root, KILLER_ESCAPE_DIST)
-
-            if killer and GEN.currentTarget then
-                cancelRepair()
-                task.wait(0.2)
-
-                teleportToGenerator(GEN.currentTarget)
-
-                continue
-            end
-
-            if not isRepairPointValid() then
-                clearRepairState()
-                teleportToGenerator()
-                continue
-            end
-
-            local progress = getGeneratorProgress(GEN.repairModel)
-
-            if progress >= 0.99 then
-                cancelRepair()
-                clearRepairState()
-
-                task.wait(0.2)
-
-                teleportToGenerator(GEN.repairModel)
-            end
-        end
-
-        _genThread = nil
-    end)
-end
-
-LocalPlayer.CharacterAdded:Connect(function()
-    task.wait(1)
-
-    clearRepairState()
-
-    if AutoGenRepair then
-        startGenLoop()
-    end
-
-    if AutoSkillPerfect then
-        startSkillLoop("perfect")
-    end
-
-    if AutoSkillNeutral then
-        startSkillLoop("neutral")
-    end
-end)
-
 SurTab:Toggle({
     Title = "Auto Generator (Teleport + Repair)",
-    Desc = "Auto repair generators with killer avoidance",
+    Desc = "Teleport sky repair + auto switch generators",
     Value = AutoGenRepair,
-
     Callback = function(v)
         AutoGenRepair = v
 
         Config:Set("AutoGenRepair", v)
         Config:Save()
 
-        local char = LocalPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-
         if v then
-            if root then
-                GEN.oldCFrame = root.CFrame
-            end
-
-            notify(
-                "Auto Generator",
-                "Enabled successfully."
-            )
-
+            notify("Auto Generator", "Started sky auto repair system.")
             startGenLoop()
-
         else
+            stopRepair()
+
             if _genThread then
                 task.cancel(_genThread)
                 _genThread = nil
             end
 
-            cancelRepair()
+            local char = LocalPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
 
             if root and GEN.oldCFrame then
                 root.CFrame = GEN.oldCFrame
             end
 
-            removeFlyPlatform()
+            removeSkyPlatform()
             clearRepairState()
+
+            notify("Auto Generator", "Disabled and returned position.")
         end
     end
 })
