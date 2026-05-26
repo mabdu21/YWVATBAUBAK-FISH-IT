@@ -1,7 +1,7 @@
 -- Powered by nig | v450 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.19"
+local ver     = "v014.20"
 -- =========================
 -- CHANGELOG v014.19
 -- [New]     Auto Parry: ไม่ทำ parry ถ้า HP = 20 (downed)
@@ -352,22 +352,22 @@ end
 
 -- ── Hitframe table ────────────────────────────────────────────────────────────────
 local ANIM_HITFRAME = {
-    ["rbxassetid://139369275981139"] = { preDelay=0.00, hitAt=0.20 },
-    ["rbxassetid://110355011987939"] = { preDelay=0.00, hitAt=0.20 },
-    ["rbxassetid://135002183282873"] = { preDelay=0.00, hitAt=0.14 },
-    ["rbxassetid://121216847022485"] = { preDelay=0.00, hitAt=0.14 },
-    ["rbxassetid://105374834496520"] = { preDelay=0.00, hitAt=0.20 },
-    ["rbxassetid://111920872708571"] = { preDelay=0.00, hitAt=0.20 },
-    ["rbxassetid://118907603246885"] = { preDelay=0.00, hitAt=0.20 },
-    ["rbxassetid://78432063483146"]  = { preDelay=0.00, hitAt=0.20 },
-    ["rbxassetid://113255068724446"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://74968262036854"]  = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://129784271201071"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://132817836308238"] = { preDelay=0.00, hitAt=0.20 },
-    ["rbxassetid://112166042383605"] = { preDelay=0.00, hitAt=0.20 },
-    ["rbxassetid://122812055447896"] = { preDelay=0.00, hitAt=0.20 },
-    ["rbxassetid://117042998468241"] = { preDelay=0.00, hitAt=0.20 },
-    ["rbxassetid://133963973694098"] = { preDelay=0.00, hitAt=0.20 },
+    ["rbxassetid://139369275981139"] = { preDelay=0.00, hitAt=0.15 },
+    ["rbxassetid://110355011987939"] = { preDelay=0.00, hitAt=0.15 },
+    ["rbxassetid://135002183282873"] = { preDelay=0.00, hitAt=0.9 },
+    ["rbxassetid://121216847022485"] = { preDelay=0.00, hitAt=0.9 },
+    ["rbxassetid://105374834496520"] = { preDelay=0.00, hitAt=0.15 },
+    ["rbxassetid://111920872708571"] = { preDelay=0.00, hitAt=0.15 },
+    ["rbxassetid://118907603246885"] = { preDelay=0.00, hitAt=0.15 },
+    ["rbxassetid://78432063483146"]  = { preDelay=0.00, hitAt=0.15 },
+    ["rbxassetid://113255068724446"] = { preDelay=0.00, hitAt=0.9 },
+    ["rbxassetid://74968262036854"]  = { preDelay=0.00, hitAt=0.9 },
+    ["rbxassetid://129784271201071"] = { preDelay=0.00, hitAt=0.9 },
+    ["rbxassetid://132817836308238"] = { preDelay=0.00, hitAt=0.9 },
+    ["rbxassetid://112166042383605"] = { preDelay=0.00, hitAt=0.15 },
+    ["rbxassetid://122812055447896"] = { preDelay=0.00, hitAt=0.15 },
+    ["rbxassetid://117042998468241"] = { preDelay=0.00, hitAt=0.15 },
+    ["rbxassetid://133963973694098"] = { preDelay=0.00, hitAt=0.15 },
 }
 
 -- ── Core parry executor ───────────────────────────────────────────────────────────
@@ -385,7 +385,7 @@ end
 local function doParryFast(kc)    execParry(kc) end
 
 local function doParrySmart(kc, animId)
-    local info = ANIM_HITFRAME[animId] or { preDelay=0.00, hitAt=0.12 }
+    local info = ANIM_HITFRAME[animId] or { preDelay=0.00, hitAt=0.10 }
     task.spawn(function()
         if info.preDelay > 0 then task.wait(info.preDelay) end
         execParry(kc)
@@ -393,7 +393,7 @@ local function doParrySmart(kc, animId)
 end
 
 local function doParryPredict(kc, animId, track)
-    local info  = ANIM_HITFRAME[animId] or { preDelay=0.00, hitAt=0.14 }
+    local info  = ANIM_HITFRAME[animId] or { preDelay=0.00, hitAt=0.12 }
     local speed = 1
     pcall(function() speed = math.max(track.Speed, 0.1) end)
     local parryAt = (info.hitAt / speed) * 0.4
