@@ -1,14 +1,15 @@
 -- Powered by nig | v455 (Reworked)
 -- =========================
-local version = "Rework (Upgraded & Fixed)"
-local ver     = "v014.24"
+local version = "Rework (Upgraded)"
+local ver     = "v014.26"
 -- =========================
--- CHANGELOG v014.24
--- [Improved] Auto Generator: Teleport to a DIFFERENT generator when killer is nearby (Prevents teleporting back to the same one)
--- [Improved] Auto Generator: Increased killer detection range for safer teleportation
--- [Fixed] Auto Generator: Ensures cancelRepair is fired before teleporting to avoid repair hang
--- [Fixed] Auto Generator: Fixed movement-based cancellation for both Mobile (Joystick) and PC (Keyboard/X key)
--- [Fixed] Typo: FindFirstFind -> FindFirstChild
+-- CHANGELOG v014.19
+-- [New]     Auto Parry: ไม่ทำ parry ถ้า HP = 20 (downed)
+-- [New]     Auto Parry: ไม่ทำ parry ถ้า HP ≤ 60 + อยู่ใกล้ Hook (กำลังถูก carry)
+-- [New]     Auto Parry: Premium-only feature (Free users ไม่เห็น UI)
+-- [Fixed]   ESP lag: แยก GetDescendants() ออกจาก main thread, throttle แต่ละ category
+-- [Fixed]   ESP: ใช้ cached scan แทน full scan ทุก tick
+-- [Improved] ESP: world objects scan ทำใน task.spawn() ไม่ block frame
 
 repeat task.wait() until game:IsLoaded()
 
@@ -104,7 +105,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config_main_02.json"
+    self.ConfigPath = ConfigFolder .. "/config_main_01.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -1256,11 +1257,20 @@ MainTab:Toggle({
 })
 
 -- ====================== GENERATOR SYSTEM ======================
+-- ====================== GENERATOR SYSTEM ======================
 local GeneratorRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Generator")
 local skillRemote      = GeneratorRemotes:WaitForChild("SkillCheckResultEvent")
 local repairRemote     = GeneratorRemotes:WaitForChild("RepairEvent")
 
-local GEN = { repairPoint=nil, repairModel=nil, cancelDB=false, skillDB=false, lastPos=nil, MOVE_THRESH=0.9 }
+local GEN = {
+    repairPoint  = nil,
+    repairModel  = nil,
+    cancelDB     = false,
+    skillDB      = false,
+    lastPos      = nil,
+    MOVE_THRESH  = 1.5,   -- [Fix] เพิ่ม threshold ให้ sensitive ขึ้น
+    _repairing   = false, -- [New] flag ว่ากำลัง repair อยู่
+}
 
 local function notify(title, content)
     WindUI:Notify({ Title=title, Content=content, Duration=5, Icon="triangle-alert" })
@@ -1271,23 +1281,37 @@ local function isRepairPointValid()
         and GEN.repairModel and GEN.repairModel.Parent
         and not generatorFinished(GEN.repairModel)
 end
+
 local function clearRepairState()
-    GEN.repairPoint = nil; GEN.repairModel = nil; GEN.lastPos = nil
-end
-local function cancelRepair()
-    if not isRepairPointValid() then clearRepairState(); return end
-    if GEN.cancelDB then return end
-    GEN.cancelDB = true
-    pcall(function() repairRemote:FireServer(GEN.repairPoint, false) end)
-    task.delay(0.4, function() GEN.cancelDB = false end)
+    GEN.repairPoint  = nil
+    GEN.repairModel  = nil
+    GEN.lastPos      = nil
+    GEN._repairing   = false
 end
 
-local function getClosestGeneratorPoint(root, maxDist, excludeGen)
+-- [Fix] cancelRepair ยิง remote cancel เสมอ ไม่ต้องเช็ค isRepairPointValid เพียงอย่างเดียว
+local function cancelRepair(force)
+    if GEN.cancelDB then return end
+    GEN.cancelDB    = true
+    GEN._repairing  = false
+    if GEN.repairPoint and GEN.repairPoint.Parent then
+        pcall(function() repairRemote:FireServer(GEN.repairPoint, false) end)
+    end
+    task.delay(0.35, function() GEN.cancelDB = false end)
+end
+
+-- [Fix] fireRepairStart: ยิง start + mark repairing
+local function fireRepairStart(pt)
+    GEN._repairing = true
+    pcall(function() repairRemote:FireServer(pt, true) end)
+end
+
+local function getClosestGeneratorPoint(root, maxDist)
     local gens = getFolderGenerator()
     local bestGen, bestPt, bestD = nil, nil, maxDist or 999
     for _, gen in ipairs(gens) do
-        if gen == excludeGen then continue end
         if gen.Parent and not generatorFinished(gen) then
+            -- [Fix] skip generator ปัจจุบันที่กำลังซ่อมอยู่ถ้าต้องการหาอันใหม่
             for i = 1, 4 do
                 local pt = gen:FindFirstChild("GeneratorPoint"..i)
                 if pt then
@@ -1300,8 +1324,56 @@ local function getClosestGeneratorPoint(root, maxDist, excludeGen)
     return bestGen, bestPt, bestD
 end
 
+-- [Fix] หา generator ที่ไกลจาก killer ที่สุด (หนีไป gen อื่น)
+local function getGeneratorFarFromKiller(root, killerRoot, minDistFromKiller)
+    local gens = getFolderGenerator()
+    local bestGen, bestPt, bestScore = nil, nil, -math.huge
+    minDistFromKiller = minDistFromKiller or 25
+
+    for _, gen in ipairs(gens) do
+        if not gen.Parent or generatorFinished(gen) then continue end
+        -- ข้าม gen ปัจจุบัน
+        if GEN.repairModel and gen == GEN.repairModel then continue end
+
+        for i = 1, 4 do
+            local pt = gen:FindFirstChild("GeneratorPoint"..i)
+            if not pt then continue end
+
+            local distFromKiller = killerRoot and (killerRoot.Position - pt.Position).Magnitude or 999
+            local distFromMe     = (root.Position - pt.Position).Magnitude
+
+            -- ยิ่งไกล killer ยิ่งดี, ยิ่งใกล้เราก็ดี
+            local score = distFromKiller - (distFromMe * 0.3)
+
+            if distFromKiller >= minDistFromKiller and score > bestScore then
+                bestScore = score
+                bestGen   = gen
+                bestPt    = pt
+            end
+        end
+    end
+
+    -- fallback: ถ้าไม่มี gen ไกลพอ ก็เอา gen ใกล้สุดที่ไม่ใช่ปัจจุบัน
+    if not bestGen then
+        local fallbackDist = math.huge
+        for _, gen in ipairs(gens) do
+            if not gen.Parent or generatorFinished(gen) then continue end
+            if GEN.repairModel and gen == GEN.repairModel then continue end
+            for i = 1, 4 do
+                local pt = gen:FindFirstChild("GeneratorPoint"..i)
+                if pt then
+                    local d = (root.Position - pt.Position).Magnitude
+                    if d < fallbackDist then fallbackDist=d; bestGen=gen; bestPt=pt end
+                end
+            end
+        end
+    end
+
+    return bestGen, bestPt
+end
+
 local function findNearestKiller(root, maxDist)
-    local nearest, nearestDist = nil, maxDist or 12.5
+    local nearest, nearestDist = nil, maxDist or 20  -- [Fix] เพิ่ม default range
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer and plr.Character then
             local oHRP = plr.Character:FindFirstChild("HumanoidRootPart")
@@ -1314,45 +1386,107 @@ local function findNearestKiller(root, maxDist)
     return nearest, nearestDist
 end
 
-local function teleportToGenerator(excludeGen)
+-- [Fix] teleportToGenerator รองรับ targetGen/targetPt ที่ระบุมาได้เลย
+local function teleportToGenerator(targetGen, targetPt)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then return end
-    local gen, pt = getClosestGeneratorPoint(root, nil, excludeGen)
+
+    -- ยิง cancel ก่อนเสมอถ้ากำลัง repair อยู่
+    if GEN._repairing or isRepairPointValid() then
+        cancelRepair(true)
+        task.wait(0.2)
+    end
+
+    local gen, pt
+    if targetGen and targetPt then
+        gen = targetGen
+        pt  = targetPt
+    else
+        gen, pt = getClosestGeneratorPoint(root)
+    end
+
     if not gen or not pt then return end
-    if isRepairPointValid() and (root.Position - GEN.repairPoint.Position).Magnitude <= 5 then return end
-    GEN.repairModel = gen; GEN.repairPoint = pt; GEN.lastPos = root.Position
-    root.CFrame = CFrame.new(pt.Position + Vector3.new(0, 2, 0))
-    task.wait(0.12)
-    pcall(function() repairRemote:FireServer(pt, true) end)
+    if not gen.Parent or generatorFinished(gen) then return end
+
+    -- อัพเดต state
+    GEN.repairModel = gen
+    GEN.repairPoint = pt
+    GEN.lastPos     = nil  -- reset lastPos เพื่อให้ movement detect ทำงานใหม่
+
+    -- Teleport
+    root.CFrame = CFrame.new(pt.Position + Vector3.new(0, 2.5, 0))
+    task.wait(0.15)
+
+    -- ยิง repair start
+    fireRepairStart(pt)
+    GEN.lastPos = root.Position
 end
 
+-- ====================== MOVEMENT CANCEL DETECTION ======================
+-- [Fix] ทำงานทั้ง PC และ Mobile: ตรวจจาก HumanoidRootPart.Position จริง
 local _movCheckAccum = 0
+
 RunService.Heartbeat:Connect(function(dt)
     _movCheckAccum += dt
     if _movCheckAccum < 0.07 then return end
     _movCheckAccum = 0
-    if not isRepairPointValid() then clearRepairState(); return end
+
+    if not AutoGenRepair then return end
+    if not GEN._repairing then return end
+    if not isRepairPointValid() then
+        clearRepairState()
+        return
+    end
+
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     local hum  = char and char:FindFirstChild("Humanoid")
     if not root or not hum then return end
+
     local dist = (root.Position - GEN.repairPoint.Position).Magnitude
-    if dist > 8 then return end
-    local prevPos = GEN.lastPos or root.Position
-    local moved = (root.Position - prevPos).Magnitude
+
+    -- ถ้าออกห่างจาก repair point
+    if dist > 8 then
+        cancelRepair(true)
+        clearRepairState()
+        return
+    end
+
+    -- [Fix] Mobile cancel: ตรวจ MoveDirection จาก Humanoid (ทำงานทั้ง joystick และ WASD)
+    if hum.MoveDirection.Magnitude > 0.1 then
+        -- ผู้เล่นกำลังขยับ → cancel
+        cancelRepair(true)
+        clearRepairState()
+        return
+    end
+
+    -- [Fix] PC/Mobile: ตรวจ position เปลี่ยน (backup สำหรับกรณี MoveDirection lag)
+    local prevPos = GEN.lastPos
+    if prevPos then
+        local moved = (root.Position - prevPos).Magnitude
+        if moved > GEN.MOVE_THRESH then
+            cancelRepair(true)
+            clearRepairState()
+            return
+        end
+    end
     GEN.lastPos = root.Position
 end)
 
+-- [Fix] กด X cancel (PC) — ยังคงทำงานได้
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.KeyCode == Enum.KeyCode.X then
-        if isRepairPointValid() and not GEN.cancelDB then
-            cancelRepair(); notify("Generator Cancelled", "Repair cancelled successfully.")
+        if (GEN._repairing or isRepairPointValid()) and not GEN.cancelDB then
+            cancelRepair(true)
+            clearRepairState()
+            notify("Generator Cancelled", "Repair cancelled successfully.")
         end
     end
 end)
 
+-- ====================== SKILL CHECK ======================
 SurTab:Section({ Title = "Feature Generator", Icon = "zap" })
 
 local AutoSkillPerfect = Config:Get("AutoSkillPerfect", false)
@@ -1397,8 +1531,13 @@ SurTab:Toggle({
     Desc = "Automatically hits perfect generator skill checks", Value = AutoSkillPerfect,
     Callback = function(v)
         AutoSkillPerfect = v; Config:Set("AutoSkillPerfect", v); Config:Save()
-        if v then AutoSkillNeutral = false; notify("Auto Skill Perfect", "Press X or move to cancel."); startSkillLoop("perfect")
-        elseif _skillThread then task.cancel(_skillThread); _skillThread = nil end
+        if v then
+            AutoSkillNeutral = false
+            notify("Auto Skill Perfect", "Press X or move to cancel.")
+            startSkillLoop("perfect")
+        elseif _skillThread then
+            task.cancel(_skillThread); _skillThread = nil
+        end
     end
 })
 SurTab:Toggle({
@@ -1406,10 +1545,18 @@ SurTab:Toggle({
     Desc = "Automatically hits neutral skill checks", Value = AutoSkillNeutral,
     Callback = function(v)
         AutoSkillNeutral = v; Config:Set("AutoSkillNeutral", v); Config:Save()
-        if v then AutoSkillPerfect = false; notify("Auto Skill Neutral", "Press X or move to cancel."); startSkillLoop("neutral")
-        elseif _skillThread then task.cancel(_skillThread); _skillThread = nil end
+        if v then
+            AutoSkillPerfect = false
+            notify("Auto Skill Neutral", "Press X or move to cancel.")
+            startSkillLoop("neutral")
+        elseif _skillThread then
+            task.cancel(_skillThread); _skillThread = nil
+        end
     end
 })
+
+-- ====================== AUTO GEN REPAIR LOOP ======================
+local KILLER_FLEE_RANGE = Config:Get("KillerFleeRange", 20) -- studs ที่ถือว่า killer เข้าใกล้
 
 local _genThread = nil
 local function startGenLoop()
@@ -1420,14 +1567,39 @@ local function startGenLoop()
             local char = LocalPlayer.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
             if not root then continue end
-            if not isRepairPointValid() then clearRepairState(); _invalidateGenCache() end
-            local killer = findNearestKiller(root, 40)
-            if killer and isRepairPointValid() then
-                cancelRepair(); task.wait(0.1); teleportToGenerator(GEN.repairModel); continue
+
+            -- เช็ค killer ในระยะ KILLER_FLEE_RANGE
+            local killer, killerDist = findNearestKiller(root, KILLER_FLEE_RANGE)
+
+            if killer then
+                -- [Fix] มี killer เข้ามาใกล้ → cancel repair ปัจจุบัน → หา gen ใหม่ที่ไกล killer
+                if GEN._repairing or isRepairPointValid() then
+                    -- cancel ก่อน
+                    cancelRepair(true)
+                    task.wait(0.25)
+                end
+                -- หา gen ที่ไกล killer
+                local killerRoot = killer:FindFirstChild("HumanoidRootPart")
+                local newGen, newPt = getGeneratorFarFromKiller(root, killerRoot, 25)
+                if newGen and newPt then
+                    clearRepairState()
+                    teleportToGenerator(newGen, newPt)
+                end
+                -- รอ cooldown ก่อนเช็คใหม่
+                task.wait(1.5)
+                continue
             end
-            if not isRepairPointValid()
-            or (root.Position - GEN.repairPoint.Position).Magnitude > 8 then
+
+            -- ไม่มี killer → ซ่อม gen ตามปกติ
+            if not isRepairPointValid() then
+                clearRepairState()
+                _invalidateGenCache()
                 teleportToGenerator()
+            elseif (root.Position - GEN.repairPoint.Position).Magnitude > 8 then
+                -- หลุดออกจาก gen โดยไม่ได้ตั้งใจ
+                cancelRepair(true)
+                task.wait(0.2)
+                teleportToGenerator(GEN.repairModel, GEN.repairPoint)
             end
         end
         _genThread = nil
@@ -1446,8 +1618,25 @@ SurTab:Toggle({
     Desc = "Teleports and repairs generators automatically", Value = AutoGenRepair,
     Callback = function(v)
         AutoGenRepair = v; Config:Set("AutoGenRepair", v); Config:Save()
-        if v then notify("Auto Generator", "Press X or move to cancel."); startGenLoop()
-        else if _genThread then task.cancel(_genThread); _genThread = nil end; clearRepairState() end
+        if v then
+            notify("Auto Generator", "Press X or move to cancel.")
+            startGenLoop()
+        else
+            if _genThread then task.cancel(_genThread); _genThread = nil end
+            -- [Fix] ยิง cancel เมื่อ toggle ปิด
+            cancelRepair(true)
+            clearRepairState()
+        end
+    end
+})
+
+SurTab:Slider({
+    Title    = "Killer Flee Range (studs)",
+    Value    = { Min=10, Max=100, Default=KILLER_FLEE_RANGE },
+    Step     = 1,
+    Callback = function(v)
+        KILLER_FLEE_RANGE = v
+        Config:Set("KillerFleeRange", v); Config:Save()
     end
 })
 
@@ -1930,7 +2119,7 @@ end})
 
 -- ====================== PLAYER TAB ======================
 local speedEnabled   = false
-local flyNoclipSpeed = Config:Get("SpeedWalk", 3)
+local flyNoclipSpeed = Config:Get("SpeedWalk", 5)
 local NoClipEnabled  = Config:Get("NoClipEnabled", false)
 local speedConnection, noclipConnection
 
@@ -1955,7 +2144,7 @@ end
 
 PlayerTab:Section({Title="Feature Player",Icon="rabbit"})
 PlayerTab:Slider({
-    Title="Set Speed (Legit = 3)", Value={Min=1,Max=677,Value=flyNoclipSpeed}, Step=1,
+    Title="Set Speed (Legit = 5)", Value={Min=1,Max=677,Value=flyNoclipSpeed}, Step=1,
     Callback=function(val) flyNoclipSpeed=val; Config:Set("SpeedWalk",flyNoclipSpeed); Config:Save() end
 })
 PlayerTab:Toggle({
@@ -2161,10 +2350,6 @@ if NoClipEnabled then
         if char then for _,part in pairs(char:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide=false end end end
     end)
 end
-
-if AutoGenRepair    then startGenLoop() end
-if AutoSkillPerfect then startSkillLoop("perfect") end
-if AutoSkillNeutral then startSkillLoop("neutral") end
 
 -- init world ESP cache
 if espEnabled then
