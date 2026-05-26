@@ -1,15 +1,14 @@
 -- Powered by nig | v455 (Reworked)
 -- =========================
-local version = "Rework (Upgraded)"
-local ver     = "v014.22"
+local version = "Rework (Upgraded & Fixed)"
+local ver     = "v014.24"
 -- =========================
--- CHANGELOG v014.19
--- [New]     Auto Parry: ไม่ทำ parry ถ้า HP = 20 (downed)
--- [New]     Auto Parry: ไม่ทำ parry ถ้า HP ≤ 60 + อยู่ใกล้ Hook (กำลังถูก carry)
--- [New]     Auto Parry: Premium-only feature (Free users ไม่เห็น UI)
--- [Fixed]   ESP lag: แยก GetDescendants() ออกจาก main thread, throttle แต่ละ category
--- [Fixed]   ESP: ใช้ cached scan แทน full scan ทุก tick
--- [Improved] ESP: world objects scan ทำใน task.spawn() ไม่ block frame
+-- CHANGELOG v014.24
+-- [Improved] Auto Generator: Teleport to a DIFFERENT generator when killer is nearby (Prevents teleporting back to the same one)
+-- [Improved] Auto Generator: Increased killer detection range for safer teleportation
+-- [Fixed] Auto Generator: Ensures cancelRepair is fired before teleporting to avoid repair hang
+-- [Fixed] Auto Generator: Fixed movement-based cancellation for both Mobile (Joystick) and PC (Keyboard/X key)
+-- [Fixed] Typo: FindFirstFind -> FindFirstChild
 
 repeat task.wait() until game:IsLoaded()
 
@@ -105,7 +104,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config_main_01.json"
+    self.ConfigPath = ConfigFolder .. "/config_main_02.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -1283,10 +1282,11 @@ local function cancelRepair()
     task.delay(0.4, function() GEN.cancelDB = false end)
 end
 
-local function getClosestGeneratorPoint(root, maxDist)
+local function getClosestGeneratorPoint(root, maxDist, excludeGen)
     local gens = getFolderGenerator()
     local bestGen, bestPt, bestD = nil, nil, maxDist or 999
     for _, gen in ipairs(gens) do
+        if gen == excludeGen then continue end
         if gen.Parent and not generatorFinished(gen) then
             for i = 1, 4 do
                 local pt = gen:FindFirstChild("GeneratorPoint"..i)
@@ -1314,11 +1314,11 @@ local function findNearestKiller(root, maxDist)
     return nearest, nearestDist
 end
 
-local function teleportToGenerator()
+local function teleportToGenerator(excludeGen)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then return end
-    local gen, pt = getClosestGeneratorPoint(root)
+    local gen, pt = getClosestGeneratorPoint(root, nil, excludeGen)
     if not gen or not pt then return end
     if isRepairPointValid() and (root.Position - GEN.repairPoint.Position).Magnitude <= 5 then return end
     GEN.repairModel = gen; GEN.repairPoint = pt; GEN.lastPos = root.Position
@@ -1421,9 +1421,9 @@ local function startGenLoop()
             local root = char and char:FindFirstChild("HumanoidRootPart")
             if not root then continue end
             if not isRepairPointValid() then clearRepairState(); _invalidateGenCache() end
-            local killer = findNearestKiller(root, 12.5)
+            local killer = findNearestKiller(root, 40)
             if killer and isRepairPointValid() then
-                cancelRepair(); task.wait(0.2); teleportToGenerator(); continue
+                cancelRepair(); task.wait(0.1); teleportToGenerator(GEN.repairModel); continue
             end
             if not isRepairPointValid()
             or (root.Position - GEN.repairPoint.Position).Magnitude > 8 then
