@@ -1,20 +1,15 @@
 -- Powered by nig | v455 (Reworked)
 -- =========================
-local version = "Rework"
+local version = "Rework (Upgraded)"
 local ver     = "v014.22"
 -- =========================
--- CHANGELOG v014.22
--- [New]     Auto Generator: ลอยบนฟ้า Y+500, สร้าง Platform ใต้เท้า กันตก
--- [New]     Auto Generator: เทเลพอร์ตไป Generator ที่ใกล้สุด + ยิง Remote ซ่อมอัตโนมัติ
--- [New]     Auto Generator: ข้าม Generator ที่ 100% แล้ว (ไม่วาร์ปซ้ำ)
--- [New]     Auto Generator: ถ้า Killer เข้าใกล้ 30 stud → หนีไป Generator อื่นทันที
--- [New]     Auto Generator: เมื่อปิด Toggle จะวาร์ปกลับตำแหน่งก่อนเปิด
--- [New]     Auto Generator: ทำจนครบ 100% ทุก Generator แล้วหยุดอัตโนมัติ
--- [Fixed]   Mobile Cancel: แก้ไขระบบ cancel ทำงานบน Mobile (ตรวจ MoveDirection ใน Heartbeat)
--- [Fixed]   Auto Parry: ไม่ทำ parry ถ้า HP = 20 (downed)
--- [Fixed]   Auto Parry: ไม่ทำ parry ถ้า HP ≤ 60 + อยู่ใกล้ Hook (กำลังถูก carry)
+-- CHANGELOG v014.19
+-- [New]     Auto Parry: ไม่ทำ parry ถ้า HP = 20 (downed)
+-- [New]     Auto Parry: ไม่ทำ parry ถ้า HP ≤ 60 + อยู่ใกล้ Hook (กำลังถูก carry)
+-- [New]     Auto Parry: Premium-only feature (Free users ไม่เห็น UI)
 -- [Fixed]   ESP lag: แยก GetDescendants() ออกจาก main thread, throttle แต่ละ category
 -- [Fixed]   ESP: ใช้ cached scan แทน full scan ทุก tick
+-- [Improved] ESP: world objects scan ทำใน task.spawn() ไม่ block frame
 
 repeat task.wait() until game:IsLoaded()
 
@@ -188,8 +183,8 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 05/27/2026 | CL: " .. ver,
-    Desc  = "• [ New ] Auto Gen: ลอยฟ้า Y+500, Platform ใต้เท้า, หนี Killer 30 stud\n• [ New ] Auto Gen: ข้าม Gen 100%, วาร์ปกลับเมื่อปิด\n• [ Fixed ] Mobile Cancel: แก้ cancel บน Mobile\n• [ Fixed ] ESP massive lag (off-thread)\n• [ Improved ] ESP cached world scan",
+    Title = "Update: 05/26/2026 | CL: " .. ver,
+    Desc  = "• [ New ] Auto Parry: Premium only feature\n• [ Fixed ] ESP massive lag every 1s (Descendants off main thread)\n• [ Fixed ] ESP: cached world scan, throttled per category\n• [ Improved ] ESP scan runs in no frame blocking",
 })
 Info:Divider()
 
@@ -225,10 +220,12 @@ local IsMobile  = UIS_AP.TouchEnabled and not UIS_AP.KeyboardEnabled
 
 local PARRY_ICON_ID = "92951359322494"
 
-local HOOK_NEAR_DIST = 12
-local HP_CARRIED     = 60
-local HP_DOWNED      = 20
+-- ── Hook detection range (studs) ──────────────────────────────────────────────────
+local HOOK_NEAR_DIST = 12   -- ถ้าอยู่ใกล้ hook ภายใน 12 studs
+local HP_CARRIED     = 60   -- HP ≤ 60 ถือว่ากำลังถูก carry
+local HP_DOWNED      = 20   -- HP = 20 ถือว่า downed
 
+-- ── Parry state checks ────────────────────────────────────────────────────────────
 local function getParryBtn()
     local pg = LP_AP:FindFirstChild("PlayerGui");     if not pg then return nil end
     local s  = pg:FindFirstChild("Survivor-mob");     if not s  then return nil end
@@ -254,7 +251,9 @@ local function isParryReady()
     return true
 end
 
+-- ── [New] Safety checks ───────────────────────────────────────────────────────────
 local function isPlayerDowned()
+    -- HP = 20 ถือว่า downed / hooked
     local char = LP_AP.Character
     if not char then return false end
     local hum = char:FindFirstChild("Humanoid")
@@ -263,13 +262,15 @@ local function isPlayerDowned()
 end
 
 local function isPlayerBeingCarriedToHook()
+    -- HP ≤ 60 + อยู่ใกล้ HookPoint/Hook model ภายใน HOOK_NEAR_DIST
     local char = LP_AP.Character
     if not char then return false end
     local hum = char:FindFirstChild("Humanoid")
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hum or not hrp then return false end
-    if hum.Health > HP_CARRIED then return false end
+    if hum.Health > HP_CARRIED then return false end   -- HP ยังสูง = ยังสู้ได้ = parry ได้
 
+    -- หา hook ที่ใกล้ที่สุด
     local myPos = hrp.Position
     for _, desc in ipairs(Workspace:GetDescendants()) do
         local ok, isHook = pcall(function()
@@ -293,11 +294,12 @@ local function isPlayerBeingCarriedToHook()
 end
 
 local function shouldParry()
-    if isPlayerDowned()          then return false end
-    if isPlayerBeingCarriedToHook() then return false end
+    if isPlayerDowned()          then return false end   -- HP = 20: downed
+    if isPlayerBeingCarriedToHook() then return false end  -- กำลังถูก carry
     return true
 end
 
+-- ── Fire methods ──────────────────────────────────────────────────────────────────
 local function fireParryPC()
     pcall(function()
         Vim_AP:SendMouseButtonEvent(0, 0, 1, true,  game, 1)
@@ -329,6 +331,7 @@ local function fireParryBtn()
     if IsMobile then fireParryMobile() else fireParryPC() end
 end
 
+-- ── Threat level ──────────────────────────────────────────────────────────────────
 local function getThreatLevel(killerChar)
     local my = LP_AP.Character
     if not my then return 0 end
@@ -347,6 +350,7 @@ local function getThreatLevel(killerChar)
     return (distScore*0.50) + (dotScore*0.35) + (speedScore*0.15)
 end
 
+-- ── Hitframe table ────────────────────────────────────────────────────────────────
 local ANIM_HITFRAME = {
     ["rbxassetid://139369275981139"] = { preDelay=0.00, hitAt=0.15 },
     ["rbxassetid://110355011987939"] = { preDelay=0.00, hitAt=0.15 },
@@ -366,9 +370,10 @@ local ANIM_HITFRAME = {
     ["rbxassetid://133963973694098"] = { preDelay=0.00, hitAt=0.15 },
 }
 
+-- ── Core parry executor ───────────────────────────────────────────────────────────
 local function execParry(killerChar)
     if not _G.AutoParry then return end
-    if not shouldParry() then return end
+    if not shouldParry() then return end          -- [New] safety checks
     if not isParryReady() then return end
     if getThreatLevel(killerChar) <= 0 then return end
     local now = os.clock()
@@ -491,6 +496,7 @@ if isPremium then
         Callback = function(v) HOOK_NEAR_DIST = v end
     })
 else
+    -- Free user: แสดงแค่ข้อความบอก premium
     SurTab:Paragraph({
         Title = "[ Premium Only ] Auto Parry",
         Desc  = "This feature is for Premium members only",
@@ -529,7 +535,8 @@ local ESP_MAX_DISTANCE = Config:Get("ESP_MAX_DISTANCE", 1500)
 
 local espObjects = {}
 
-local _worldESPCache     = {}
+-- ── [Fix] world cache: scan ครั้งเดียว เก็บผลไว้ แทนการ scan ทุก tick ──────────────
+local _worldESPCache     = {}   -- { obj, type } list
 local _worldCacheDirty   = true
 local _worldCacheScanBusy= false
 
@@ -551,6 +558,7 @@ Workspace.DescendantRemoving:Connect(function()
     end
 end)
 
+-- ── [Fix] rebuild world cache ใน task.spawn → ไม่บล็อก frame ──────────────────────
 local function rebuildWorldCacheAsync()
     if _worldCacheScanBusy then return end
     _worldCacheScanBusy = true
@@ -717,6 +725,7 @@ local function setObjectLabels(data, col, nameText, showName, hpText, showHp, di
         data.distLabel.Text    = showDist and (distText or "") or ""
         data.distLabel.Visible = showDist and distText ~= nil and distText ~= ""
         data.distLabel.TextColor3 = col
+        -- reposition rows
         local row = 0
         if data.nameLabel.Visible then data.nameLabel.Position = UDim2.new(0,0,row*0.33,0); row+=1 end
         if data.hpLabel.Visible   then data.hpLabel.Position   = UDim2.new(0,0,row*0.33,0); row+=1 end
@@ -724,10 +733,14 @@ local function setObjectLabels(data, col, nameText, showName, hpText, showHp, di
     end)
 end
 
+-- ── [Fix] ESP update split into lightweight player loop + off-thread world scan ────
+-- Player ESP: รันทุก 0.5 วิ บน heartbeat (เบามาก)
+-- World ESP:  รันทุก 2 วิ ใน task.spawn() (ไม่ block frame)
+
 local _playerESPAccum = 0
 local _worldESPAccum  = 0
-local PLAYER_ESP_INTERVAL = 0.5
-local WORLD_ESP_INTERVAL  = 2.0
+local PLAYER_ESP_INTERVAL = 0.5   -- วิ
+local WORLD_ESP_INTERVAL  = 2.0   -- วิ (world objects เปลี่ยนน้อย → scan ถี่แค่นี้พอ)
 local _worldScanBusy = false
 
 local function updatePlayerESP(hrp)
@@ -774,25 +787,28 @@ local function updatePlayerESP(hrp)
     end
 end
 
+-- [Fix] world scan ทำใน task.spawn → zero frame impact
 local function updateWorldESPAsync(hrp)
     if _worldScanBusy then return end
     _worldScanBusy = true
 
+    -- rebuild cache ถ้า dirty (ก็ทำใน spawn ด้วย)
     if _worldCacheDirty then rebuildWorldCacheAsync() end
 
     task.spawn(function()
         local myPos = hrp.Position
-
         for _, entry in ipairs(_worldESPCache) do
-            local desc = entry.obj
-            local t    = entry.t
-            pcall(function()
-                local ok2, valid2 = pcall(function() return desc and desc.Parent ~= nil end)
-                if not ok2 or not valid2 then removeESP(desc); return end
+            if not espEnabled then break end
+            local ok, _ = pcall(function()
+                local desc = entry.obj
+                local t    = entry.t
+                local isValid = desc and desc.Parent ~= nil
+                if not isValid then return end
 
                 local part = desc.PrimaryPart or desc:FindFirstChildWhichIsA("BasePart")
                 local dist = part and math.floor((myPos - part.Position).Magnitude) or math.huge
 
+                -- Generator
                 if t == "Generator" then
                     if not espGenerator then removeESP(desc); return end
                     if dist > ESP_MAX_DISTANCE then
@@ -803,21 +819,23 @@ local function updateWorldESPAsync(hrp)
                         end) end
                         return
                     end
-                    local prog = getGeneratorProgress(desc)
-                    local col  = generatorFinished(desc) and COLOR_GENERATOR_DONE or getProgressColor(prog)
+                    local progress = getGeneratorProgress(desc)
+                    local col = generatorFinished(desc) and COLOR_GENERATOR_DONE or getProgressColor(progress)
                     createESP(desc, col)
                     local data = espObjects[desc]
-                    if data then
-                        local nameText = ShowName and "Generator" or nil
-                        local hpText   = ShowPercent and ("[ "..math.floor(prog*100).."% ]") or nil
+                    if data and part then
+                        local nameText = nil
+                        if ShowName and ShowPercent then nameText = "Generator | "..math.floor(progress*100).."%"
+                        elseif ShowName then nameText = "Generator" end
                         local distText = ShowDistance and ("[ "..dist.." MM ]") or nil
-                        setObjectLabels(data, col, nameText, ShowName, hpText, ShowPercent, distText, ShowDistance)
+                        setObjectLabels(data, col, nameText, ShowName or ShowPercent, nil, false, distText, ShowDistance)
                         pcall(function()
                             if data.bill then data.bill.Enabled = true end
                             if data.highlight then data.highlight.Enabled = ShowHighlight end
                         end)
                     end
 
+                -- Gate
                 elseif t == "Gate" then
                     if not espGate then removeESP(desc); return end
                     if dist > ESP_MAX_DISTANCE then
@@ -839,20 +857,25 @@ local function updateWorldESPAsync(hrp)
                         end)
                     end
 
+                -- Hook
                 elseif t == "Hook" then
-                    if not espHook then removeESP(desc); return end
-                    if dist > ESP_MAX_DISTANCE then
-                        local d = espObjects[desc]
+                    local mdl = desc:FindFirstChild("Model")
+                    if not mdl then return end
+                    if not espHook then removeESP(mdl); return end
+                    local mdlPart = mdl.PrimaryPart or mdl:FindFirstChildWhichIsA("BasePart")
+                    local mdlDist = mdlPart and math.floor((myPos - mdlPart.Position).Magnitude) or math.huge
+                    if mdlDist > ESP_MAX_DISTANCE then
+                        local d = espObjects[mdl]
                         if d then pcall(function()
                             if d.bill then d.bill.Enabled = false end
                             if d.highlight then d.highlight.Enabled = false end
                         end) end
                         return
                     end
-                    createESP(desc, COLOR_HOOK)
-                    local data = espObjects[desc]
+                    createESP(mdl, COLOR_HOOK)
+                    local data = espObjects[mdl]
                     if data then
-                        local distText = ShowDistance and ("[ "..dist.." MM ]") or nil
+                        local distText = ShowDistance and ("[ "..mdlDist.." MM ]") or nil
                         setObjectLabels(data, COLOR_HOOK, ShowName and "Hook" or nil, ShowName, nil, false, distText, ShowDistance)
                         pcall(function()
                             if data.bill then data.bill.Enabled = true end
@@ -860,6 +883,7 @@ local function updateWorldESPAsync(hrp)
                         end)
                     end
 
+                -- Pallet
                 elseif t == "Pallet" then
                     if not espPallet then removeESP(desc); return end
                     if dist > ESP_MAX_DISTANCE then
@@ -881,6 +905,7 @@ local function updateWorldESPAsync(hrp)
                         end)
                     end
 
+                -- Window
                 elseif t == "Window" then
                     if not espWindowEnabled then removeESP(desc); return end
                     if dist > ESP_MAX_DISTANCE then
@@ -902,6 +927,7 @@ local function updateWorldESPAsync(hrp)
                         end)
                     end
 
+                -- Patient
                 elseif t == "Patient" then
                     if not espPatient then removeESP(desc); return end
                     if dist > ESP_MAX_DISTANCE then
@@ -926,6 +952,7 @@ local function updateWorldESPAsync(hrp)
             end)
         end
 
+        -- cleanup stale
         for obj in pairs(espObjects) do
             local ok2, valid2 = pcall(function() return obj and obj.Parent ~= nil end)
             if not ok2 or not valid2 then removeESP(obj) end
@@ -935,6 +962,7 @@ local function updateWorldESPAsync(hrp)
     end)
 end
 
+-- ── [Fix] Heartbeat: player ESP เบา, world ESP throttled + off-thread ──────────────
 RunService.Heartbeat:Connect(function(dt)
     if not espEnabled then return end
 
@@ -1233,15 +1261,7 @@ local GeneratorRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild(
 local skillRemote      = GeneratorRemotes:WaitForChild("SkillCheckResultEvent")
 local repairRemote     = GeneratorRemotes:WaitForChild("RepairEvent")
 
--- [Fixed] ระบบ GEN: เพิ่ม cancelDB guard + mobile-safe
-local GEN = {
-    repairPoint = nil,
-    repairModel = nil,
-    cancelDB    = false,
-    skillDB     = false,
-    lastPos     = nil,
-    MOVE_THRESH = 0.9,
-}
+local GEN = { repairPoint=nil, repairModel=nil, cancelDB=false, skillDB=false, lastPos=nil, MOVE_THRESH=0.9 }
 
 local function notify(title, content)
     WindUI:Notify({ Title=title, Content=content, Duration=5, Icon="triangle-alert" })
@@ -1280,24 +1300,6 @@ local function getClosestGeneratorPoint(root, maxDist)
     return bestGen, bestPt, bestD
 end
 
--- หา Generator ที่ใกล้สุด ยกเว้น gen ที่ระบุ (ใช้ตอนหนี Killer)
-local function getClosestGeneratorPointExclude(root, excludeGen, maxDist)
-    local gens = getFolderGenerator()
-    local bestGen, bestPt, bestD = nil, nil, maxDist or 99999
-    for _, gen in ipairs(gens) do
-        if gen.Parent and gen ~= excludeGen and not generatorFinished(gen) then
-            for i = 1, 4 do
-                local pt = gen:FindFirstChild("GeneratorPoint"..i)
-                if pt then
-                    local d = (root.Position - pt.Position).Magnitude
-                    if d < bestD then bestD=d; bestGen=gen; bestPt=pt end
-                end
-            end
-        end
-    end
-    return bestGen, bestPt, bestD
-end
-
 local function findNearestKiller(root, maxDist)
     local nearest, nearestDist = nil, maxDist or 12.5
     for _, plr in ipairs(Players:GetPlayers()) do
@@ -1312,206 +1314,36 @@ local function findNearestKiller(root, maxDist)
     return nearest, nearestDist
 end
 
--- ====================== [New] AUTO GEN SKY SYSTEM ======================
--- ระบบใหม่: ลอยบนฟ้า Y+500, สร้าง Platform, เทเลพอร์ตไป Gen ที่ใกล้สุด
--- หนี Killer 30 stud → ไป Gen อื่น, กลับตำแหน่งก่อนเปิด Toggle เมื่อปิด
-
-local KILLER_FLEE_DIST   = 30    -- stud ที่จะหนีจาก Killer
-local SKY_HEIGHT_OFFSET  = 500   -- ความสูงบนฟ้า
-local PLATFORM_SIZE      = Vector3.new(10, 1, 10)
-
-local _skyPlatform       = nil   -- Part ที่สร้างใต้เท้า
-local _preGenCFrame      = nil   -- CFrame ก่อนเปิด toggle
-local _genSkyThread      = nil   -- thread หลัก
-
--- สร้าง/อัปเดต Platform ใต้เท้าผู้เล่น
-local function ensureSkyPlatform(root)
-    if not _skyPlatform or not _skyPlatform.Parent then
-        _skyPlatform = Instance.new("Part")
-        _skyPlatform.Name         = "DYHUB_SkyPlatform"
-        _skyPlatform.Size         = PLATFORM_SIZE
-        _skyPlatform.Anchored     = true
-        _skyPlatform.CanCollide   = true
-        _skyPlatform.Transparency = 0.5
-        _skyPlatform.BrickColor   = BrickColor.new("Bright blue")
-        _skyPlatform.Material     = Enum.Material.Neon
-        _skyPlatform.Parent       = Workspace
-    end
-    -- วาง platform ใต้เท้า (Y - 1.5)
-    _skyPlatform.CFrame = CFrame.new(root.Position.X, root.Position.Y - 1.5, root.Position.Z)
-end
-
-local function removeSkyPlatform()
-    if _skyPlatform and _skyPlatform.Parent then
-        pcall(function() _skyPlatform:Destroy() end)
-    end
-    _skyPlatform = nil
-end
-
--- เช็คว่า Gen ทุกอันเสร็จหมดแล้วไหม
-local function allGeneratorsDone()
-    local gens = getFolderGenerator()
-    if #gens == 0 then return false end
-    for _, gen in ipairs(gens) do
-        if gen.Parent and not generatorFinished(gen) then
-            return false
-        end
-    end
-    return true
-end
-
--- เทเลพอร์ตขึ้นฟ้าแล้วยิง repair ไปยัง Gen ที่ระบุ
-local function teleportToGenSky(gen, pt, root)
-    if not gen or not pt or not root then return false end
-    -- คำนวณตำแหน่งบนฟ้าเหนือ Gen
-    local skyPos = Vector3.new(pt.Position.X, pt.Position.Y + SKY_HEIGHT_OFFSET, pt.Position.Z)
-    -- เทเลพอร์ตขึ้นฟ้า
-    root.CFrame = CFrame.new(skyPos)
-    task.wait(0.1)
-    -- อัปเดต platform
-    ensureSkyPlatform(root)
-    -- ยิง repair
-    GEN.repairModel = gen
-    GEN.repairPoint = pt
-    GEN.lastPos     = root.Position
+local function teleportToGenerator()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local gen, pt = getClosestGeneratorPoint(root)
+    if not gen or not pt then return end
+    if isRepairPointValid() and (root.Position - GEN.repairPoint.Position).Magnitude <= 5 then return end
+    GEN.repairModel = gen; GEN.repairPoint = pt; GEN.lastPos = root.Position
+    root.CFrame = CFrame.new(pt.Position + Vector3.new(0, 2, 0))
+    task.wait(0.12)
     pcall(function() repairRemote:FireServer(pt, true) end)
-    return true
 end
-
-local function startGenSkyLoop()
-    if _genSkyThread then task.cancel(_genSkyThread); _genSkyThread = nil end
-    _genSkyThread = task.spawn(function()
-        -- บันทึกตำแหน่งก่อนเปิด
-        local char = LocalPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        if root then
-            _preGenCFrame = root.CFrame
-        end
-
-        while AutoGenRepair do
-            task.wait(0.25)
-
-            char = LocalPlayer.Character
-            root = char and char:FindFirstChild("HumanoidRootPart")
-            if not root then continue end
-
-            -- เช็คว่าทุก Gen เสร็จหมดแล้ว → หยุดอัตโนมัติ
-            if allGeneratorsDone() then
-                WindUI:Notify({
-                    Title   = "Auto Generator",
-                    Content = "Generator ทุกอันเสร็จ 100% แล้ว!",
-                    Duration = 5,
-                    Icon    = "check-circle"
-                })
-                AutoGenRepair = false
-                Config:Set("AutoGenRepair", false)
-                Config:Save()
-                break
-            end
-
-            -- อัปเดต platform ทุก tick (ป้องกันตก)
-            ensureSkyPlatform(root)
-
-            -- เช็ค Killer ใกล้ 30 stud
-            local killerChar, killerDist = findNearestKiller(root, KILLER_FLEE_DIST)
-            if killerChar then
-                -- หนี: cancel repair เดิม แล้วไป Gen อื่น
-                if isRepairPointValid() then
-                    cancelRepair()
-                    task.wait(0.15)
-                end
-                -- ไปหา Gen อื่นที่ใกล้สุด (ไม่ใช่ Gen ที่อยู่ตอนนี้)
-                local currentExclude = GEN.repairModel
-                clearRepairState()
-                _invalidateGenCache()
-                local newGen, newPt = getClosestGeneratorPointExclude(root, currentExclude)
-                if newGen and newPt then
-                    teleportToGenSky(newGen, newPt, root)
-                else
-                    -- ถ้าไม่มี Gen อื่น ลองหา Gen ปัจจุบัน
-                    local anyGen, anyPt = getClosestGeneratorPoint(root)
-                    if anyGen and anyPt then
-                        teleportToGenSky(anyGen, anyPt, root)
-                    end
-                end
-                continue
-            end
-
-            -- ไม่มี Killer ใกล้: เช็คว่ากำลัง repair อยู่ไหม
-            if not isRepairPointValid() then
-                clearRepairState()
-                _invalidateGenCache()
-                -- หา Gen ที่ใกล้สุด ยังไม่ 100%
-                local gen, pt = getClosestGeneratorPoint(root)
-                if gen and pt then
-                    teleportToGenSky(gen, pt, root)
-                end
-            else
-                -- กำลัง repair อยู่ → อัปเดต platform แล้วรอต่อ
-                -- ถ้า Gen ปัจจุบันเสร็จแล้ว → หาอันใหม่
-                if generatorFinished(GEN.repairModel) then
-                    cancelRepair()
-                    task.wait(0.1)
-                    clearRepairState()
-                    _invalidateGenCache()
-                    local gen2, pt2 = getClosestGeneratorPoint(root)
-                    if gen2 and pt2 then
-                        teleportToGenSky(gen2, pt2, root)
-                    end
-                end
-            end
-        end
-
-        -- หยุดแล้ว: ลบ platform + วาร์ปกลับ
-        removeSkyPlatform()
-        clearRepairState()
-        task.wait(0.2)
-        local charFinal = LocalPlayer.Character
-        local rootFinal = charFinal and charFinal:FindFirstChild("HumanoidRootPart")
-        if rootFinal and _preGenCFrame then
-            rootFinal.CFrame = _preGenCFrame
-            _preGenCFrame    = nil
-        end
-        _genSkyThread = nil
-    end)
-end
-
--- ====================== [Fixed] CANCEL SYSTEM (Mobile + PC) ======================
--- [Fix] Mobile: ตรวจ MoveDirection ใน Heartbeat แทน InputBegan
--- [Fix] PC: ยังใช้ KeyCode X ได้เหมือนเดิม
 
 local _movCheckAccum = 0
 RunService.Heartbeat:Connect(function(dt)
     _movCheckAccum += dt
     if _movCheckAccum < 0.07 then return end
     _movCheckAccum = 0
-
-    -- cancel guard สำหรับ AutoGenRepair (ระบบเก่า + ระบบใหม่)
     if not isRepairPointValid() then clearRepairState(); return end
-
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
-    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    local hum  = char and char:FindFirstChild("Humanoid")
     if not root or not hum then return end
-
-    -- ถ้าใช้ระบบฟ้า (AutoGenRepair) → ไม่ cancel จากการเดิน (ระบบจัดการเอง)
-    if AutoGenRepair then return end
-
     local dist = (root.Position - GEN.repairPoint.Position).Magnitude
     if dist > 8 then return end
-
     local prevPos = GEN.lastPos or root.Position
-    local moved   = (root.Position - prevPos).Magnitude
-    GEN.lastPos   = root.Position
-
-    -- [Fixed Mobile] ตรวจ MoveDirection เพิ่มเติมจาก moved threshold
-    local isMoving = (moved > GEN.MOVE_THRESH) or (hum.MoveDirection.Magnitude > 0.05)
-    if isMoving and not GEN.cancelDB then
-        cancelRepair()
-    end
+    local moved = (root.Position - prevPos).Magnitude
+    GEN.lastPos = root.Position
 end)
 
--- PC: กด X cancel
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.KeyCode == Enum.KeyCode.X then
@@ -1525,7 +1357,7 @@ SurTab:Section({ Title = "Feature Generator", Icon = "zap" })
 
 local AutoSkillPerfect = Config:Get("AutoSkillPerfect", false)
 local AutoSkillNeutral = Config:Get("AutoSkillNeutral", false)
-AutoGenRepair          = Config:Get("AutoGenRepair",    false)
+local AutoGenRepair    = Config:Get("AutoGenRepair",    false)
 
 local _skillThread = nil
 local function startSkillLoop(mode)
@@ -1579,29 +1411,43 @@ SurTab:Toggle({
     end
 })
 
--- [New] Auto Generator: ระบบฟ้า
-SurTab:Toggle({
-    Title = "Auto Generator (Sky + Repair)",
-    Desc  = "ลอยฟ้า Y+500 → ซ่อม Gen ที่ใกล้ที่สุด, หนี Killer 30 stud → Gen อื่น, ปิด → กลับตำแหน่งเดิม",
-    Value = AutoGenRepair,
-    Callback = function(v)
-        AutoGenRepair = v; Config:Set("AutoGenRepair", v); Config:Save()
-        if v then
-            notify("Auto Generator (Sky)", "ลอยฟ้า + ซ่อม Gen อัตโนมัติ | หนี Killer 30 stud")
-            startGenSkyLoop()
-        else
-            -- ปิด toggle → หยุด thread (thread จะ cleanup เอง)
-            if _genSkyThread then task.cancel(_genSkyThread); _genSkyThread = nil end
-            removeSkyPlatform()
-            clearRepairState()
-            -- วาร์ปกลับ
-            local charFinal = LocalPlayer.Character
-            local rootFinal = charFinal and charFinal:FindFirstChild("HumanoidRootPart")
-            if rootFinal and _preGenCFrame then
-                rootFinal.CFrame = _preGenCFrame
-                _preGenCFrame    = nil
+local _genThread = nil
+local function startGenLoop()
+    if _genThread then task.cancel(_genThread); _genThread = nil end
+    _genThread = task.spawn(function()
+        while AutoGenRepair do
+            task.wait(0.25)
+            local char = LocalPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if not root then continue end
+            if not isRepairPointValid() then clearRepairState(); _invalidateGenCache() end
+            local killer = findNearestKiller(root, 12.5)
+            if killer and isRepairPointValid() then
+                cancelRepair(); task.wait(0.2); teleportToGenerator(); continue
+            end
+            if not isRepairPointValid()
+            or (root.Position - GEN.repairPoint.Position).Magnitude > 8 then
+                teleportToGenerator()
             end
         end
+        _genThread = nil
+    end)
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+    clearRepairState()
+    if AutoGenRepair    then task.delay(1, startGenLoop) end
+    if AutoSkillPerfect then task.delay(1, function() startSkillLoop("perfect") end) end
+    if AutoSkillNeutral then task.delay(1, function() startSkillLoop("neutral") end) end
+end)
+
+SurTab:Toggle({
+    Title = "Auto Generator (Teleport + Repair)",
+    Desc = "Teleports and repairs generators automatically", Value = AutoGenRepair,
+    Callback = function(v)
+        AutoGenRepair = v; Config:Set("AutoGenRepair", v); Config:Save()
+        if v then notify("Auto Generator", "Press X or move to cancel."); startGenLoop()
+        else if _genThread then task.cancel(_genThread); _genThread = nil end; clearRepairState() end
     end
 })
 
@@ -2088,7 +1934,10 @@ local flyNoclipSpeed = Config:Get("SpeedWalk", 3)
 local NoClipEnabled  = Config:Get("NoClipEnabled", false)
 local speedConnection, noclipConnection
 
+-- [Fix] Restore speed on load
 local function applySpeedToChar()
+    -- Speed ใน script นี้ใช้ RenderStepped hrp offset ไม่ใช่ WalkSpeed
+    -- ถ้าเปิด Enable Speed ตอน load → restore
     if speedEnabled then
         if speedConnection then speedConnection:Disconnect() end
         speedConnection = RunService.RenderStepped:Connect(function()
@@ -2305,6 +2154,7 @@ Info:Paragraph({Title="Discord",Desc="Join our discord for more scripts!",Image=
     Buttons={{Icon="copy",Title="Copy Link",Callback=function() setclipboard("https://discord.gg/jWNDPNMmyB") end}}})
 
 -- ====================== AUTO RESTORE ON LOAD ======================
+-- [Fix] restore features ที่ save ไว้
 if NoClipEnabled then
     noclipConnection=RunService.Stepped:Connect(function()
         local char=LocalPlayer.Character
@@ -2312,23 +2162,14 @@ if NoClipEnabled then
     end)
 end
 
-if AutoGenRepair    then startGenSkyLoop() end
+if AutoGenRepair    then startGenLoop() end
 if AutoSkillPerfect then startSkillLoop("perfect") end
 if AutoSkillNeutral then startSkillLoop("neutral") end
 
+-- init world ESP cache
 if espEnabled then
     task.delay(2, function() rebuildWorldCacheAsync() end)
 end
-
--- cleanup platform เมื่อ character respawn
-LocalPlayer.CharacterAdded:Connect(function()
-    removeSkyPlatform()
-    clearRepairState()
-    _preGenCFrame = nil
-    if AutoGenRepair    then task.delay(1, startGenSkyLoop) end
-    if AutoSkillPerfect then task.delay(1, function() startSkillLoop("perfect") end) end
-    if AutoSkillNeutral then task.delay(1, function() startSkillLoop("neutral") end) end
-end)
 
 print("[DYHUB] "..version.." | "..ver.." loaded successfully!")
 print("[DYHUB] Config active | Auto saving every "..tostring(AutoSaveDelay).."s")
