@@ -1,10 +1,15 @@
 -- Powered by nig | v455 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.23"
+local ver     = "v014.22"
 -- =========================
--- CHANGELOG v014.23
--- [Fixed] AUTO GEN
+-- CHANGELOG v014.19
+-- [New]     Auto Parry: ไม่ทำ parry ถ้า HP = 20 (downed)
+-- [New]     Auto Parry: ไม่ทำ parry ถ้า HP ≤ 60 + อยู่ใกล้ Hook (กำลังถูก carry)
+-- [New]     Auto Parry: Premium-only feature (Free users ไม่เห็น UI)
+-- [Fixed]   ESP lag: แยก GetDescendants() ออกจาก main thread, throttle แต่ละ category
+-- [Fixed]   ESP: ใช้ cached scan แทน full scan ทุก tick
+-- [Improved] ESP: world objects scan ทำใน task.spawn() ไม่ block frame
 
 repeat task.wait() until game:IsLoaded()
 
@@ -1251,279 +1256,370 @@ MainTab:Toggle({
     end
 })
 
--- ====================== GENERATOR SYSTEM (REWORK) ======================
 
-local GeneratorRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Generator")
-local skillRemote      = GeneratorRemotes:WaitForChild("SkillCheckResultEvent")
-local repairRemote     = GeneratorRemotes:WaitForChild("RepairEvent")
+--// =========================
+--// AUTO GENERATOR FULL SRC
+--// =========================
 
--- State หลัก
-local GEN = {
-    repairPoint  = nil,
-    repairModel  = nil,
-    skillDB      = false,
-    cancelDB     = false,
-    lastPos      = nil,
-    MOVE_THRESH  = 0.9,
-}
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
--- Toggle states
-local AutoSkillPerfect = Config:Get("AutoSkillPerfect", false)
-local AutoSkillNeutral = Config:Get("AutoSkillNeutral", false)
+local LocalPlayer = Players.LocalPlayer
 
--- ── หา Generator ทุกอันใน workspace โดยไม่ระบุ folder ──────────────────────────
-local _genCache    = nil
-local _genCacheDirty = true
+--// =========================
+--// CONFIG
+--// =========================
 
-local function invalidateGenCache() _genCacheDirty = true end
+_G.AutoGen_Perfect = Config:Get("AutoGen_Perfect", false)
+_G.AutoGen_Neutral = Config:Get("AutoGen_Neutral", false)
 
-Workspace.DescendantAdded:Connect(function(d)
-    if d.Name == "Generator" then invalidateGenCache() end
-end)
-Workspace.DescendantRemoving:Connect(function(d)
-    if d.Name == "Generator" then invalidateGenCache() end
-end)
+--// =========================
+--// TOGGLES
+--// =========================
 
-local function getAllGeneratorsInWorkspace()
-    if not _genCacheDirty and _genCache then return _genCache end
-    local list = {}
-    for _, desc in ipairs(Workspace:GetDescendants()) do
-        if desc.Name == "Generator" and desc:IsA("Model") then
-            list[#list + 1] = desc
-        end
+SurTab:Toggle({
+    Title = "Auto Generator Perfect",
+    Desc = "Automatically hits perfect skill checks",
+    Value = _G.AutoGen_Perfect,
+    Callback = function(v)
+        _G.AutoGen_Perfect = v
+        Config:Set("AutoGen_Perfect", v)
+        Config:Save()
     end
-    _genCache      = list
-    _genCacheDirty = false
-    return list
+})
+
+SurTab:Toggle({
+    Title = "Auto Generator Neutral",
+    Desc = "Automatically hits neutral skill checks",
+    Value = _G.AutoGen_Neutral,
+    Callback = function(v)
+        _G.AutoGen_Neutral = v
+        Config:Set("AutoGen_Neutral", v)
+        Config:Save()
+    end
+})
+
+--// =========================
+--// REMOTES
+--// =========================
+
+local GeneratorFolder =
+    ReplicatedStorage:WaitForChild("Remotes")
+    :WaitForChild("Generator")
+
+local SkillCheckRemote =
+    GeneratorFolder:WaitForChild("SkillCheckResultEvent")
+
+local RepairRemote =
+    GeneratorFolder:WaitForChild("RepairEvent")
+
+--// =========================
+--// VARIABLES
+--// =========================
+
+local CurrentGenerator = nil
+local CurrentPoint = nil
+
+--// =========================
+--// CHARACTER
+--// =========================
+
+local function GetCharacter()
+    return LocalPlayer.Character
 end
 
--- ── เช็คว่า generator ซ่อมเสร็จยัง ──────────────────────────────────────────────
-local function isGeneratorDone(gen)
-    if gen:FindFirstChild("Finished") or gen:FindFirstChild("Repaired") then return true end
-    local progress = 0
-    if gen:GetAttribute("Progress") then
-        progress = gen:GetAttribute("Progress")
-    elseif gen:GetAttribute("RepairProgress") then
-        progress = gen:GetAttribute("RepairProgress")
-    else
-        for _, child in ipairs(gen:GetDescendants()) do
-            if child:IsA("NumberValue") or child:IsA("IntValue") then
-                local n = child.Name:lower()
-                if n:find("progress") or n:find("repair") or n:find("percent") then
-                    progress = child.Value; break
-                end
+local function GetHRP()
+    local Character = GetCharacter()
+    if not Character then
+        return nil
+    end
+
+    return Character:FindFirstChild("HumanoidRootPart")
+end
+
+local function GetHumanoid()
+    local Character = GetCharacter()
+    if not Character then
+        return nil
+    end
+
+    return Character:FindFirstChildOfClass("Humanoid")
+end
+
+--// =========================
+--// FIND ALL GENERATORS
+--// =========================
+
+local function GetAllGenerators()
+
+    local Generators = {}
+
+    for _,v in ipairs(workspace:GetDescendants()) do
+
+        if v:IsA("Model")
+        and v.Name == "Generator"
+        and (
+            v:FindFirstChild("GeneratorPoint1")
+            or v:FindFirstChild("GeneratorPoint2")
+            or v:FindFirstChild("GeneratorPoint3")
+            or v:FindFirstChild("GeneratorPoint4")
+        ) then
+
+            table.insert(Generators, v)
+
+        end
+
+    end
+
+    return Generators
+
+end
+
+--// =========================
+--// FIND NEAREST GENERATOR
+--// =========================
+
+local function GetNearestGenerator()
+
+    local HRP = GetHRP()
+    if not HRP then
+        return nil
+    end
+
+    local Closest = nil
+    local ClosestDistance = math.huge
+
+    for _,Generator in ipairs(GetAllGenerators()) do
+
+        local Position
+
+        pcall(function()
+            Position = Generator:GetPivot().Position
+        end)
+
+        if Position then
+
+            local Distance =
+                (HRP.Position - Position).Magnitude
+
+            if Distance < ClosestDistance then
+
+                ClosestDistance = Distance
+                Closest = Generator
+
             end
+
         end
+
     end
-    progress = progress > 1 and progress / 100 or progress
-    return progress >= 0.99
+
+    return Closest
+
 end
 
--- ── หา GeneratorPoint ที่ใกล้เราที่สุด (Point1–4) ────────────────────────────────
-local function getClosestGenPoint(root, maxDist)
-    local gens    = getAllGeneratorsInWorkspace()
-    local bestGen, bestPt, bestDist = nil, nil, maxDist or 999
-    for _, gen in ipairs(gens) do
-        if gen.Parent and not isGeneratorDone(gen) then
-            for i = 1, 4 do
-                local pt = gen:FindFirstChild("GeneratorPoint" .. i)
-                if pt then
-                    local d = (root.Position - pt.Position).Magnitude
-                    if d < bestDist then
-                        bestDist = d
-                        bestGen  = gen
-                        bestPt   = pt
-                    end
-                end
+--// =========================
+--// FIND NEAREST REPAIR POINT
+--// =========================
+
+local function GetNearestPoint(Generator)
+
+    local HRP = GetHRP()
+
+    if not HRP or not Generator then
+        return nil
+    end
+
+    local ClosestPoint = nil
+    local ClosestDistance = math.huge
+
+    for i = 1,4 do
+
+        local Point =
+            Generator:FindFirstChild(
+                "GeneratorPoint"..i
+            )
+
+        if Point and Point:IsA("BasePart") then
+
+            local Distance =
+                (HRP.Position - Point.Position).Magnitude
+
+            if Distance < ClosestDistance then
+
+                ClosestDistance = Distance
+                ClosestPoint = Point
+
             end
+
         end
+
     end
-    return bestGen, bestPt, bestDist
+
+    return ClosestPoint
+
 end
 
--- ── เช็คว่า repairPoint ยังใช้ได้อยู่ ────────────────────────────────────────────
-local function isRepairValid()
-    return GEN.repairPoint
-        and GEN.repairPoint.Parent
-        and GEN.repairModel
-        and GEN.repairModel.Parent
-        and not isGeneratorDone(GEN.repairModel)
-end
+--// =========================
+--// CANCEL GENERATOR
+--// =========================
 
-local function clearRepairState()
-    GEN.repairPoint = nil
-    GEN.repairModel = nil
-    GEN.lastPos     = nil
-end
+local function CancelGenerator()
 
--- ── Cancel generator (ยิง RepairEvent false) ──────────────────────────────────────
-local function cancelRepair()
-    if not isRepairValid() then clearRepairState(); return end
-    if GEN.cancelDB then return end
-    GEN.cancelDB = true
+    if not CurrentPoint then
+        return
+    end
+
     pcall(function()
-        repairRemote:FireServer(GEN.repairPoint, false)
+
+        RepairRemote:FireServer(
+            CurrentPoint,
+            false
+        )
+
     end)
-    task.delay(0.4, function() GEN.cancelDB = false end)
+
 end
 
--- ── ตรวจจับการเดิน → auto cancel ─────────────────────────────────────────────────
-local _movAccum = 0
-RunService.Heartbeat:Connect(function(dt)
-    _movAccum += dt
-    if _movAccum < 0.07 then return end
-    _movAccum = 0
+--// =========================
+--// KEYBOARD CANCEL
+--// =========================
 
-    if not (AutoSkillPerfect or AutoSkillNeutral) then return end
-    if not isRepairValid() then clearRepairState(); return end
+UserInputService.InputBegan:Connect(function(Input, GameProcessed)
 
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    local hum  = char and char:FindFirstChild("Humanoid")
-    if not root or not hum then return end
-
-    -- เช็คระยะห่างจาก point
-    local distFromPoint = (root.Position - GEN.repairPoint.Position).Magnitude
-    if distFromPoint > 8 then return end
-
-    local prevPos  = GEN.lastPos or root.Position
-    local moved    = (root.Position - prevPos).Magnitude
-    GEN.lastPos    = root.Position
-
-    local isMoving = moved > GEN.MOVE_THRESH or hum.MoveDirection.Magnitude > 0.05
-    if isMoving and not GEN.cancelDB then
-        cancelRepair()
+    if GameProcessed then
+        return
     end
+
+    local Key = Input.KeyCode
+
+    if Key == Enum.KeyCode.W
+    or Key == Enum.KeyCode.A
+    or Key == Enum.KeyCode.S
+    or Key == Enum.KeyCode.D
+    or Key == Enum.KeyCode.X then
+
+        CancelGenerator()
+
+    end
+
 end)
 
--- ── กด X เพื่อ cancel (PC) ───────────────────────────────────────────────────────
-UserInputService.InputBegan:Connect(function(input, gpe)
-    if gpe then return end
-    if input.KeyCode == Enum.KeyCode.X then
-        if isRepairValid() and not GEN.cancelDB then
-            cancelRepair()
-            WindUI:Notify({
-                Title   = "Generator Cancelled",
-                Content = "กด X → cancel generator สำเร็จ",
-                Duration = 3,
-                Icon    = "x-circle"
-            })
-        end
+--// =========================
+--// MOBILE / MOVEMENT CANCEL
+--// =========================
+
+RunService.RenderStepped:Connect(function()
+
+    local Humanoid = GetHumanoid()
+
+    if not Humanoid then
+        return
     end
+
+    if Humanoid.MoveDirection.Magnitude > 0 then
+
+        CancelGenerator()
+
+    end
+
 end)
 
--- ── Skill loop หลัก (Perfect / Neutral) ──────────────────────────────────────────
-local _skillThread = nil
+--// =========================
+--// SKILL CHECK GUI
+--// =========================
 
-local function startSkillLoop(mode)
-    if _skillThread then task.cancel(_skillThread); _skillThread = nil end
+local function GetSkillCheck()
 
-    _skillThread = task.spawn(function()
-        local pGui = LocalPlayer:WaitForChild("PlayerGui")
+    local PlayerGui =
+        LocalPlayer:FindFirstChild("PlayerGui")
 
-        while (mode == "perfect" and AutoSkillPerfect)
-           or (mode == "neutral" and AutoSkillNeutral) do
-            task.wait(0.05)
+    if not PlayerGui then
+        return nil
+    end
 
-            local char = LocalPlayer.Character
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            if not root then continue end
+    local SkillGui =
+        PlayerGui:FindFirstChild(
+            "SkillCheckPromptGui"
+        )
 
-            -- อัปเดต repair state จาก point ที่ใกล้ที่สุด
-            local gen, pt, dist = getClosestGenPoint(root, 8)
-            if gen and pt then
-                GEN.repairModel = gen
-                GEN.repairPoint = pt
-            end
+    if not SkillGui then
+        return nil
+    end
 
-            -- รอ GUI SkillCheck
-            local sgui  = pGui:FindFirstChild("SkillCheckPromptGui")
-            if not sgui then continue end
-            local check = sgui:FindFirstChild("Check")
-            if not (check and check.Visible) then continue end
+    return SkillGui:FindFirstChild("Check")
 
-            -- ต้องอยู่ใกล้ point และ state valid
-            if not isRepairValid() then continue end
-            local d = (root.Position - GEN.repairPoint.Position).Magnitude
-            if d > 7 then continue end
-
-            if GEN.skillDB then continue end
-            GEN.skillDB = true
-
-            -- ยิง remote ตาม mode
-            if mode == "perfect" then
-                pcall(function()
-                    skillRemote:FireServer("perfect", 1, GEN.repairModel, GEN.repairPoint)
-                end)
-            else
-                pcall(function()
-                    skillRemote:FireServer("neutral", 0, GEN.repairModel, GEN.repairPoint)
-                end)
-            end
-
-            -- ซ่อน check GUI เพื่อไม่ให้ยิงซ้ำ
-            pcall(function() check.Visible = false end)
-
-            task.delay(0.15, function() GEN.skillDB = false end)
-        end
-
-        _skillThread = nil
-    end)
 end
 
--- ── restore ตอน respawn ──────────────────────────────────────────────────────────
-LocalPlayer.CharacterAdded:Connect(function()
-    clearRepairState()
-    if AutoSkillPerfect then task.delay(1, function() startSkillLoop("perfect") end) end
-    if AutoSkillNeutral then task.delay(1, function() startSkillLoop("neutral") end) end
-end)
+--// =========================
+--// FIRE SKILL CHECK
+--// =========================
 
--- ── UI Toggles ───────────────────────────────────────────────────────────────────
-SurTab:Section({ Title = "Feature Generator", Icon = "zap" })
+local function FireSkillCheck()
 
-SurTab:Toggle({
-    Title    = "Auto SkillCheck (Perfect)",
-    Desc     = "Automatically hits perfect generator skill checks",
-    Value    = AutoSkillPerfect,
-    Callback = function(v)
-        AutoSkillPerfect = v
-        Config:Set("AutoSkillPerfect", v); Config:Save()
-        if v then
-            AutoSkillNeutral = false
-            WindUI:Notify({
-                Title   = "Auto Generator | Perfect",
-                Content = "Press X or move joystick to cancel",
-                Duration = 5, Icon = "zap"
-            })
-            startSkillLoop("perfect")
-        else
-            if _skillThread then task.cancel(_skillThread); _skillThread = nil end
-        end
+    local Generator = GetNearestGenerator()
+
+    if not Generator then
+        return
     end
-})
 
-SurTab:Toggle({
-    Title    = "Auto SkillCheck (Neutral)",
-    Desc     = "Automatically hits neutral generator skill checks",
-    Value    = AutoSkillNeutral,
-    Callback = function(v)
-        AutoSkillNeutral = v
-        Config:Set("AutoSkillNeutral", v); Config:Save()
-        if v then
-            AutoSkillPerfect = false
-            WindUI:Notify({
-                Title   = "Auto Generator | Neutral",
-                Content = "Press X or move joystick to cancel",
-                Duration = 5, Icon = "zap"
-            })
-            startSkillLoop("neutral")
-        else
-            if _skillThread then task.cancel(_skillThread); _skillThread = nil end
-        end
+    local Point =
+        GetNearestPoint(Generator)
+
+    if not Point then
+        return
     end
-})
 
--- ====================== END GENERATOR SYSTEM ======================
+    CurrentGenerator = Generator
+    CurrentPoint = Point
+
+    --// PERFECT
+
+    if _G.AutoGen_Perfect then
+
+        pcall(function()
+
+            SkillCheckRemote:FireServer(
+                "perfect",
+                1,
+                Generator,
+                Point
+            )
+
+        end)
+
+    end
+
+    --// NEUTRAL
+
+    if _G.AutoGen_Neutral then
+
+        pcall(function()
+
+            SkillCheckRemote:FireServer(
+                "neutral",
+                0,
+                Generator,
+                Point
+            )
+
+        end)
+
+    end
+
+end
+
+--// =========================
+--// MAIN LOOP
+--// =========================
+
+
+
+--// =========================
+--// END
+--// =========================
+
 
 -- Feature Cheat (Survivor)
 SurTab:Section({ Title = "Feature Cheat", Icon = "bug" })
@@ -2236,8 +2332,34 @@ if NoClipEnabled then
     end)
 end
 
-if AutoSkillPerfect then startSkillLoop("perfect") end
-if AutoSkillNeutral then startSkillLoop("neutral") end
+task.spawn(function()
+
+    while task.wait() do
+
+        if not _G.AutoGen_Perfect
+        and not _G.AutoGen_Neutral then
+            continue
+        end
+
+        local Check = GetSkillCheck()
+
+        if not Check then
+            continue
+        end
+
+        if Check.Visible then
+
+            FireSkillCheck()
+
+            repeat
+                task.wait()
+            until not Check.Visible
+
+        end
+
+    end
+
+end)
 
 -- init world ESP cache
 if espEnabled then
