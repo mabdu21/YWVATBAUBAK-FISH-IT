@@ -1,4 +1,4 @@
--- Powered by nig | v455 (Reworked)
+-- Powered by nig | v541
 -- =========================
 local version = "Rework"
 local ver     = "v015.00"
@@ -2287,11 +2287,13 @@ ui.Creator.Request=function(requestData)
     if success then return result else error("HTTP Request failed: "..tostring(result)) end
 end
 
-local InviteCode="jWNDPNMmyB"
-local DiscordAPI="https://discord.com/api/v10/invites/"..InviteCode.."?with_counts=true&with_expiration=true"
-local function LoadDiscordInfo()
+-- [FIX] Compile ERROR: Out of local registers
+-- ห้ามเพิ่ม local ใน top-level ตรงนี้ เพราะ chunk นี้ใกล้ Roblox/Luau local limit 200
+settings.InviteCode="jWNDPNMmyB"
+settings.DiscordAPI="https://discord.com/api/v10/invites/"..settings.InviteCode.."?with_counts=true&with_expiration=true"
+function DYHUB_LoadDiscordInfo()
     local success,result=pcall(function()
-        return HttpService:JSONDecode(ui.Creator.Request({Url=DiscordAPI,Method="GET",Headers={["User-Agent"]="RobloxBot/1.0",["Accept"]="application/json"}}).Body)
+        return HttpService:JSONDecode(ui.Creator.Request({Url=settings.DiscordAPI,Method="GET",Headers={["User-Agent"]="RobloxBot/1.0",["Accept"]="application/json"}}).Body)
     end)
     if success and result and result.guild then
         local DiscordInfo=Info:Paragraph({
@@ -2300,18 +2302,18 @@ local function LoadDiscordInfo()
             Image="https://cdn.discordapp.com/icons/"..result.guild.id.."/"..result.guild.icon..".png?size=1024",ImageSize=42,
         })
         Info:Button({Title="Update Info",Callback=function()
-            local ok,r=pcall(function() return HttpService:JSONDecode(ui.Creator.Request({Url=DiscordAPI,Method="GET"}).Body) end)
+            local ok,r=pcall(function() return HttpService:JSONDecode(ui.Creator.Request({Url=settings.DiscordAPI,Method="GET"}).Body) end)
             if ok and r and r.guild then
                 DiscordInfo:SetDesc(' <font color="#52525b">●</font> Member Count : '..tostring(r.approximate_member_count)..'\n <font color="#16a34a">●</font> Online Count : '..tostring(r.approximate_presence_count))
                 WindUI:Notify({Title="Discord Info Updated",Content="Refreshed!",Duration=2,Icon="refresh-cw"})
             else WindUI:Notify({Title="Update Failed",Content="Could not refresh.",Duration=3,Icon="alert-triangle"}) end
         end})
         Info:Button({Title="Copy Discord Invite",Callback=function()
-            setclipboard("https://discord.gg/"..InviteCode); WindUI:Notify({Title="Copied!",Content="Discord invite copied!",Duration=2,Icon="clipboard-check"})
+            setclipboard("https://discord.gg/"..settings.InviteCode); WindUI:Notify({Title="Copied!",Content="Discord invite copied!",Duration=2,Icon="clipboard-check"})
         end})
     else Info:Paragraph({Title="Error fetching Discord Info",Desc="Unable to load.",Image="triangle-alert",ImageSize=26,Color="Red"}) end
 end
-LoadDiscordInfo()
+DYHUB_LoadDiscordInfo()
 
 Info:Divider()
 Info:Section({Title="DYHUB Information",TextXAlignment="Center",TextSize=17})
