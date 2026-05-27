@@ -250,7 +250,7 @@ Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/28/2026 | CL: " .. ver,
-    Desc  = [[•• [ Fixed Premium ] Auto Parry no longer triggers just from walking into / touching the killer
+    Desc  = [[• [ Fixed Premium ] Auto Parry no longer triggers just from walking into / touching the killer
 • [ Improved Premium ] Fast, Smart, and Predict now parry immediately on killer attack animation
 • [ Improved Premium ] Predict uses extra movement lead tuned for ping 60-100+ ms]],
 })
