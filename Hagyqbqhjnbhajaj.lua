@@ -1,4 +1,4 @@
--- Powered by nig | v523
+-- Powered by nig | v525
 -- =========================
 local version = "Rework"
 local ver     = "v015.06"
@@ -290,13 +290,13 @@ _G.AutoParryMode  = settings.AutoParryMode
 _G.AutoParryRange = settings.AutoParryRange
 
 local LastParry       = 0
-local PARRY_CD        = 0.060 -- tuned for ping 60-100; stops double-spam but still instant
+local PARRY_CD        = 0.03 -- tuned for ping 60-100; stops double-spam but still instant
 local Hooked_AP       = {}
 local CharCons_AP     = {}
 local IsMobile        = UIS_AP.TouchEnabled and not UIS_AP.KeyboardEnabled
 local PARRY_ICON_ID   = "92951359322494"
 local HOOK_NEAR_DIST  = settings.HookNearDist
-local HP_CARRIED      = 60
+local HP_CARRIED      = 20
 local HP_DOWNED       = 20
 local FALLBACK_TICK   = 0
 local REHOOK_TICK     = 0
