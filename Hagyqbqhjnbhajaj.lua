@@ -1,9 +1,9 @@
--- Powered by nig | v531
+-- Powered by nig | v535
 -- =========================
 local version = "Rework"
-local ver     = "v015.00"
+local ver     = "v015.01"
 -- =========================
--- CHANGELOG v015.00
+-- CHANGELOG v015.01
 -- [Fixed]   Auto Gen: หา GeneratorPoint ได้ทุกชื่อ (ไม่จำกัดแค่ 1-4)
 -- [Fixed]   Auto Gen: retry repairRemote ถ้า fire ไม่ติด + validate ก่อน fire
 -- [Fixed]   Auto Gen: _invalidateGenCache เมื่อ gen เสร็จ (prevent หา gen ที่ done แล้ว)
@@ -270,6 +270,9 @@ Info:Paragraph({
 })
 Info:Divider()
 
+-- Runtime bridge: ใช้แชร์ฟังก์ชันข้าม do-scope เพื่อลด local register ไม่ให้เกิน 200
+local DYHUB_RUNTIME = {}
+
 -- =====================================================================================
 --  HELPER: isKillerChar (shared, defined early)
 -- =====================================================================================
@@ -290,6 +293,7 @@ end
 --  [Fix] Hooked_AP cleanup เมื่อ character removed
 --  [Fix] isParryReady() fallback logic ดีขึ้น
 -- =====================================================================================
+do
 local UIS_AP = UserInputService
 local Vim_AP = VIM
 local LP_AP  = LocalPlayer
@@ -625,9 +629,16 @@ else
     })
 end
 
+DYHUB_RUNTIME.ResetHookCache = function()
+    _hookCache = {}
+    _hookCacheTick = 0
+end
+end -- AUTO PARRY do-scope
+
 -- =====================================================================================
 --  ESP SYSTEM  — [Fixed lag, fixed Pallet name, fixed BasePart gen]
 -- =====================================================================================
+do
 local COLOR_SURVIVOR       = Color3.fromRGB(0,     0,  255)
 local COLOR_MURDERER       = Color3.fromRGB(255,   0,    0)
 local COLOR_GENERATOR_DONE = Color3.fromRGB(0,   255,    0)
@@ -1193,7 +1204,41 @@ EspTab:Toggle({ Title = "Show Highlight", Desc = "Adds highlights around ESP tar
 EspTab:Toggle({ Title = "Show Percent (Generator)", Desc = "Displays generator percent values", Value = ShowPercent,
     Callback = function(v) ShowPercent = v; settings.ShowPercent = v; Config:Set("ShowPercent", v); Config:Save() end })
 
+DYHUB_RUNTIME.InvalidateGenCache = _invalidateGenCache
+DYHUB_RUNTIME.InvalidateWorldCache = invalidateWorldCache
+DYHUB_RUNTIME.GetFolderGenerator = getFolderGenerator
+DYHUB_RUNTIME.GetGeneratorProgress = getGeneratorProgress
+DYHUB_RUNTIME.GeneratorFinished = generatorFinished
+DYHUB_RUNTIME.RebuildWorldCacheAsync = rebuildWorldCacheAsync
+DYHUB_RUNTIME.IsEspEnabled = function()
+    return espEnabled
+end
+end -- ESP SYSTEM do-scope
+
+local function _invalidateGenCache()
+    if DYHUB_RUNTIME.InvalidateGenCache then return DYHUB_RUNTIME.InvalidateGenCache() end
+end
+local function invalidateWorldCache()
+    if DYHUB_RUNTIME.InvalidateWorldCache then return DYHUB_RUNTIME.InvalidateWorldCache() end
+end
+local function getFolderGenerator()
+    if DYHUB_RUNTIME.GetFolderGenerator then return DYHUB_RUNTIME.GetFolderGenerator() end
+    return {}
+end
+local function getGeneratorProgress(gen)
+    if DYHUB_RUNTIME.GetGeneratorProgress then return DYHUB_RUNTIME.GetGeneratorProgress(gen) end
+    return 0
+end
+local function generatorFinished(gen)
+    if DYHUB_RUNTIME.GeneratorFinished then return DYHUB_RUNTIME.GeneratorFinished(gen) end
+    return false
+end
+local function rebuildWorldCacheAsync()
+    if DYHUB_RUNTIME.RebuildWorldCacheAsync then return DYHUB_RUNTIME.RebuildWorldCacheAsync() end
+end
+
 -- ====================== MAIN TAB ======================
+do
 MainTab:Section({ Title = "Feature Gameplay", Icon = "target" })
 MainTab:Button({
     Title = "Aimbot (NEW)", Desc = "Advanced survivor aimbot settings and lock",
@@ -1352,6 +1397,7 @@ MainTab:Toggle({
         elseif _antiAfkThread then task.cancel(_antiAfkThread); _antiAfkThread = nil end
     end
 })
+end -- MAIN TAB do-scope
 
 -- =====================================================================================
 --  GENERATOR SYSTEM
@@ -1360,6 +1406,7 @@ MainTab:Toggle({
 --  [Fix] _invalidateGenCache เมื่อ gen เสร็จ ป้องกัน tp ไป gen ที่ done แล้ว
 --  [Fix] ตรวจ repairPoint ซ้ำก่อน tp ป้องกัน tp loop
 -- =====================================================================================
+do
 local GeneratorRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Generator")
 local skillRemote      = GeneratorRemotes:WaitForChild("SkillCheckResultEvent")
 local repairRemote     = GeneratorRemotes:WaitForChild("RepairEvent")
@@ -1726,7 +1773,24 @@ SurTab:Button({ Title="Self UnHook (Not 100%)",
     Desc = "Attempts to free yourself from hooks",
     Callback=function() ReplicatedStorage.Remotes.Carry.SelfUnHookEvent:FireServer() end })
 
+DYHUB_RUNTIME.ClearRepairState = clearRepairState
+DYHUB_RUNTIME.StartGenLoop = startGenLoop
+DYHUB_RUNTIME.StartSkillLoop = startSkillLoop
+DYHUB_RUNTIME.RestoreGeneratorLoops = function()
+    if AutoGenRepair then startGenLoop() end
+    if AutoSkillPerfect then startSkillLoop("perfect") end
+    if AutoSkillNeutral then startSkillLoop("neutral") end
+end
+DYHUB_RUNTIME.OnCharacterAdded_Generator = function()
+    clearRepairState()
+    if AutoGenRepair then task.delay(1, startGenLoop) end
+    if AutoSkillPerfect then task.delay(1, function() startSkillLoop("perfect") end) end
+    if AutoSkillNeutral then task.delay(1, function() startSkillLoop("neutral") end) end
+end
+end -- GENERATOR do-scope
+
 -- ====================== KILLER TAB ======================
+do
 local DYHUB_AimbotEnabled         = false
 local DYHUB_Aimbot28Enabled       = false
 local DYHUB_LockedTarget          = nil
@@ -2130,8 +2194,10 @@ killerTab:Button({Title="Fix Cam (3rd Person Camera)",
         local head=character:FindFirstChild("Head"); if head then head.Anchored=false end
     end
 end})
+end -- KILLER TAB do-scope
 
 -- ====================== PLAYER TAB ======================
+do
 local speedEnabled   = settings.SpeedEnabled
 local flyNoclipSpeed = settings.SpeedWalk
 local NoClipEnabled  = settings.NoClipEnabled
@@ -2198,7 +2264,23 @@ PlayerTab:Toggle({Title="No Fall (Beta)",
     Desc = "Prevents movement slowdown after falling",Value=false,
     Callback=function(v) NoFallEnabled=v; settings.NoFallEnabled=v end})
 
+DYHUB_RUNTIME.RestoreNoClip = function()
+    if NoClipEnabled then
+        if noclipConnection then noclipConnection:Disconnect() end
+        noclipConnection = RunService.Stepped:Connect(function()
+            local char = LocalPlayer.Character
+            if char then
+                for _, part in pairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then part.CanCollide = false end
+                end
+            end
+        end)
+    end
+end
+end -- PLAYER TAB do-scope
+
 -- ====================== TELEPORT TAB ======================
+do
 local function getCFrame(obj)
     if obj:IsA("BasePart") then return obj.CFrame
     elseif obj:IsA("Model") then
@@ -2251,8 +2333,10 @@ TeleportTab:Button({Title="Refresh All", Desc = "Updates all dropdowns",Callback
     GenTarget=nil; _invalidateGenCache(); invalidateWorldCache()
     print("[DYHUB] Refresh All completed")
 end})
+end -- TELEPORT TAB do-scope
 
 -- ====================== SETTINGS TAB ======================
+do
 Main3:Section({Title="Save Config",Icon="save"})
 Main3:Button({Title="Save Config (NOW)", Desc = "Saves all current settings immediately.",Callback=function()
     Config:Save(); WindUI:Notify({Title="Config Saved",Content="Config saved successfully!",Duration=2,Icon="save"})
@@ -2291,8 +2375,10 @@ Main3:Button({Title="Rejoin", Desc = "Rejoins the current game server.",Callback
     WindUI:Notify({Title="Rejoin",Content="Rejoining...",Duration=2,Icon="refresh-cw"}); task.wait(1)
     TeleportService:Teleport(game.PlaceId,LocalPlayer)
 end})
+end -- SETTINGS TAB do-scope
 
 -- ====================== INFORMATION TAB ======================
+do
 ui.Creator.Request=function(requestData)
     local success,result=pcall(function()
         if HttpService.RequestAsync then
@@ -2337,36 +2423,27 @@ Info:Paragraph({Title="Social",Desc="Copy link social media for follow!",Image="
     Buttons={{Icon="copy",Title="Copy Link",Callback=function() setclipboard("https://guns.lol/DYHUB") end}}})
 Info:Paragraph({Title="Discord",Desc="Join our discord for more scripts!",Image="rbxassetid://104487529937663",ImageSize=30,
     Buttons={{Icon="copy",Title="Copy Link",Callback=function() setclipboard("https://discord.gg/jWNDPNMmyB") end}}})
+end -- INFORMATION TAB do-scope
 
 -- =====================================================================================
 --  AUTO RESTORE ON LOAD
 --  [Fix] ย้ายมาอยู่หลัง define ตัวแปรและฟังก์ชันทั้งหมด ป้องกัน nil error
 -- =====================================================================================
 LocalPlayer.CharacterAdded:Connect(function()
-    clearRepairState()
-    _hookCache = {}; _hookCacheTick = 0  -- reset hook cache เมื่อ respawn
-    if AutoGenRepair    then task.delay(1, startGenLoop) end
-    if AutoSkillPerfect then task.delay(1, function() startSkillLoop("perfect") end) end
-    if AutoSkillNeutral then task.delay(1, function() startSkillLoop("neutral") end) end
+    if DYHUB_RUNTIME.ResetHookCache then DYHUB_RUNTIME.ResetHookCache() end
+    if DYHUB_RUNTIME.OnCharacterAdded_Generator then DYHUB_RUNTIME.OnCharacterAdded_Generator() end
 end)
 
 -- restore noclip
-if NoClipEnabled then
-    noclipConnection=RunService.Stepped:Connect(function()
-        local char=LocalPlayer.Character
-        if char then for _,part in pairs(char:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide=false end end end
-    end)
-end
+if DYHUB_RUNTIME.RestoreNoClip then DYHUB_RUNTIME.RestoreNoClip() end
 
 -- restore gen/skill loops
-if AutoGenRepair    then startGenLoop() end
-if AutoSkillPerfect then startSkillLoop("perfect") end
-if AutoSkillNeutral then startSkillLoop("neutral") end
+if DYHUB_RUNTIME.RestoreGeneratorLoops then DYHUB_RUNTIME.RestoreGeneratorLoops() end
 
 -- init world ESP cache
-if espEnabled then
+if DYHUB_RUNTIME.IsEspEnabled and DYHUB_RUNTIME.IsEspEnabled() then
     task.delay(2, function() rebuildWorldCacheAsync() end)
 end
 
 print("[DYHUB] "..version.." | "..ver.." loaded successfully!")
-print("[DYHUB] Config active | Auto saving every "..tostring(AutoSaveDelay).."s")
+print("[DYHUB] Config active | Auto saving every "..tostring(settings.AutoSaveDelay).."s")
