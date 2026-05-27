@@ -1,4 +1,4 @@
--- Powered by nig | v450 (Reworked)
+-- Powered by nig | v455 (Reworked)
 -- =========================
 local version = "Rework"
 local ver     = "v014.22"
@@ -105,7 +105,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config_main_01.json"
+    self.ConfigPath = ConfigFolder .. "/config_main_02.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -221,7 +221,7 @@ local IsMobile  = UIS_AP.TouchEnabled and not UIS_AP.KeyboardEnabled
 local PARRY_ICON_ID = "92951359322494"
 
 -- ── Hook detection range (studs) ──────────────────────────────────────────────────
-local HOOK_NEAR_DIST = 12   -- ถ้าอยู่ใกล้ hook ภายใน 12 studs
+local HOOK_NEAR_DIST = Config:Get("hookrange", 6)   -- ถ้าอยู่ใกล้ hook ภายใน 12 studs
 local HP_CARRIED     = 60   -- HP ≤ 60 ถือว่ากำลังถูก carry
 local HP_DOWNED      = 20   -- HP = 20 ถือว่า downed
 
@@ -489,11 +489,12 @@ if isPremium then
         end
     })
     SurTab:Slider({
-        Title    = "Hook Detect Range (studs)",
-        Desc     = "ระยะตรวจ Hook (ถ้าใกล้ hook และ HP ≤ 60 จะหยุด parry)",
+        Title    = "Hook Detect Range",
+        Desc     = "Hook detection range if get hook parry will stop (studs)",
         Value    = { Min=5, Max=25, Default=HOOK_NEAR_DIST },
         Step     = 1,
-        Callback = function(v) HOOK_NEAR_DIST = v end
+        Callback = function(v) HOOK_NEAR_DIST = v
+        Config:Set("hookrange", v); Config:Save() end
     })
 else
     -- Free user: แสดงแค่ข้อความบอก premium
