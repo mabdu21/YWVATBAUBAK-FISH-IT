@@ -1,7 +1,7 @@
 -- Powered by nig | v523
 -- =========================
 local version = "Rework"
-local ver     = "v015.05"
+local ver     = "v015.06"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -250,52 +250,9 @@ Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/28/2026 | CL: " .. ver,
-    Desc  = [[• [ Reword ] Speed Walk description changed to a cleaner CFrame movement description
-• [ Reword ] Auto Parry description and mode info simplified for easier understanding
-• [ Reword ] Latest Update text updated to match the new v015.05 generator optimization changes
-
-• [ New ] Auto Parry v6 with rehook system for killer, weapon, and character changes
-• [ New ] Auto Parry heartbeat fallback scan if AnimationPlayed does not fire
-• [ New ] Recursive mobile parry button finder with PC fallback support
-• [ New ] Runtime bridge for sharing functions across do-scope safely
-
-• [ Added ] Auto Generator v4 Lite system
-• [ Added ] Cached generator list, repair point cache, and progress cache
-• [ Added ] Cached SkillCheck GUI / Check object lookup
-• [ Added ] Debounced generator cache invalidation when map objects change
-• [ Added ] Movement cancel support using X, WASD, arrow keys, space, and mobile joystick
-• [ Added ] Auto Generator restore after respawn / character reload
-
-• [ Fixed ] Auto Generator lag/freeze when enabled
-• [ Fixed ] SkillCheck loop no longer scans all generators every tick
-• [ Fixed ] Generator scan now prioritizes workspace.Map before fallback workspace scan
-• [ Fixed ] Repair loop no longer repeatedly teleports to the same point too fast
-• [ Fixed ] Generator cache clears when generators / repair points are added or removed
-• [ Fixed ] Auto Parry missing hooks after killer or weapon changes
-• [ Fixed ] Mobile parry button detection is more reliable
-
-• [ Improved ] Auto Generator now supports more generator and repair point names
-• [ Improved ] Teleport + Repair now avoids generators near the killer
-• [ Improved ] Repair retry timing is slower and safer to reduce lag
-• [ Improved ] Auto SkillCheck Perfect / Neutral now share one optimized system
-• [ Improved ] Settings now use a centralized settings table
-• [ Improved ] Anti-AFK toggle now updates settings table before saving
-• [ Improved ] Speed Walk slider now saves through settings table
-
-• [ Optimized ] Removed repeated full GetDescendants scans from active generator loops
-• [ Optimized ] Generator scan is cached and debounced
-• [ Optimized ] Repair point lookup is cached per generator
-• [ Optimized ] Generator progress check is cached briefly
-• [ Optimized ] GUI scan is throttled instead of checking deeply every tick
-• [ Optimized ] Auto Generator loop delay increased to reduce freezing
-
-• [ Kept ] Auto SkillCheck Perfect mode
-• [ Kept ] Auto SkillCheck Neutral mode
-• [ Kept ] Auto Generator teleport + repair
-• [ Kept ] Cancel by X, movement keys, and mobile joystick
-• [ Kept ] Premium-only Auto Parry system
-• [ Kept ] ESP cached world scan system
-• [ Kept ] No Clip, No Fall, Speed Walk, Teleport, and other existing features]],
+    Desc  = [[•• [ Fixed Premium ] Auto Parry no longer triggers just from walking into / touching the killer
+• [ Improved Premium ] Fast, Smart, and Predict now parry immediately on killer attack animation
+• [ Improved Premium ] Predict uses extra movement lead tuned for ping 60-100+ ms]],
 })
 Info:Divider()
 
@@ -333,7 +290,7 @@ _G.AutoParryMode  = settings.AutoParryMode
 _G.AutoParryRange = settings.AutoParryRange
 
 local LastParry       = 0
-local PARRY_CD        = 0.045
+local PARRY_CD        = 0.060 -- tuned for ping 60-100; stops double-spam but still instant
 local Hooked_AP       = {}
 local CharCons_AP     = {}
 local IsMobile        = UIS_AP.TouchEnabled and not UIS_AP.KeyboardEnabled
@@ -343,6 +300,7 @@ local HP_CARRIED      = 60
 local HP_DOWNED       = 20
 local FALLBACK_TICK   = 0
 local REHOOK_TICK     = 0
+local AttackTracks_AP  = setmetatable({}, { __mode = "k" })
 
 local function safeDisconnect(c)
     pcall(function()
@@ -509,57 +467,168 @@ local function fireParryBtn()
     if IsMobile then fireParryMobile() else fireParryPC() end
 end
 
+local function getParryLeadTime()
+    local mode = _G.AutoParryMode or "Fast"
+    if mode == "Predict" then
+        return 0.11 -- ping 60-100: more lead for moving killers
+    elseif mode == "Smart" then
+        return 0.09
+    end
+    return 0.08
+end
+
 local function getThreatLevel(killerChar)
     local my = LP_AP.Character
     local myHRP = getRoot(my)
     local ksHRP = getRoot(killerChar)
-    if not myHRP or not ksHRP then return 0, math.huge end
+    if not myHRP or not ksHRP then return 0, math.huge, false end
 
+    local range = _G.AutoParryRange or 20
     local delta = myHRP.Position - ksHRP.Position
-    local dist = delta.Magnitude
-    if dist > (_G.AutoParryRange or 20) then return 0, dist end
+    local rawDist = delta.Magnitude
+    if rawDist > range + 3 then return 0, rawDist, false end
 
     local vel = ksHRP.AssemblyLinearVelocity or Vector3.zero
-    local predicted = ksHRP.Position + vel * 0.09
-    dist = (myHRP.Position - predicted).Magnitude
-    if dist > (_G.AutoParryRange or 20) then return 0, dist end
+    local predicted = ksHRP.Position + vel * getParryLeadTime()
+    local predDelta = myHRP.Position - predicted
+    local dist = predDelta.Magnitude
+    if dist > range + 1.5 then return 0, dist, false end
 
-    local toMe = delta.Magnitude > 0.05 and delta.Unit or ksHRP.CFrame.LookVector
+    local toMe = rawDist > 0.05 and delta.Unit or ksHRP.CFrame.LookVector
     local dot = ksHRP.CFrame.LookVector:Dot(toMe)
-    local distScore  = 1 - math.clamp(dist / (_G.AutoParryRange or 20), 0, 1)
+    local facing = dot > -0.05 or rawDist <= 5.5
+
+    local distScore  = 1 - math.clamp(dist / range, 0, 1)
     local dotScore   = math.clamp((dot + 1) * 0.5, 0, 1)
-    local speedScore = math.clamp(vel.Magnitude / 28, 0, 1)
-    local closeBoost = dist <= 7 and 0.18 or 0
-    return math.clamp((distScore * 0.50) + (dotScore * 0.32) + (speedScore * 0.18) + closeBoost, 0, 1), dist
+    local speedScore = math.clamp(vel.Magnitude / 30, 0, 1)
+    local closeBoost = rawDist <= 6.5 and 0.12 or 0
+
+    return math.clamp((distScore * 0.54) + (dotScore * 0.30) + (speedScore * 0.16) + closeBoost, 0, 1), dist, facing
 end
 
 local ANIM_HITFRAME = {
-    ["rbxassetid://139369275981139"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://110355011987939"] = { preDelay=0.00, hitAt=0.13 },
+    ["rbxassetid://139369275981139"] = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://110355011987939"] = { preDelay=0.00, hitAt=0.12 },
     ["rbxassetid://135002183282873"] = { preDelay=0.00, hitAt=0.8 },
     ["rbxassetid://121216847022485"] = { preDelay=0.00, hitAt=0.8 },
-    ["rbxassetid://105374834496520"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://111920872708571"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://118907603246885"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://78432063483146"]  = { preDelay=0.00, hitAt=0.13 },
+    ["rbxassetid://105374834496520"] = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://111920872708571"] = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://118907603246885"] = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://78432063483146"]  = { preDelay=0.00, hitAt=0.12 },
     ["rbxassetid://113255068724446"] = { preDelay=0.00, hitAt=0.9 },
     ["rbxassetid://74968262036854"]  = { preDelay=0.00, hitAt=0.9 },
     ["rbxassetid://129784271201071"] = { preDelay=0.00, hitAt=0.9 },
     ["rbxassetid://132817836308238"] = { preDelay=0.00, hitAt=0.9 },
-    ["rbxassetid://112166042383605"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://122812055447896"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://117042998468241"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://133963973694098"] = { preDelay=0.00, hitAt=0.13 },
+    ["rbxassetid://112166042383605"] = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://122812055447896"] = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://117042998468241"] = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://133963973694098"] = { preDelay=0.00, hitAt=0.12 },
 }
 
-local function execParry(killerChar, minThreat)
+
+local function getTrackAnimId(track)
+    local ok, anim = pcall(function() return track and track.Animation end)
+    if ok and anim then return tostring(anim.AnimationId or "") end
+    return ""
+end
+
+local function getTrackName(track)
+    local name = ""
+    pcall(function()
+        name = tostring(track.Name or "")
+        local anim = track.Animation
+        if anim then name = name .. " " .. tostring(anim.Name or "") end
+    end)
+    return name:lower()
+end
+
+local function isActionPriority(track)
+    local ok, priority = pcall(function() return track.Priority end)
+    if not ok then return false end
+    return priority == Enum.AnimationPriority.Action
+        or priority == Enum.AnimationPriority.Action2
+        or priority == Enum.AnimationPriority.Action3
+        or priority == Enum.AnimationPriority.Action4
+end
+
+local function hasAttackWord(text)
+    text = tostring(text or ""):lower()
+    return text:find("attack", 1, true)
+        or text:find("slash", 1, true)
+        or text:find("swing", 1, true)
+        or text:find("stab", 1, true)
+        or text:find("hit", 1, true)
+        or text:find("punch", 1, true)
+        or text:find("lunge", 1, true)
+        or text:find("melee", 1, true)
+        or text:find("weapon", 1, true)
+        or text:find("heavy", 1, true)
+        or text:find("m1", 1, true)
+        or text:find("m2", 1, true)
+end
+
+local function hasMoveWord(text)
+    text = tostring(text or ""):lower()
+    return text:find("idle", 1, true)
+        or text:find("walk", 1, true)
+        or text:find("run", 1, true)
+        or text:find("sprint", 1, true)
+        or text:find("jump", 1, true)
+        or text:find("fall", 1, true)
+        or text:find("carry", 1, true)
+        or text:find("equip", 1, true)
+end
+
+local function trackIsEarly(track, fallback)
+    local ok, pos = pcall(function() return track.TimePosition end)
+    if not ok then return true end
+    return pos <= (fallback and 0.28 or 0.42)
+end
+
+local function isAttackTrack(track, animId)
+    animId = animId or getTrackAnimId(track)
+    if ANIM_HITFRAME[animId] then return true end
+
+    local name = getTrackName(track)
+    if hasMoveWord(name) then return false end
+    if hasAttackWord(name) then return true end
+
+    if isActionPriority(track) then
+        local ok, length = pcall(function() return track.Length end)
+        if (not ok) or length <= 2.2 then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function markTrackSeen(track)
+    if not track then return false end
+    if AttackTracks_AP[track] then return false end
+    AttackTracks_AP[track] = os.clock()
+    return true
+end
+
+local function getModeTuning(fallback)
+    local mode = _G.AutoParryMode or "Fast"
+    if mode == "Smart" then
+        return fallback and 0.14 or 0.08, true
+    elseif mode == "Predict" then
+        return fallback and 0.12 or 0.06, true
+    end
+    return fallback and 0.10 or 0.04, false
+end
+
+local function execParry(killerChar, minThreat, requireFacing)
     if not _G.AutoParry then return end
     if not killerChar or not killerChar.Parent then return end
     if not shouldParry() then return end
     if not isParryReady() then return end
 
-    local threat = getThreatLevel(killerChar)
+    local threat, dist, facing = getThreatLevel(killerChar)
     if threat < (minThreat or 0.01) then return end
+    if requireFacing and not facing and dist > 6.5 then return end
 
     local now = os.clock()
     if now - LastParry < PARRY_CD then return end
@@ -568,31 +637,15 @@ local function execParry(killerChar, minThreat)
 end
 
 local function scheduleParry(kc, animId, track, fallback)
-    local mode = _G.AutoParryMode or "Fast"
-    local info = ANIM_HITFRAME[animId]
-    if not info and fallback then
-        info = { preDelay = 0, hitAt = 0.09 }
-    elseif not info then
-        return
-    end
+    if not kc or not kc.Parent then return end
+    if not fallback and not ANIM_HITFRAME[animId] then return end
+    if track and not trackIsEarly(track, fallback) then return end
 
-    if mode == "Fast" then
-        execParry(kc, fallback and 0.28 or 0.02)
-        return
-    end
+    local minThreat, requireFacing = getModeTuning(fallback)
 
-    local delayTime = info.hitAt
-    if mode == "Predict" and track then
-        local speed = 1
-        pcall(function() speed = math.max(track.Speed, 0.1) end)
-        delayTime = (info.hitAt / speed) * 0.38
-    end
-
-    task.spawn(function()
-        if info.preDelay > 0 then task.wait(info.preDelay) end
-        if delayTime > 0 then task.wait(delayTime) end
-        execParry(kc, fallback and 0.28 or 0.01)
-    end)
+    -- Important: all modes parry immediately when attack animation starts.
+    -- Fast = lowest filter, Smart = safer facing filter, Predict = safer + more lead time in getThreatLevel().
+    execParry(kc, minThreat, requireFacing)
 end
 
 local function hookChar_AP(char)
@@ -603,16 +656,12 @@ local function hookChar_AP(char)
     local function bindHum(hum)
         if not hum or CharCons_AP[char].Anim then return end
         CharCons_AP[char].Anim = hum.AnimationPlayed:Connect(function(track)
-            local anim = track and track.Animation
-            local id = anim and tostring(anim.AnimationId) or ""
-            if ANIM_HITFRAME[id] then
-                scheduleParry(char, id, track, false)
-                return
-            end
+            local id = getTrackAnimId(track)
+            local fallback = not ANIM_HITFRAME[id]
 
-            local threat, dist = getThreatLevel(char)
-            if dist <= (_G.AutoParryRange or 20) and threat >= 0.33 then
-                scheduleParry(char, id, track, true)
+            -- Do not parry from distance/contact only. Parry only when the killer plays an attack-like animation.
+            if isAttackTrack(track, id) and markTrackSeen(track) then
+                scheduleParry(char, id, track, fallback)
             end
         end)
     end
@@ -676,15 +725,24 @@ RunService.Heartbeat:Connect(function(dt)
         scanHookKillers()
     end
 
-    if FALLBACK_TICK < 0.065 then return end
+    if FALLBACK_TICK < 0.045 then return end
     FALLBACK_TICK = 0
 
+    -- Fallback no longer parries just because the killer is close.
+    -- It only catches attack animations that AnimationPlayed missed.
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LP_AP and plr.Character and isKillerChar(plr.Character) then
-            local threat = getThreatLevel(plr.Character)
-            if threat >= 0.62 then
-                execParry(plr.Character, 0.62)
-                break
+        local char = plr ~= LP_AP and plr.Character
+        if char and isKillerChar(char) then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
+                    local id = getTrackAnimId(track)
+                    local fallback = not ANIM_HITFRAME[id]
+                    if isAttackTrack(track, id) and trackIsEarly(track, fallback) and markTrackSeen(track) then
+                        scheduleParry(char, id, track, fallback)
+                        break
+                    end
+                end
             end
         end
     end
@@ -696,7 +754,7 @@ SurTab:Section({ Title = "Feature Survivor", Icon = "user" })
 if isPremium then
     SurTab:Paragraph({
         Title = "Information: Parry Mode",
-        Desc  = "• Fast = Instant\n• Smart = Small hitframe delay\n• Predict = Hitframe delay scaled by anim speed",
+        Desc  = "• Fast = instant on killer attack animation\n• Smart = instant + safer facing/range filter\n• Predict = instant + movement lead for ping 60-100",
         Image = "rbxassetid://104487529937663", ImageSize = 30,
     })
     SurTab:Toggle({
