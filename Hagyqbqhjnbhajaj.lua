@@ -1,23 +1,15 @@
 -- Powered by nig | v455 (Reworked)
 -- =========================
 local version = "Rework"
-local ver     = "v014.25"
+local ver     = "v014.23"
 -- =========================
--- CHANGELOG v014.25
--- [Hotfix]  Compile error: Out of local registers / DoGrab exceeded limit 200
--- [Fix]     Late aimbot/killer/player/settings locals no longer allocate top-level registers
--- [Keep]    Boot-safe remote lookup from v014.24
--- CHANGELOG v014.24
--- [Hotfix]  Boot-safe remotes / no infinite WaitForChild at load
--- [Hotfix]  Removed continue/compound assignments for executor compatibility
--- [Rework]  Generator Finder: หา generator ได้หลายโครงสร้าง / หลายแมพขึ้น
--- [Fix]     Generator cache invalidation + TTL กันหาไม่เจอหลังแมพเปลี่ยน/รีราวด์
--- [Fix]     SkillCheck GUI search แบบ recursive + visible chain check
--- [Fix]     Auto Generator blacklists gen เดิมชั่วคราวเมื่อ killer ใกล้
--- [Rework]  Auto Parry hook all non-local humanoids + fallback threat scan
--- [Fix]     Parry GUI ready check ไม่ล็อกตายกับ icon id เดียว
--- [Improve] PC parry กดตำแหน่งกลางจอ / Mobile ลดการแย่ง joystick
--- [Improve] Cleanup/connection guard ลดบัคหลังเริ่มเกมใหม่/respawn
+-- CHANGELOG v014.23
+-- [Fixed]   Auto Generator: ไม่ cancel repair ทันทีหลัง teleport
+-- [Fixed]   Auto Generator: หา Generator/GeneratorPoint แบบ recursive รองรับหลายแมพ
+-- [Fixed]   Auto Generator: retry RepairEvent ถ้า server ไม่เริ่มซ่อม
+-- [Improved] Auto Generator: cache invalidation หลังเปลี่ยนรอบ/แมพ + avoid killer 30 studs
+-- [Fixed]   Auto Parry: reconnect killer/weapon หลังเริ่มรอบใหม่
+-- [Improved] Auto Parry: AnimationPlayed + Heartbeat fallback + mobile tap ไม่ล็อก joystick
 
 repeat task.wait() until game:IsLoaded()
 
@@ -43,38 +35,10 @@ local StarterGui        = game:GetService("StarterGui")
 local TeleportService   = game:GetService("TeleportService")
 local VirtualUser       = game:GetService("VirtualUser")
 local VIM               = game:GetService("VirtualInputManager")
-local CollectionService = game:GetService("CollectionService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
 local Camera      = Workspace.CurrentCamera
-
--- ====================== BOOT SAFE HELPERS ======================
-local function safeCall(fn, ...)
-    local ok, result = pcall(fn, ...)
-    if ok then return result end
-    return nil
-end
-
-local function safePath(parent, ...)
-    local current = parent
-    for _, name in ipairs({ ... }) do
-        if not current then return nil end
-        current = current:FindFirstChild(name)
-    end
-    return current
-end
-
-local function safeNotify(title, content, icon)
-    pcall(function()
-        if WindUI and WindUI.Notify then
-            WindUI:Notify({ Title = tostring(title), Content = tostring(content), Duration = 4, Icon = icon or "info" })
-        else
-            warn("[DYHUB] " .. tostring(title) .. " | " .. tostring(content))
-        end
-    end)
-end
-
 
 -- ====================== CHARACTER CACHE ======================
 local Character        = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
@@ -144,11 +108,7 @@ function CustomConfig.new()
     self.ConfigPath = ConfigFolder .. "/config_main_02.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
-    pcall(function()
-        if type(isfolder) == "function" and type(makefolder) == "function" and not isfolder(ConfigFolder) then
-            makefolder(ConfigFolder)
-        end
-    end)
+    if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
     self:Load()
     return self
 end
@@ -159,19 +119,14 @@ function CustomConfig:Get(key, default)
 end
 function CustomConfig:Save()
     local ok, err = pcall(function()
-        if type(writefile) == "function" then
-            writefile(self.ConfigPath, HttpService:JSONEncode(self.ConfigData))
-        end
+        writefile(self.ConfigPath, HttpService:JSONEncode(self.ConfigData))
     end)
     if not ok then warn("[DYHUB] Save failed:", err) end
 end
 function CustomConfig:Load()
-    if type(isfile) == "function" and isfile(self.ConfigPath) then
+    if isfile(self.ConfigPath) then
         local ok, result = pcall(function()
-            if type(readfile) == "function" then
-                return HttpService:JSONDecode(readfile(self.ConfigPath))
-            end
-            return {}
+            return HttpService:JSONDecode(readfile(self.ConfigPath))
         end)
         if ok and type(result) == "table" then
             self.ConfigData = result
@@ -229,49 +184,32 @@ Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/27/2026 | CL: " .. ver,
-    Desc  = "• [ Hotfix ] Boot-safe: ไม่ค้างตอน Remotes/Generator ยังไม่โหลด\n• [ Fixed ] ตัด continue / += เพื่อรองรับ executor มากขึ้น\n• [ Rework ] Auto Generator Finder รองรับหลายแมพขึ้น\n• [ Rework ] Auto Parry hook all + fallback threat scan",
+    Desc  = "• [ Fixed ] Auto Generator cancel หลัง teleport\n• [ Fixed ] Generator finder แบบ recursive รองรับแมพที่ folder/model ซ้อนกัน\n• [ Improved ] RepairEvent retry + avoid killer 30 studs\n• [ Fixed ] Auto Parry reconnect หลังเปลี่ยนรอบ/weapon มาใหม่\n• [ Improved ] Auto Parry heartbeat fallback + mobile tap ลด joystick freeze",
 })
 Info:Divider()
 
 -- =====================================================================================
---  HELPER: isKillerChar (shared, defined early) — v014.23 robust role check
+--  HELPER: isKillerChar (shared, defined early)
 -- =====================================================================================
-local KILLER_KEYWORDS = { "killer", "murder", "murderer", "weapon", "knife", "blade", "axe", "sword", "gun", "chainsaw" }
-
-local function _nameHasAnyKeyword(name)
-    name = tostring(name or ""):lower()
-    for _, key in ipairs(KILLER_KEYWORDS) do
-        if name:find(key, 1, true) then return true end
-    end
-    return false
-end
-
 local function isKillerChar(char)
     if not char then return false end
-
-    local plr = Players:GetPlayerFromCharacter(char)
-    if plr then
-        local teamName = plr.Team and plr.Team.Name or ""
-        if _nameHasAnyKeyword(teamName) then return true end
-        local roleAttr = plr:GetAttribute("Role") or plr:GetAttribute("Class") or plr:GetAttribute("Type")
-        if _nameHasAnyKeyword(roleAttr) then return true end
-    end
-
-    local charRole = char:GetAttribute("Role") or char:GetAttribute("Class") or char:GetAttribute("Type")
-    if _nameHasAnyKeyword(charRole) then return true end
     if char:FindFirstChild("Weapon") then return true end
-
     for _, obj in ipairs(char:GetDescendants()) do
-        if (obj:IsA("Tool") or obj:IsA("Model") or obj:IsA("BasePart")) and _nameHasAnyKeyword(obj.Name) then
+        if (obj:IsA("Model") or obj:IsA("Tool")) and obj.Name:lower():find("weapon") then
             return true
         end
     end
-
     return false
 end
 
 -- =====================================================================================
---  AUTO PARRY SYSTEM v5  —  [Premium Only]  |  robust hook + fallback scan
+--  AUTO PARRY SYSTEM v5  —  [Premium Only]
+--  Fixes:
+--    • Re-hook killer every round / after weapon appears
+--    • Heartbeat fallback scan if AnimationPlayed misses
+--    • Safer mobile tap: no long VirtualInput hold, reduces joystick freeze
+--    • Cached hook positions, no Workspace:GetDescendants() on every parry
+--    • Better button/icon readiness check
 -- =====================================================================================
 local UIS_AP = UserInputService
 local Vim_AP = VIM
@@ -282,9 +220,9 @@ _G.AutoParryMode  = Config:Get("autoparrymode",  "Fast")
 _G.AutoParryRange = Config:Get("autoparryrange", 22)
 
 local LastParry = 0
-local PARRY_CD  = 0.08
+local PARRY_CD  = 0.10
 local Hooked_AP = setmetatable({}, { __mode = "k" })
-local AP_Conns  = setmetatable({}, { __mode = "k" })
+local Conn_AP   = setmetatable({}, { __mode = "k" })
 local IsMobile  = UIS_AP.TouchEnabled and not UIS_AP.KeyboardEnabled
 
 local PARRY_ICON_ID = "92951359322494"
@@ -292,107 +230,101 @@ local HOOK_NEAR_DIST = Config:Get("hookrange", 6)
 local HP_CARRIED     = 60
 local HP_DOWNED      = 20
 
-local AP_SCAN_INTERVAL = 0.045
-local AP_HOOK_INTERVAL = 1.0
-local AP_THREAT_FIRE   = 0.58
+local _hookCache = {}
+local _hookCacheAt = 0
+local _apScanAccum = 0
+local _apHookAccum = 0
+
+local function disconnectAP(char)
+    local bucket = Conn_AP[char]
+    if bucket then
+        for _, c in ipairs(bucket) do pcall(function() c:Disconnect() end) end
+    end
+    Conn_AP[char] = nil
+    Hooked_AP[char] = nil
+end
+
+local function addAPConn(char, conn)
+    if not Conn_AP[char] then Conn_AP[char] = {} end
+    table.insert(Conn_AP[char], conn)
+end
 
 local function getParryBtn()
     local pg = LP_AP:FindFirstChild("PlayerGui")
     if not pg then return nil end
 
     local s = pg:FindFirstChild("Survivor-mob")
-    if s then
-        local c = s:FindFirstChild("Controls")
-        if c then
-            local btn = c:FindFirstChild("Gui-mob")
-            if btn then return btn end
+    local c = s and s:FindFirstChild("Controls")
+    local b = c and c:FindFirstChild("Gui-mob")
+    if b then return b end
+
+    for _, obj in ipairs(pg:GetDescendants()) do
+        if obj.Name == "Gui-mob" and obj:IsA("GuiObject") then
+            return obj
         end
     end
-
-    -- fallback: บางแมพ/บางรอบ GUI path เปลี่ยน
-    for _, gui in ipairs(pg:GetDescendants()) do
-        local n = gui.Name:lower()
-        if (n == "gui-mob" or n:find("parry") or n:find("block")) and (gui:IsA("GuiButton") or gui:IsA("Frame")) then
-            return gui
-        end
-    end
-
     return nil
-end
-
-local function isGuiActuallyVisible(gui)
-    local obj = gui
-    while obj and obj ~= PlayerGui do
-        if obj:IsA("GuiObject") and obj.Visible == false then return false end
-        obj = obj.Parent
-    end
-    return true
 end
 
 local function isParryReady()
     local btn = getParryBtn()
-    if not btn then
-        -- PC บางรอบไม่มี mobile gui แต่ยัง parry ด้วย right click/F ได้
-        return not IsMobile
-    end
-    if btn:IsA("GuiObject") and not isGuiActuallyVisible(btn) then return false end
+    if not btn then return not IsMobile end
 
-    local icon = btn:FindFirstChild("icon", true)
+    local icon = btn:FindFirstChild("icon") or btn:FindFirstChildWhichIsA("ImageLabel", true) or btn:FindFirstChildWhichIsA("ImageButton", true)
     local target = icon or btn
-    if not (target:IsA("ImageLabel") or target:IsA("ImageButton")) then return true end
 
-    local image = tostring(target.Image or "")
-    local ok, col = pcall(function() return target.ImageColor3 end)
-    if ok then
-        local r, g, b = col.R * 255, col.G * 255, col.B * 255
-        if math.abs(r - 77) < 4 and math.abs(g - 77) < 4 and math.abs(b - 77) < 4 then
-            return false
+    if target:IsA("ImageLabel") or target:IsA("ImageButton") then
+        local idStr = tostring(target.Image or "")
+        if idStr ~= "" and not idStr:find(PARRY_ICON_ID) then return false end
+
+        local ok, col = pcall(function() return target.ImageColor3 end)
+        if ok and col then
+            if math.abs(col.R*255 - 77) < 4
+            and math.abs(col.G*255 - 77) < 4
+            and math.abs(col.B*255 - 77) < 4 then
+                return false
+            end
         end
     end
 
-    -- ถ้า icon id เปลี่ยน แต่ปุ่มยัง visible และไม่เทา ให้ถือว่าพร้อมแทนการล็อก false ตลอด
-    if image ~= "" and image:find(PARRY_ICON_ID, 1, true) then return true end
     return true
+end
+
+local function refreshHookCache()
+    if os.clock() - _hookCacheAt < 2 then return end
+    _hookCacheAt = os.clock()
+    local list = {}
+    pcall(function()
+        for _, desc in ipairs(Workspace:GetDescendants()) do
+            local n = desc.Name:lower()
+            if n == "hook" or n == "hookpoint" or n:find("hook") then
+                if desc:IsA("BasePart") then
+                    list[#list+1] = desc
+                elseif desc:IsA("Model") then
+                    local p = desc.PrimaryPart or desc:FindFirstChildWhichIsA("BasePart", true)
+                    if p then list[#list+1] = p end
+                end
+            end
+        end
+    end)
+    _hookCache = list
 end
 
 local function isPlayerDowned()
     local char = LP_AP.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
-    return hum and hum.Health <= HP_DOWNED
-end
-
-local _hookCache, _hookCacheAt = {}, 0
-local function rebuildHookCache()
-    local now = os.clock()
-    if now - _hookCacheAt < 2 then return _hookCache end
-    _hookCacheAt = now
-    local list = {}
-    for _, desc in ipairs(Workspace:GetDescendants()) do
-        if (desc.Name == "HookPoint" or desc.Name == "Hook") and (desc:IsA("BasePart") or desc:IsA("Model")) then
-            list[#list + 1] = desc
-        end
-    end
-    _hookCache = list
-    return list
+    return hum and hum.Health <= HP_DOWNED or false
 end
 
 local function isPlayerBeingCarriedToHook()
     local char = LP_AP.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hum or not hrp then return false end
-    if hum.Health > HP_CARRIED then return false end
+    if not hum or not hrp or hum.Health > HP_CARRIED then return false end
 
-    local myPos = hrp.Position
-    for _, hook in ipairs(rebuildHookCache()) do
-        local hookPos
-        if hook:IsA("BasePart") then
-            hookPos = hook.Position
-        elseif hook:IsA("Model") then
-            local p = hook.PrimaryPart or hook:FindFirstChildWhichIsA("BasePart", true)
-            if p then hookPos = p.Position end
-        end
-        if hookPos and (myPos - hookPos).Magnitude <= HOOK_NEAR_DIST then
+    refreshHookCache()
+    for _, part in ipairs(_hookCache) do
+        if part and part.Parent and (hrp.Position - part.Position).Magnitude <= HOOK_NEAR_DIST then
             return true
         end
     end
@@ -406,19 +338,14 @@ local function shouldParry()
 end
 
 local function fireParryPC()
-    local vp = Camera and Camera.ViewportSize or Vector2.new(0, 0)
-    local x, y = math.floor(vp.X * 0.5), math.floor(vp.Y * 0.5)
-
-    -- right click ก่อน เพราะเป็น input หลักของ PC
+    -- PC: right-click first, F as fallback.
     pcall(function()
-        Vim_AP:SendMouseButtonEvent(x, y, 1, true,  game, 1)
+        Vim_AP:SendMouseButtonEvent(0, 0, 1, true, game, 1)
         task.wait(0.012)
-        Vim_AP:SendMouseButtonEvent(x, y, 1, false, game, 1)
+        Vim_AP:SendMouseButtonEvent(0, 0, 1, false, game, 1)
     end)
-
-    -- fallback key เผื่อบาง device map เป็น F
     pcall(function()
-        Vim_AP:SendKeyEvent(true,  Enum.KeyCode.F, false, game)
+        Vim_AP:SendKeyEvent(true, Enum.KeyCode.F, false, game)
         task.wait(0.012)
         Vim_AP:SendKeyEvent(false, Enum.KeyCode.F, false, game)
     end)
@@ -428,23 +355,15 @@ local function fireParryMobile()
     local btn = getParryBtn()
     if not btn then return end
 
-    -- ใช้ Activate/firesignal ก่อน ลดอาการ joystick ค้างจาก mouse inject
-    pcall(function() btn:Activate() end)
+    -- Mobile: do not hold virtual mouse input. This avoids joystick lock/freeze.
     pcall(function()
-        if btn.MouseButton1Click then firesignal(btn.MouseButton1Click) end
-        if btn.Activated then firesignal(btn.Activated) end
+        if btn:IsA("GuiButton") then btn:Activate() end
     end)
-
-    -- fallback สั้นมาก เฉพาะกรณี Activate ไม่ติด
-    task.delay(0.01, function()
-        pcall(function()
-            if not _G.AutoParry then return end
-            local p, sz = btn.AbsolutePosition, btn.AbsoluteSize
-            local x, y = p.X + sz.X * 0.5, p.Y + sz.Y * 0.5
-            Vim_AP:SendMouseButtonEvent(x, y, 0, true,  game, 1)
-            task.wait(0.006)
-            Vim_AP:SendMouseButtonEvent(x, y, 0, false, game, 1)
-        end)
+    pcall(function()
+        if firesignal and btn.Activated then firesignal(btn.Activated) end
+    end)
+    pcall(function()
+        if firesignal and btn.MouseButton1Click then firesignal(btn.MouseButton1Click) end
     end)
 end
 
@@ -454,30 +373,30 @@ end
 
 local function getThreatLevel(killerChar)
     local my = LP_AP.Character
-    local myHRP = my and my:FindFirstChild("HumanoidRootPart")
-    local ksHRP = killerChar and killerChar:FindFirstChild("HumanoidRootPart")
+    if not my or not killerChar then return 0 end
+
+    local myHRP = my:FindFirstChild("HumanoidRootPart")
+    local ksHRP = killerChar:FindFirstChild("HumanoidRootPart")
     if not myHRP or not ksHRP then return 0 end
 
     local vel = ksHRP.AssemblyLinearVelocity or Vector3.zero
     local predicted = ksHRP.Position + vel * 0.09
-    local offset = myHRP.Position - predicted
-    local dist = offset.Magnitude
+    local delta = myHRP.Position - predicted
+    local dist = delta.Magnitude
     if dist > (_G.AutoParryRange or 22) then return 0 end
 
-    local toMe
-    if (myHRP.Position - ksHRP.Position).Magnitude > 0.05 then
-        toMe = (myHRP.Position - ksHRP.Position).Unit
-    else
-        toMe = ksHRP.CFrame.LookVector
+    local toMe = myHRP.Position - ksHRP.Position
+    local dot = 0.5
+    if toMe.Magnitude > 0.05 then
+        dot = math.clamp(ksHRP.CFrame.LookVector:Dot(toMe.Unit), -1, 1)
     end
 
-    local dot = ksHRP.CFrame.LookVector:Dot(toMe)
     local distScore  = 1 - math.clamp(dist / (_G.AutoParryRange or 22), 0, 1)
     local dotScore   = math.clamp((dot + 1) * 0.5, 0, 1)
     local speedScore = math.clamp(vel.Magnitude / 28, 0, 1)
-    local closeBonus = dist <= 6 and 0.22 or 0
+    local closeBonus = dist <= 6 and 0.30 or 0
 
-    return math.clamp((distScore * 0.52) + (dotScore * 0.30) + (speedScore * 0.18) + closeBonus, 0, 1)
+    return math.clamp((distScore*0.55) + (dotScore*0.30) + (speedScore*0.15) + closeBonus, 0, 1)
 end
 
 local ANIM_HITFRAME = {
@@ -499,11 +418,29 @@ local ANIM_HITFRAME = {
     ["rbxassetid://133963973694098"] = { preDelay=0.00, hitAt=0.15 },
 }
 
-local function execParry(killerChar, minThreat)
+local ATTACK_NAME_PATTERNS = { "attack", "slash", "hit", "swing", "stab", "kill", "m1", "lunge" }
+
+local function looksLikeAttackTrack(track)
+    if not track then return false end
+    local n = tostring(track.Name or ""):lower()
+    for _, pat in ipairs(ATTACK_NAME_PATTERNS) do
+        if n:find(pat) then return true end
+    end
+    local anim = track.Animation
+    local animName = anim and tostring(anim.Name or ""):lower() or ""
+    for _, pat in ipairs(ATTACK_NAME_PATTERNS) do
+        if animName:find(pat) then return true end
+    end
+    return false
+end
+
+local function execParry(killerChar, force)
     if not _G.AutoParry then return end
     if not shouldParry() then return end
     if not isParryReady() then return end
-    if getThreatLevel(killerChar) < (minThreat or 0.05) then return end
+
+    local threat = getThreatLevel(killerChar)
+    if not force and threat < 0.18 then return end
 
     local now = os.clock()
     if now - LastParry < PARRY_CD then return end
@@ -512,131 +449,131 @@ local function execParry(killerChar, minThreat)
 end
 
 local function doParryFast(kc)
-    execParry(kc, 0.01)
+    execParry(kc, true)
 end
 
 local function doParrySmart(kc, animId)
-    local info = ANIM_HITFRAME[animId] or { preDelay=0.00, hitAt=0.10 }
+    local info = ANIM_HITFRAME[animId] or { preDelay=0.00, hitAt=0.12 }
     task.spawn(function()
         if info.preDelay > 0 then task.wait(info.preDelay) end
-        execParry(kc, 0.01)
+        execParry(kc, true)
     end)
 end
 
 local function doParryPredict(kc, animId, track)
-    local info  = ANIM_HITFRAME[animId] or { preDelay=0.00, hitAt=0.12 }
+    local info = ANIM_HITFRAME[animId] or { preDelay=0.00, hitAt=0.14 }
     local speed = 1
     pcall(function() speed = math.max(track.Speed, 0.1) end)
-    local parryAt = math.clamp((info.hitAt / speed) * 0.42, 0, 0.38)
+    local parryAt = math.clamp((info.hitAt / speed) * 0.45, 0, 0.45)
     task.spawn(function()
         if parryAt > 0 then task.wait(parryAt) end
-        execParry(kc, 0.01)
+        execParry(kc, true)
     end)
 end
 
 local function onAttackAnim(killerChar, animId, track)
     if not _G.AutoParry then return end
-    local mode = _G.AutoParryMode or "Smart"
-    if mode == "Fast" then
-        doParryFast(killerChar)
-    elseif mode == "Predict" then
+    local mode = tostring(_G.AutoParryMode or "Fast")
+    if mode == "Predict" then
         doParryPredict(killerChar, animId, track)
-    else
+    elseif mode == "Smart" then
         doParrySmart(killerChar, animId)
+    else
+        doParryFast(killerChar)
     end
 end
 
 local function hookChar_AP(char)
     if not char or Hooked_AP[char] then return end
+    local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 2)
+    if not hum then return end
+
     Hooked_AP[char] = true
-    AP_Conns[char] = AP_Conns[char] or {}
 
-    local function connectHum(hum)
-        if not hum or AP_Conns[char].anim then return end
-        AP_Conns[char].anim = hum.AnimationPlayed:Connect(function(track)
+    local function bindAnimationSignal(signalOwner)
+        if not signalOwner or not signalOwner.AnimationPlayed then return end
+        local conn = signalOwner.AnimationPlayed:Connect(function(track)
+            if not _G.AutoParry then return end
             local anim = track and track.Animation
-            local id = anim and tostring(anim.AnimationId) or ""
-            if id == "" then return end
-
-            -- ถ้า id อยู่ในตาราง ยิงตาม hitframe, ถ้าไม่อยู่แต่เป็น killer/ถือ weapon ให้ fallback ทันที
-            if ANIM_HITFRAME[id] or isKillerChar(char) then
+            local id = anim and tostring(anim.AnimationId or "") or ""
+            if ANIM_HITFRAME[id] or looksLikeAttackTrack(track) then
                 onAttackAnim(char, id, track)
             end
         end)
+        addAPConn(char, conn)
     end
 
-    connectHum(char:FindFirstChildOfClass("Humanoid"))
+    bindAnimationSignal(hum)
+    local animator = hum:FindFirstChildOfClass("Animator") or hum:WaitForChild("Animator", 2)
+    bindAnimationSignal(animator)
 
-    AP_Conns[char].child = char.ChildAdded:Connect(function(obj)
-        if obj:IsA("Humanoid") then connectHum(obj) end
-        if (obj:IsA("Model") or obj:IsA("Tool")) and _nameHasAnyKeyword(obj.Name) then
-            connectHum(char:FindFirstChildOfClass("Humanoid"))
+    addAPConn(char, char.DescendantAdded:Connect(function(obj)
+        local n = obj.Name:lower()
+        if n:find("weapon") or n:find("knife") or n:find("sword") then
+            Hooked_AP[char] = nil
+            task.defer(function() hookChar_AP(char) end)
         end
-    end)
+    end))
 
-    AP_Conns[char].desc = char.DescendantAdded:Connect(function(obj)
-        if (obj:IsA("Model") or obj:IsA("Tool") or obj:IsA("BasePart")) and _nameHasAnyKeyword(obj.Name) then
-            connectHum(char:FindFirstChildOfClass("Humanoid"))
-        end
-    end)
-end
-
-local function unhookChar_AP(char)
-    if AP_Conns[char] then
-        for _, c in pairs(AP_Conns[char]) do pcall(function() c:Disconnect() end) end
-    end
-    AP_Conns[char] = nil
-    Hooked_AP[char] = nil
+    addAPConn(char, char.AncestryChanged:Connect(function(_, parent)
+        if not parent then disconnectAP(char) end
+    end))
 end
 
 local function hookPlayer_AP(plr)
     if plr == LP_AP then return end
 
     local function onChar(char)
-        unhookChar_AP(char)
-        task.defer(function()
-            hookChar_AP(char) -- hook ทุกตัว แล้วค่อย filter ตอน threat/role เพื่อไม่พลาด role เปลี่ยนกลางเกม
+        disconnectAP(char)
+        task.delay(0.25, function()
+            if char and char.Parent and isKillerChar(char) then hookChar_AP(char) end
         end)
     end
 
     if plr.Character then onChar(plr.Character) end
     plr.CharacterAdded:Connect(onChar)
-    plr.CharacterRemoving:Connect(unhookChar_AP)
 end
 
 for _, plr in ipairs(Players:GetPlayers()) do hookPlayer_AP(plr) end
 Players.PlayerAdded:Connect(hookPlayer_AP)
 Players.PlayerRemoving:Connect(function(plr)
-    if plr.Character then unhookChar_AP(plr.Character) end
+    if plr.Character then disconnectAP(plr.Character) end
 end)
 
--- fallback scan: กันกรณี animation id ใหม่ / AnimationPlayed ไม่ยิง / killer เปลี่ยนอาวุธกลางรอบ
-local _apScanAccum, _apHookAccum = 0, 0
 RunService.Heartbeat:Connect(function(dt)
     if not _G.AutoParry then return end
 
-    _apHookAccum = _apHookAccum + dt
-    if _apHookAccum >= AP_HOOK_INTERVAL then
+    _apHookAccum += dt
+    if _apHookAccum >= 1.0 then
         _apHookAccum = 0
         for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= LP_AP and plr.Character then hookChar_AP(plr.Character) end
+            if plr ~= LP_AP and plr.Character and isKillerChar(plr.Character) then
+                hookChar_AP(plr.Character)
+            end
         end
     end
 
-    _apScanAccum = _apScanAccum + dt
-    if _apScanAccum < AP_SCAN_INTERVAL then return end
+    _apScanAccum += dt
+    if _apScanAccum < 0.075 then return end
     _apScanAccum = 0
+
+    local myChar = LP_AP.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
 
     local bestChar, bestThreat = nil, 0
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LP_AP and plr.Character and isKillerChar(plr.Character) then
             local threat = getThreatLevel(plr.Character)
-            if threat > bestThreat then bestThreat = threat; bestChar = plr.Character end
+            if threat > bestThreat then
+                bestThreat = threat
+                bestChar = plr.Character
+            end
         end
     end
 
-    if bestChar and bestThreat >= AP_THREAT_FIRE then
-        execParry(bestChar, AP_THREAT_FIRE)
+    if bestChar and bestThreat >= 0.62 then
+        execParry(bestChar, false)
     end
 end)
 
@@ -647,7 +584,7 @@ SurTab:Section({ Title = "Feature Survivor", Icon = "user" })
 if isPremium then
     SurTab:Paragraph({
         Title = "Information: Parry Mode",
-        Desc  = "• Fast = Instant on anim start\n• Smart = Delay based on hitframe\n• Predict = Scaled by anim speed\n\n• Ping: 60 - 100ms",
+        Desc  = "• Fast = instant when attack animation is detected\n• Smart = uses hitframe delay\n• Predict = scales timing by animation speed\n• v5 adds heartbeat fallback scan + reconnect after round restart",
         Image = "rbxassetid://104487529937663", ImageSize = 30,
     })
     SurTab:Toggle({
@@ -666,31 +603,32 @@ if isPremium then
         Multi    = false,
         Value    = _G.AutoParryMode,
         Callback = function(v)
-            _G.AutoParryMode = v
-            Config:Set("autoparrymode", v); Config:Save()
-            WindUI:Notify({ Title="Parry Mode", Content=v, Duration=2, Icon="settings" })
+            _G.AutoParryMode = tostring(v or "Fast")
+            Config:Set("autoparrymode", _G.AutoParryMode); Config:Save()
+            WindUI:Notify({ Title="Parry Mode", Content=_G.AutoParryMode, Duration=2, Icon="settings" })
         end
     })
     SurTab:Slider({
         Title    = "Parry Range",
         Desc     = "Range for parrying (studs)",
-        Value    = { Min=5, Max=35, Default=_G.AutoParryRange },
+        Value    = { Min=5, Max=40, Default=_G.AutoParryRange },
         Step     = 1,
         Callback = function(v)
-            _G.AutoParryRange = v
-            Config:Set("autoparryrange", v); Config:Save()
+            _G.AutoParryRange = tonumber(v) or 22
+            Config:Set("autoparryrange", _G.AutoParryRange); Config:Save()
         end
     })
     SurTab:Slider({
         Title    = "Hook Detect Range",
-        Desc     = "Hook detection range if get hook parry will stop (studs)",
+        Desc     = "Hook detection range; parry stops when carried near hook.",
         Value    = { Min=5, Max=25, Default=HOOK_NEAR_DIST },
         Step     = 1,
-        Callback = function(v) HOOK_NEAR_DIST = v
-        Config:Set("hookrange", v); Config:Save() end
+        Callback = function(v)
+            HOOK_NEAR_DIST = tonumber(v) or 6
+            Config:Set("hookrange", HOOK_NEAR_DIST); Config:Save()
+        end
     })
 else
-    -- Free user: แสดงแค่ข้อความบอก premium
     SurTab:Paragraph({
         Title = "[ Premium Only ] Auto Parry",
         Desc  = "This feature is for Premium members only",
@@ -761,21 +699,19 @@ local function rebuildWorldCacheAsync()
         local newCache = {}
         local ok = pcall(function()
             for _, desc in ipairs(Workspace:GetDescendants()) do
-                if desc:IsA("Model") then
-                    local parentOk, hasParent = pcall(function() return desc.Parent ~= nil end)
-                    if parentOk and hasParent then
-                        local n = desc.Name
-                        local t = nil
-                        if n == "Generator"   then t = "Generator"
-                        elseif n == "Gate"    then t = "Gate"
-                        elseif n == "Hook"    then t = "Hook"
-                        elseif n == "Palletwrong" then t = "Pallet"
-                        elseif n == "Window"  then t = "Window"
-                        elseif n:match("^[Ss][Cc][Pp]%d*$") then t = "Patient"
-                        end
-                        if t then table.insert(newCache, { obj=desc, t=t }) end
-                    end
+                if not desc:IsA("Model") then continue end
+                local parentOk, hasParent = pcall(function() return desc.Parent ~= nil end)
+                if not parentOk or not hasParent then continue end
+                local n = desc.Name
+                local t = nil
+                if n == "Generator"   then t = "Generator"
+                elseif n == "Gate"    then t = "Gate"
+                elseif n == "Hook"    then t = "Hook"
+                elseif n == "Palletwrong" then t = "Pallet"
+                elseif n == "Window"  then t = "Window"
+                elseif n:match("^[Ss][Cc][Pp]%d*$") then t = "Patient"
                 end
+                if t then table.insert(newCache, { obj=desc, t=t }) end
             end
         end)
         if ok then _worldESPCache = newCache end
@@ -783,202 +719,36 @@ local function rebuildWorldCacheAsync()
     end)
 end
 
--- ── Generator helpers v014.23: robust map-independent discovery ─────────────────────
+-- ── Generator helpers ─────────────────────────────────────────────────────────────
 local _cachedGenFolders = nil
-local _cachedGenPoints  = setmetatable({}, { __mode = "k" })
-local _genCacheDirty    = true
-local _genCacheAt       = 0
-local GEN_CACHE_TTL     = 2.5
-
-local function _invalidateGenCache()
-    _cachedGenFolders = nil
-    _cachedGenPoints = setmetatable({}, { __mode = "k" })
-    _genCacheDirty = true
-end
-
-local _genInvalidateScheduled = false
-local function scheduleGenCacheInvalidate()
-    if _genInvalidateScheduled then return end
-    _genInvalidateScheduled = true
-    task.delay(0.65, function()
-        _invalidateGenCache()
-        _genInvalidateScheduled = false
-    end)
-end
-
-Workspace.DescendantAdded:Connect(function(obj)
-    local n = tostring(obj.Name):lower()
-    if n:find("generator") or n:find("gen") or n:find("repair") or n:find("progress") or n:find("point") then
-        scheduleGenCacheInvalidate()
-    end
-end)
-Workspace.DescendantRemoving:Connect(function(obj)
-    local n = tostring(obj.Name):lower()
-    if n:find("generator") or n:find("gen") or n:find("repair") or n:find("progress") or n:find("point") then
-        scheduleGenCacheInvalidate()
-    end
-end)
-
-local function _getModelPart(model)
-    if not model then return nil end
-    if model:IsA("BasePart") then return model end
-    if model:IsA("Model") then
-        return model.PrimaryPart
-            or model:FindFirstChild("HumanoidRootPart", true)
-            or model:FindFirstChild("Main", true)
-            or model:FindFirstChild("Base", true)
-            or model:FindFirstChildWhichIsA("BasePart", true)
-    end
-    return nil
-end
-
-local function _looksLikeGenerator(obj)
-    if not obj or not obj.Parent then return false end
-    if not (obj:IsA("Model") or obj:IsA("Folder")) then return false end
-
-    local n = obj.Name:lower()
-    if n == "generator" or n == "generators" or n:find("generator", 1, true) or n:match("^gen%d*$") then
-        return true
-    end
-
-    if CollectionService:HasTag(obj, "Generator") or CollectionService:HasTag(obj, "Generators") then
-        return true
-    end
-
-    if obj:GetAttribute("Progress") ~= nil or obj:GetAttribute("RepairProgress") ~= nil or obj:GetAttribute("Percent") ~= nil then
-        return true
-    end
-
-    local hasPoint, hasProgress = false, false
-    for _, child in ipairs(obj:GetDescendants()) do
-        local cn = child.Name:lower()
-        if child:IsA("BasePart") and (cn:find("generatorpoint") or cn:find("repairpoint") or cn == "point" or cn:find("interact")) then
-            hasPoint = true
-        elseif child:IsA("ProximityPrompt") and (cn:find("repair") or cn:find("generator") or tostring(child.ActionText):lower():find("repair")) then
-            hasPoint = true
-        elseif (child:IsA("NumberValue") or child:IsA("IntValue")) and (cn:find("progress") or cn:find("repair") or cn:find("percent")) then
-            hasProgress = true
-        end
-        if hasPoint and hasProgress then return true end
-    end
-
-    return hasPoint
-end
+local function _invalidateGenCache() _cachedGenFolders = nil end
 
 local function getFolderGenerator()
-    local now = os.clock()
-    if _cachedGenFolders and not _genCacheDirty and (now - _genCacheAt) < GEN_CACHE_TTL then
-        return _cachedGenFolders
+    if _cachedGenFolders then return _cachedGenFolders end
+    local list = {}
+    for _, desc in ipairs(Workspace:GetDescendants()) do
+        if desc.Name == "Generator" and desc:IsA("Model") then list[#list+1] = desc end
     end
-
-    local found, seen = {}, {}
-
-    local function add(obj)
-        if obj and obj.Parent and not seen[obj] and _looksLikeGenerator(obj) then
-            seen[obj] = true
-            found[#found + 1] = obj
-        end
-    end
-
-    pcall(function()
-        for _, obj in ipairs(CollectionService:GetTagged("Generator")) do add(obj) end
-        for _, obj in ipairs(CollectionService:GetTagged("Generators")) do add(obj) end
-    end)
-
-    local map = Workspace:FindFirstChild("Map")
-    local roots = {}
-    if map then roots[#roots + 1] = map end
-    roots[#roots + 1] = Workspace
-
-    for _, root in ipairs(roots) do
-        for _, desc in ipairs(root:GetDescendants()) do
-            add(desc)
-        end
-    end
-
-    _cachedGenFolders = found
-    _genCacheDirty = false
-    _genCacheAt = now
-    return found
+    _cachedGenFolders = list
+    return list
 end
 
 local function getGeneratorProgress(gen)
-    if not gen then return 1 end
-
-    local progress = nil
-    local attrs = { "Progress", "RepairProgress", "Percent", "Completion", "Completed" }
-    for _, attr in ipairs(attrs) do
-        local v = gen:GetAttribute(attr)
-        if type(v) == "number" then progress = v; break end
-        if type(v) == "boolean" and v == true then progress = 1; break end
-    end
-
-    if progress == nil then
+    local progress = 0
+    if gen:GetAttribute("Progress") then progress = gen:GetAttribute("Progress")
+    elseif gen:GetAttribute("RepairProgress") then progress = gen:GetAttribute("RepairProgress")
+    else
         for _, child in ipairs(gen:GetDescendants()) do
-            local n = child.Name:lower()
             if child:IsA("NumberValue") or child:IsA("IntValue") then
-                if n:find("progress") or n:find("repair") or n:find("percent") or n:find("complete") then
-                    progress = child.Value
-                    break
+                local n = child.Name:lower()
+                if n:find("progress") or n:find("repair") or n:find("percent") then
+                    progress = child.Value; break
                 end
-            elseif child:IsA("BoolValue") and (n:find("finished") or n:find("repaired") or n:find("complete")) and child.Value == true then
-                progress = 1
-                break
             end
         end
     end
-
-    progress = tonumber(progress) or 0
-    if progress > 1 then progress = progress / 100 end
+    progress = progress > 1 and progress / 100 or progress
     return math.clamp(progress, 0, 1)
-end
-
-local function generatorFinished(gen)
-    if not gen or not gen.Parent then return true end
-    if getGeneratorProgress(gen) >= 0.99 then return true end
-    if gen:FindFirstChild("Finished", true) ~= nil then return true end
-    if gen:FindFirstChild("Repaired", true) ~= nil then return true end
-    if gen:GetAttribute("Finished") == true or gen:GetAttribute("Repaired") == true or gen:GetAttribute("Completed") == true then return true end
-    return false
-end
-
-local function getGeneratorPoints(gen)
-    if not gen then return {} end
-    if _cachedGenPoints[gen] then return _cachedGenPoints[gen] end
-
-    local points, seen = {}, {}
-    local function add(part)
-        if part and part:IsA("BasePart") and not seen[part] then
-            seen[part] = true
-            points[#points + 1] = part
-        end
-    end
-
-    for i = 1, 8 do
-        add(gen:FindFirstChild("GeneratorPoint" .. i, true))
-        add(gen:FindFirstChild("RepairPoint" .. i, true))
-    end
-
-    for _, d in ipairs(gen:GetDescendants()) do
-        local n = d.Name:lower()
-        if d:IsA("BasePart") then
-            if n:find("generatorpoint") or n:find("repairpoint") or n == "point" or n:find("interact") or n:find("prompt") then
-                add(d)
-            end
-        elseif d:IsA("ProximityPrompt") and d.Parent and d.Parent:IsA("BasePart") then
-            local action = tostring(d.ActionText or ""):lower()
-            if n:find("repair") or n:find("generator") or action:find("repair") or action:find("generator") then
-                add(d.Parent)
-            end
-        end
-    end
-
-    if #points == 0 then
-        add(_getModelPart(gen))
-    end
-
-    _cachedGenPoints[gen] = points
-    return points
 end
 
 local function getProgressColor(p)
@@ -991,7 +761,11 @@ local function getProgressColor(p)
     end
 end
 
--- generatorFinished is defined in robust generator helper above
+local function generatorFinished(gen)
+    return getGeneratorProgress(gen) >= 0.99
+        or gen:FindFirstChild("Finished") ~= nil
+        or gen:FindFirstChild("Repaired") ~= nil
+end
 
 -- ── ESP instance helpers ───────────────────────────────────────────────────────────
 local function removeESP(obj)
@@ -1085,8 +859,8 @@ local function setObjectLabels(data, col, nameText, showName, hpText, showHp, di
         data.distLabel.TextColor3 = col
         -- reposition rows
         local row = 0
-        if data.nameLabel.Visible then data.nameLabel.Position = UDim2.new(0,0,row*0.33,0); row = row + 1 end
-        if data.hpLabel.Visible   then data.hpLabel.Position   = UDim2.new(0,0,row*0.33,0); row = row + 1 end
+        if data.nameLabel.Visible then data.nameLabel.Position = UDim2.new(0,0,row*0.33,0); row+=1 end
+        if data.hpLabel.Visible   then data.hpLabel.Position   = UDim2.new(0,0,row*0.33,0); row+=1 end
         if data.distLabel.Visible then data.distLabel.Position = UDim2.new(0,0,row*0.33,0) end
     end)
 end
@@ -1104,46 +878,47 @@ local _worldScanBusy = false
 local function updatePlayerESP(hrp)
     if not espEnabled then return end
     for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            local pChar = player.Character
-            if pChar then
-                local ok, isValid = pcall(function() return pChar.Parent ~= nil end)
-                if ok and isValid and pChar.Name ~= "Lobby" then
-                    local pRoot = pChar:FindFirstChild("HumanoidRootPart")
-                    local pHum  = pChar:FindFirstChildOfClass("Humanoid")
-                    local dist  = pRoot and math.floor((hrp.Position - pRoot.Position).Magnitude) or math.huge
-                    local isMurderer = isKillerChar(pChar)
-                    local shouldShow = (isMurderer and espMurder) or (not isMurderer and espSurvivor)
+        if player == LocalPlayer then continue end
+        local pChar = player.Character
+        if not pChar then continue end
+        local ok, isValid = pcall(function() return pChar.Parent ~= nil end)
+        if not ok or not isValid then continue end
+        if pChar.Name == "Lobby" then continue end
 
-                    if not shouldShow or dist > ESP_MAX_DISTANCE then
-                        local data = espObjects[pChar]
-                        if data then
-                            pcall(function()
-                                if data.bill      then data.bill.Enabled      = false end
-                                if data.highlight then data.highlight.Enabled = false end
-                            end)
-                        end
-                        if not shouldShow then removeESP(pChar) end
-                    else
-                        local col = isMurderer and COLOR_MURDERER or COLOR_SURVIVOR
-                        createESP(pChar, col)
-                        local data = espObjects[pChar]
-                        if data then
-                            local nameText = ShowName and player.Name or nil
-                            local hpText   = (ShowHP and pHum) and ("[ "..math.floor(pHum.Health).." HP ]") or nil
-                            local distText = ShowDistance and ("[ "..dist.." MM ]") or nil
-                            setObjectLabels(data, col, nameText, ShowName, hpText, ShowHP and pHum ~= nil, distText, ShowDistance)
-                            pcall(function()
-                                if data.bill      then data.bill.Enabled      = true end
-                                if data.highlight then data.highlight.Enabled = ShowHighlight end
-                            end)
-                        end
-                    end
-                end
+        local pRoot = pChar:FindFirstChild("HumanoidRootPart")
+        local pHum  = pChar:FindFirstChildOfClass("Humanoid")
+        local dist  = pRoot and math.floor((hrp.Position - pRoot.Position).Magnitude) or math.huge
+        local isMurderer = isKillerChar(pChar)
+        local shouldShow = (isMurderer and espMurder) or (not isMurderer and espSurvivor)
+
+        if not shouldShow or dist > ESP_MAX_DISTANCE then
+            local data = espObjects[pChar]
+            if data then
+                pcall(function()
+                    if data.bill      then data.bill.Enabled      = false end
+                    if data.highlight then data.highlight.Enabled = false end
+                end)
             end
+            if not shouldShow then removeESP(pChar) end
+            continue
+        end
+
+        local col = isMurderer and COLOR_MURDERER or COLOR_SURVIVOR
+        createESP(pChar, col)
+        local data = espObjects[pChar]
+        if data then
+            local nameText = ShowName and player.Name or nil
+            local hpText   = (ShowHP and pHum) and ("[ "..math.floor(pHum.Health).." HP ]") or nil
+            local distText = ShowDistance and ("[ "..dist.." MM ]") or nil
+            setObjectLabels(data, col, nameText, ShowName, hpText, ShowHP and pHum ~= nil, distText, ShowDistance)
+            pcall(function()
+                if data.bill      then data.bill.Enabled      = true end
+                if data.highlight then data.highlight.Enabled = ShowHighlight end
+            end)
         end
     end
 end
+
 -- [Fix] world scan ทำใน task.spawn → zero frame impact
 local function updateWorldESPAsync(hrp)
     if _worldScanBusy then return end
@@ -1327,13 +1102,13 @@ RunService.Heartbeat:Connect(function(dt)
     local hrp  = char and char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    _playerESPAccum = _playerESPAccum + dt
+    _playerESPAccum += dt
     if _playerESPAccum >= PLAYER_ESP_INTERVAL then
         _playerESPAccum = 0
         pcall(updatePlayerESP, hrp)
     end
 
-    _worldESPAccum = _worldESPAccum + dt
+    _worldESPAccum += dt
     if _worldESPAccum >= WORLD_ESP_INTERVAL then
         _worldESPAccum = 0
         pcall(updateWorldESPAsync, hrp)
@@ -1612,35 +1387,152 @@ MainTab:Toggle({
     end
 })
 
--- ====================== GENERATOR SYSTEM ======================
-local GeneratorRemotes = nil
-local skillRemote      = nil
-local repairRemote     = nil
+-- ====================== GENERATOR SYSTEM v5 ======================
+-- Fixes:
+--   • recursive generator/point finder for maps with nested folders/models
+--   • does not cancel repair right after teleport
+--   • re-fires RepairEvent if the server did not start repair
+--   • invalidates cache after map/round changes
+--   • avoids generator near killer and blacklists unsafe generator shortly
+local GeneratorRemotes, skillRemote, repairRemote
 
 local function refreshGeneratorRemotes()
     local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-    local generator = remotes and remotes:FindFirstChild("Generator")
-    GeneratorRemotes = generator
-    skillRemote = generator and generator:FindFirstChild("SkillCheckResultEvent") or nil
-    repairRemote = generator and generator:FindFirstChild("RepairEvent") or nil
+    GeneratorRemotes = remotes and remotes:FindFirstChild("Generator") or nil
+    skillRemote      = GeneratorRemotes and GeneratorRemotes:FindFirstChild("SkillCheckResultEvent") or nil
+    repairRemote     = GeneratorRemotes and GeneratorRemotes:FindFirstChild("RepairEvent") or nil
     return skillRemote ~= nil and repairRemote ~= nil
 end
 refreshGeneratorRemotes()
 
 local GEN = {
-    repairPoint = nil,
-    repairModel = nil,
-    cancelDB = false,
-    skillDB = false,
-    lastPos = nil,
-    MOVE_THRESH = 1.35,
-    blacklist = {},
-    lastRepairStart = 0,
-    lastTeleport = 0,
+    repairPoint=nil,
+    repairModel=nil,
+    cancelDB=false,
+    skillDB=false,
+    lastPos=nil,
+    ignoreMoveUntil=0,
+    lastRepairFire=0,
+    lastCacheScan=0,
+    cacheDirty=true,
+    cache={},
+    blacklist={},
+    MOVE_THRESH=1.25,
+    REPAIR_REFIRE=1.10,
+    KILLER_AVOID=30,
 }
 
 local function notify(title, content)
-    safeNotify(title, content, "triangle-alert")
+    WindUI:Notify({ Title=title, Content=content, Duration=5, Icon="triangle-alert" })
+end
+
+local function markGenCacheDirty()
+    GEN.cacheDirty = true
+    pcall(_invalidateGenCache)
+end
+
+local _genInvalidateBusy = false
+Workspace.DescendantAdded:Connect(function(obj)
+    local n = obj.Name:lower()
+    if n:find("generator") or n:find("repair") or n:find("skillcheck") then
+        if not _genInvalidateBusy then
+            _genInvalidateBusy = true
+            task.delay(1, function()
+                markGenCacheDirty()
+                _genInvalidateBusy = false
+            end)
+        end
+    end
+end)
+Workspace.DescendantRemoving:Connect(function(obj)
+    local n = obj.Name:lower()
+    if n:find("generator") or n:find("repair") or n:find("skillcheck") then
+        if not _genInvalidateBusy then
+            _genInvalidateBusy = true
+            task.delay(1, function()
+                markGenCacheDirty()
+                _genInvalidateBusy = false
+            end)
+        end
+    end
+end)
+
+local function isGenPoint(obj)
+    if not obj or not obj:IsA("BasePart") then return false end
+    local n = obj.Name:lower()
+    return n:match("^generatorpoint%d*$")
+        or n:find("generatorpoint")
+        or n:find("repairpoint")
+        or n == "point"
+        or n == "prompt"
+end
+
+local function findGeneratorPoints(gen)
+    local points = {}
+    for _, desc in ipairs(gen:GetDescendants()) do
+        if isGenPoint(desc) then
+            points[#points+1] = desc
+        end
+    end
+
+    table.sort(points, function(a, b) return a.Name < b.Name end)
+
+    if #points == 0 then
+        local p = gen.PrimaryPart or gen:FindFirstChildWhichIsA("BasePart", true)
+        if p then points[1] = p end
+    end
+
+    return points
+end
+
+local function looksLikeGeneratorModel(model)
+    if not model or not model:IsA("Model") then return false end
+    local n = model.Name:lower()
+    if n == "generator" or n:find("generator") or n:find("gen") then return true end
+    for _, desc in ipairs(model:GetDescendants()) do
+        if isGenPoint(desc) then return true end
+        local dn = desc.Name:lower()
+        if dn:find("repairprogress") or dn:find("progress") then return true end
+    end
+    return false
+end
+
+local function rebuildGenCache(force)
+    if not force and not GEN.cacheDirty and os.clock() - GEN.lastCacheScan < 2 then
+        return GEN.cache
+    end
+
+    GEN.cacheDirty = false
+    GEN.lastCacheScan = os.clock()
+
+    local found = {}
+    local list = {}
+
+    pcall(function()
+        for _, desc in ipairs(Workspace:GetDescendants()) do
+            if desc:IsA("Model") and looksLikeGeneratorModel(desc) then
+                if not found[desc] then
+                    found[desc] = true
+                    list[#list+1] = desc
+                end
+            elseif isGenPoint(desc) then
+                local m = desc.Parent
+                while m and m ~= Workspace do
+                    if m:IsA("Model") and looksLikeGeneratorModel(m) then
+                        if not found[m] then
+                            found[m] = true
+                            list[#list+1] = m
+                        end
+                        break
+                    end
+                    m = m.Parent
+                end
+            end
+        end
+    end)
+
+    GEN.cache = list
+    return GEN.cache
 end
 
 local function isRepairPointValid()
@@ -1653,46 +1545,87 @@ local function clearRepairState()
     GEN.repairPoint = nil
     GEN.repairModel = nil
     GEN.lastPos = nil
+    GEN.lastRepairFire = 0
 end
 
 local function cancelRepair()
     if not isRepairPointValid() then clearRepairState(); return end
     if GEN.cancelDB then return end
+
     GEN.cancelDB = true
-    if not refreshGeneratorRemotes() or not repairRemote then return end
-    pcall(function() repairRemote:FireServer(GEN.repairPoint, false) end)
+    refreshGeneratorRemotes()
+    if repairRemote then
+        pcall(function() repairRemote:FireServer(GEN.repairPoint, false) end)
+    end
+
     task.delay(0.35, function() GEN.cancelDB = false end)
 end
 
-local function blacklistGenerator(gen, seconds)
-    if gen then GEN.blacklist[gen] = os.clock() + (seconds or 4) end
-end
-
-local function isGeneratorBlacklisted(gen)
-    local expire = gen and GEN.blacklist[gen]
-    if not expire then return false end
-    if os.clock() > expire then
-        GEN.blacklist[gen] = nil
-        return false
+local function getKillerRoots()
+    local roots = {}
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and isKillerChar(plr.Character) then
+            local root = plr.Character:FindFirstChild("HumanoidRootPart")
+            if root then roots[#roots+1] = root end
+        end
     end
-    return true
+    return roots
 end
 
-local function getClosestGeneratorPoint(root, maxDist, ignoreGen)
-    if not root then return nil, nil, math.huge end
+local function isGeneratorUnsafe(gen, killerRoots, avoidDist)
+    if not gen or not gen.Parent then return true end
+    if GEN.blacklist[gen] and GEN.blacklist[gen] > os.clock() then return true end
 
-    local gens = getFolderGenerator()
+    local points = findGeneratorPoints(gen)
+    local base = points[1] or gen.PrimaryPart or gen:FindFirstChildWhichIsA("BasePart", true)
+    if not base then return true end
+
+    for _, kr in ipairs(killerRoots or {}) do
+        if kr and kr.Parent and (base.Position - kr.Position).Magnitude <= (avoidDist or GEN.KILLER_AVOID) then
+            return true
+        end
+    end
+    return false
+end
+
+local function getClosestGeneratorPoint(root, maxDist, opts)
+    opts = opts or {}
+    local gens = rebuildGenCache(false)
+    local killerRoots = opts.ignoreKiller and {} or getKillerRoots()
+
     local bestGen, bestPt, bestD = nil, nil, maxDist or math.huge
 
     for _, gen in ipairs(gens) do
-        if gen ~= ignoreGen and gen.Parent and not generatorFinished(gen) and not isGeneratorBlacklisted(gen) then
-            for _, pt in ipairs(getGeneratorPoints(gen)) do
-                if pt and pt.Parent then
-                    local d = (root.Position - pt.Position).Magnitude
-                    if d < bestD then
-                        bestD = d
-                        bestGen = gen
-                        bestPt = pt
+        if gen and gen.Parent and not generatorFinished(gen) and gen ~= opts.excludeGen then
+            if not isGeneratorUnsafe(gen, killerRoots, opts.avoidDist or GEN.KILLER_AVOID) then
+                local points = findGeneratorPoints(gen)
+                for _, pt in ipairs(points) do
+                    if pt and pt.Parent then
+                        local d = (root.Position - pt.Position).Magnitude
+                        if d < bestD then
+                            bestD = d
+                            bestGen = gen
+                            bestPt = pt
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- If every generator is near killer, fallback to nearest valid generator so the script does not stall.
+    if not bestGen and not opts.strictSafe then
+        for _, gen in ipairs(gens) do
+            if gen and gen.Parent and not generatorFinished(gen) and gen ~= opts.excludeGen then
+                local points = findGeneratorPoints(gen)
+                for _, pt in ipairs(points) do
+                    if pt and pt.Parent then
+                        local d = (root.Position - pt.Position).Magnitude
+                        if d < bestD then
+                            bestD = d
+                            bestGen = gen
+                            bestPt = pt
+                        end
                     end
                 end
             end
@@ -1703,74 +1636,82 @@ local function getClosestGeneratorPoint(root, maxDist, ignoreGen)
 end
 
 local function findNearestKiller(root, maxDist)
-    local nearest, nearestDist = nil, maxDist or 12.5
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character then
-            local oHRP = plr.Character:FindFirstChild("HumanoidRootPart")
-            if isKillerChar(plr.Character) and oHRP then
-                local d = (root.Position - oHRP.Position).Magnitude
-                if d < nearestDist then
-                    nearestDist = d
-                    nearest = plr.Character
-                end
-            end
+    local nearest, nearestDist = nil, maxDist or GEN.KILLER_AVOID
+    for _, kr in ipairs(getKillerRoots()) do
+        local d = (root.Position - kr.Position).Magnitude
+        if d < nearestDist then
+            nearestDist = d
+            nearest = kr.Parent
         end
     end
     return nearest, nearestDist
 end
 
-local function startRepairAt(gen, pt)
-    if not gen or not pt then return false end
-    GEN.repairModel = gen
-    GEN.repairPoint = pt
-    GEN.lastPos = (HumanoidRootPart and HumanoidRootPart.Position) or nil
-    GEN.lastRepairStart = os.clock()
-    if not refreshGeneratorRemotes() or not repairRemote then
-        safeNotify("Generator Remote Missing", "RepairEvent not found yet. Try again after round/map loads.", "triangle-alert")
-        return false
-    end
-    return pcall(function() repairRemote:FireServer(pt, true) end)
+local function fireRepair(point, enabled)
+    refreshGeneratorRemotes()
+    if not repairRemote or not point then return false end
+    return pcall(function() repairRemote:FireServer(point, enabled) end)
 end
 
-local function teleportToGenerator(ignoreGen)
+local function startRepairAt(gen, pt, root)
+    if not gen or not pt or not root then return false end
+
+    GEN.repairModel = gen
+    GEN.repairPoint = pt
+
+    local dist = (root.Position - pt.Position).Magnitude
+    if dist > 5 then
+        GEN.ignoreMoveUntil = os.clock() + 1.05
+        pcall(function()
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.CFrame = CFrame.new(pt.Position + Vector3.new(0, 2.15, 0))
+        end)
+        task.wait(0.10)
+    else
+        GEN.ignoreMoveUntil = os.clock() + 0.45
+    end
+
+    GEN.lastPos = root.Position
+    GEN.lastRepairFire = os.clock()
+    return fireRepair(pt, true)
+end
+
+local function teleportToGenerator(excludeGen)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then return false end
 
-    if os.clock() - GEN.lastTeleport < 0.18 then return false end
+    local gen, pt = getClosestGeneratorPoint(root, nil, {
+        excludeGen = excludeGen,
+        avoidDist = GEN.KILLER_AVOID,
+    })
 
-    local gen, pt = getClosestGeneratorPoint(root, nil, ignoreGen)
     if not gen or not pt then
-        _invalidateGenCache()
-        gen, pt = getClosestGeneratorPoint(root, nil, ignoreGen)
+        markGenCacheDirty()
+        gen, pt = getClosestGeneratorPoint(root, nil, {
+            excludeGen = excludeGen,
+            ignoreKiller = true,
+        })
     end
+
     if not gen or not pt then return false end
-
-    if isRepairPointValid() and (root.Position - GEN.repairPoint.Position).Magnitude <= 5 then
-        return true
-    end
-
-    GEN.lastTeleport = os.clock()
-    GEN.repairModel = gen
-    GEN.repairPoint = pt
-    GEN.lastPos = root.Position
-
-    -- ยืนข้าง/เหนือจุดนิดเดียว ลดโอกาสติดพื้น/ติดโมเดลในบางแมพ
-    local up = Vector3.new(0, 2.2, 0)
-    root.CFrame = CFrame.new(pt.Position + up)
-    task.wait(0.10)
-    startRepairAt(gen, pt)
-    return true
+    return startRepairAt(gen, pt, root)
 end
 
 local _movCheckAccum = 0
-local MOV_CHECK_INTERVAL = 0.10
+local MOV_CHECK_INTERVAL = 0.08
 RunService.Heartbeat:Connect(function(dt)
-    _movCheckAccum = _movCheckAccum + dt
+    _movCheckAccum += dt
     if _movCheckAccum < MOV_CHECK_INTERVAL then return end
     _movCheckAccum = 0
 
     if not isRepairPointValid() then clearRepairState(); return end
+    if os.clock() < (GEN.ignoreMoveUntil or 0) then
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if root then GEN.lastPos = root.Position end
+        return
+    end
 
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -1780,18 +1721,16 @@ RunService.Heartbeat:Connect(function(dt)
     local dist = (root.Position - GEN.repairPoint.Position).Magnitude
     if dist > 10 then return end
 
-    -- grace หลัง teleport/เริ่ม repair กัน cancel หลอกเพราะ physics เด้ง
-    if os.clock() - (GEN.lastRepairStart or 0) < 0.55 then
-        GEN.lastPos = root.Position
-        return
-    end
-
     local prevPos = GEN.lastPos or root.Position
-    local moved   = (root.Position - prevPos).Magnitude
-    GEN.lastPos   = root.Position
+    local moved = (root.Position - prevPos).Magnitude
+    GEN.lastPos = root.Position
 
-    local isMoving = moved > GEN.MOVE_THRESH or hum.MoveDirection.Magnitude > 0.10
-    if isMoving and not GEN.cancelDB then cancelRepair() end
+    local manualMove = hum.MoveDirection.Magnitude > 0.08
+    local movedByPlayer = manualMove and moved > GEN.MOVE_THRESH
+
+    if movedByPlayer and not GEN.cancelDB then
+        cancelRepair()
+    end
 end)
 
 UserInputService.InputBegan:Connect(function(input, gpe)
@@ -1810,25 +1749,20 @@ local AutoSkillPerfect = Config:Get("AutoSkillPerfect", false)
 local AutoSkillNeutral = Config:Get("AutoSkillNeutral", false)
 local AutoGenRepair    = Config:Get("AutoGenRepair",    false)
 
-local _skillThread = nil
-
-local function findVisibleSkillCheck()
+local function findSkillCheck()
     local pGui = LocalPlayer:FindFirstChild("PlayerGui")
     if not pGui then return nil end
 
     local gui = pGui:FindFirstChild("SkillCheckPromptGui")
-    local root = gui or pGui
-
-    local check = root:FindFirstChild("Check", true)
-    if check and check:IsA("GuiObject") and check.Visible and isGuiActuallyVisible(check) then
-        return check
+    if gui then
+        local check = gui:FindFirstChild("Check", true)
+        if check then return check end
     end
 
-    -- fallback ชื่ออื่นในบางแมพ/บางอัปเดต
-    for _, obj in ipairs(root:GetDescendants()) do
-        if obj:IsA("GuiObject") then
-            local n = obj.Name:lower()
-            if (n:find("skill") or n:find("check") or n:find("prompt")) and obj.Visible and isGuiActuallyVisible(obj) then
+    for _, obj in ipairs(pGui:GetDescendants()) do
+        if obj.Name == "Check" and obj:IsA("GuiObject") then
+            local parentName = obj.Parent and obj.Parent.Name:lower() or ""
+            if parentName:find("skill") or tostring(obj:GetFullName()):lower():find("skillcheck") then
                 return obj
             end
         end
@@ -1837,42 +1771,51 @@ local function findVisibleSkillCheck()
     return nil
 end
 
-local function startSkillLoop(mode)
-    if _skillThread then task.cancel(_skillThread); _skillThread = nil end
+local function ensureRepairStateNear(root, radius)
+    if isRepairPointValid() then return true end
+    local gen, pt = getClosestGeneratorPoint(root, radius or 12, { ignoreKiller = true })
+    if gen and pt then
+        GEN.repairModel = gen
+        GEN.repairPoint = pt
+        GEN.lastPos = root.Position
+        return true
+    end
+    return false
+end
+
+local _skillThread = nil
+local function startSkillLoop()
+    if _skillThread then return end
 
     _skillThread = task.spawn(function()
-        while (mode == "perfect" and AutoSkillPerfect) or (mode == "neutral" and AutoSkillNeutral) do
+        while AutoSkillPerfect or AutoSkillNeutral do
             task.wait(0.055)
 
             local char = LocalPlayer.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
-            if root then
-                if not isRepairPointValid() then
-                    local gen, pt = getClosestGeneratorPoint(root, 12)
-                    if gen and pt then
-                        GEN.repairModel = gen
-                        GEN.repairPoint = pt
+            if not root then continue end
+
+            ensureRepairStateNear(root, 14)
+
+            local check = findSkillCheck()
+            if check and check.Visible and isRepairPointValid() then
+                local d = (root.Position - GEN.repairPoint.Position).Magnitude
+                if d <= 14 and not GEN.skillDB then
+                    GEN.skillDB = true
+                    refreshGeneratorRemotes()
+
+                    local usePerfect = AutoSkillPerfect
+                    local resultType = usePerfect and "success" or "neutral"
+                    local resultVal  = usePerfect and 1 or 0
+
+                    if skillRemote then
+                        pcall(function()
+                            skillRemote:FireServer(resultType, resultVal, GEN.repairModel, GEN.repairPoint)
+                        end)
                     end
-                end
 
-                local check = findVisibleSkillCheck()
-                if check and isRepairPointValid() then
-                    local d = (root.Position - GEN.repairPoint.Position).Magnitude
-                    if d <= 12 and not GEN.skillDB then
-                        GEN.skillDB = true
-
-                        local resultType = mode == "perfect" and "success" or "neutral"
-                        local resultVal  = mode == "perfect" and 1 or 0
-
-                        if refreshGeneratorRemotes() and skillRemote then
-                            pcall(function()
-                                skillRemote:FireServer(resultType, resultVal, GEN.repairModel, GEN.repairPoint)
-                            end)
-                        end
-
-                        pcall(function() check.Visible = false end)
-                        task.delay(0.085, function() GEN.skillDB = false end)
-                    end
+                    pcall(function() check.Visible = false end)
+                    task.delay(0.08, function() GEN.skillDB = false end)
                 end
             end
         end
@@ -1880,20 +1823,50 @@ local function startSkillLoop(mode)
         _skillThread = nil
     end)
 end
+
+local function stopSkillLoopIfOff()
+    if not AutoSkillPerfect and not AutoSkillNeutral and _skillThread then
+        task.cancel(_skillThread)
+        _skillThread = nil
+    end
+end
+
 SurTab:Toggle({
-    Title = "Auto SkillCheck (Perfect)", Desc = "Automatically hits perfect generator skill checks", Value = AutoSkillPerfect,
+    Title = "Auto SkillCheck (Perfect)",
+    Desc = "Automatically hits perfect generator skill checks",
+    Value = AutoSkillPerfect,
     Callback = function(v)
-        AutoSkillPerfect = v; Config:Set("AutoSkillPerfect", v); Config:Save()
-        if v then AutoSkillNeutral = false; notify("Auto Generator Perfect | Enabled", "Press X or move joystick to cancel."); startSkillLoop("perfect")
-        elseif _skillThread then task.cancel(_skillThread); _skillThread = nil end
+        AutoSkillPerfect = v
+        if v then AutoSkillNeutral = false end
+        Config:Set("AutoSkillPerfect", AutoSkillPerfect)
+        Config:Set("AutoSkillNeutral", AutoSkillNeutral)
+        Config:Save()
+
+        if v then
+            notify("Auto Generator Perfect | Enabled", "Recursive finder enabled. Press X or move joystick to cancel.")
+            startSkillLoop()
+        else
+            stopSkillLoopIfOff()
+        end
     end
 })
 SurTab:Toggle({
-    Title = "Auto SkillCheck (Neutral)", Desc = "Automatically hits neutral generator skill checks", Value = AutoSkillNeutral,
+    Title = "Auto SkillCheck (Neutral)",
+    Desc = "Automatically hits neutral generator skill checks",
+    Value = AutoSkillNeutral,
     Callback = function(v)
-        AutoSkillNeutral = v; Config:Set("AutoSkillNeutral", v); Config:Save()
-        if v then AutoSkillPerfect = false; notify("Auto Generator Neutral | Enabled", "Press X or move joystick to cancel."); startSkillLoop("neutral")
-        elseif _skillThread then task.cancel(_skillThread); _skillThread = nil end
+        AutoSkillNeutral = v
+        if v then AutoSkillPerfect = false end
+        Config:Set("AutoSkillNeutral", AutoSkillNeutral)
+        Config:Set("AutoSkillPerfect", AutoSkillPerfect)
+        Config:Save()
+
+        if v then
+            notify("Auto Generator Neutral | Enabled", "Recursive finder enabled. Press X or move joystick to cancel.")
+            startSkillLoop()
+        else
+            stopSkillLoopIfOff()
+        end
     end
 })
 
@@ -1903,44 +1876,72 @@ local function startGenLoop()
 
     _genThread = task.spawn(function()
         while AutoGenRepair do
-            task.wait(0.22)
+            task.wait(0.16)
 
             local char = LocalPlayer.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
-            if root then
-                if not isRepairPointValid() then
-                    clearRepairState()
-                    _invalidateGenCache()
-                end
+            if not root then continue end
 
-                local killer = findNearestKiller(root, 13.5)
-                if killer and isRepairPointValid() then
-                    local oldGen = GEN.repairModel
-                    blacklistGenerator(oldGen, 4.5)
-                    cancelRepair()
-                    task.wait(0.16)
-                    teleportToGenerator(oldGen)
-                elseif not isRepairPointValid() or (GEN.repairPoint and (root.Position - GEN.repairPoint.Position).Magnitude > 10) then
-                    teleportToGenerator()
-                end
+            if not refreshGeneratorRemotes() then
+                task.wait(0.5)
+                continue
+            end
+
+            if not isRepairPointValid() then
+                clearRepairState()
+                markGenCacheDirty()
+            end
+
+            local killer = findNearestKiller(root, GEN.KILLER_AVOID)
+            if killer and isRepairPointValid() then
+                GEN.blacklist[GEN.repairModel] = os.clock() + 3.5
+                cancelRepair()
+                task.wait(0.12)
+                teleportToGenerator(GEN.repairModel)
+                continue
+            end
+
+            if not isRepairPointValid() then
+                teleportToGenerator(nil)
+                continue
+            end
+
+            local dist = (root.Position - GEN.repairPoint.Position).Magnitude
+            if dist > 9 then
+                teleportToGenerator(nil)
+                continue
+            end
+
+            if os.clock() - (GEN.lastRepairFire or 0) >= GEN.REPAIR_REFIRE then
+                GEN.lastRepairFire = os.clock()
+                fireRepair(GEN.repairPoint, true)
             end
         end
 
         _genThread = nil
     end)
 end
+
 LocalPlayer.CharacterAdded:Connect(function()
     clearRepairState()
-    if AutoGenRepair    then task.delay(1, startGenLoop) end
-    if AutoSkillPerfect then task.delay(1, function() startSkillLoop("perfect") end) end
-    if AutoSkillNeutral then task.delay(1, function() startSkillLoop("neutral") end) end
+    markGenCacheDirty()
+    if AutoGenRepair then task.delay(1, startGenLoop) end
+    if AutoSkillPerfect or AutoSkillNeutral then task.delay(1, startSkillLoop) end
 end)
 
 SurTab:Toggle({
-    Title = "Auto Generator (BETA)", Desc = "Automatically teleports and repairs generators.", Value = AutoGenRepair,
+    Title = "Auto Generator (BETA)",
+    Desc = "Automatically teleports and repairs generators. v5 finder supports more maps.",
+    Value = AutoGenRepair,
     Callback = function(v)
-        AutoGenRepair = v; Config:Set("AutoGenRepair", v); Config:Save()
-        if v then notify("Auto Generator Enabled", "Press X or move joystick to cancel."); startGenLoop()
+        AutoGenRepair = v
+        Config:Set("AutoGenRepair", v)
+        Config:Save()
+
+        if v then
+            notify("Auto Generator Enabled", "v5 finder/retry enabled. Press X or move joystick to cancel.")
+            markGenCacheDirty()
+            startGenLoop()
         else
             if _genThread then task.cancel(_genThread); _genThread = nil end
             clearRepairState()
@@ -1995,7 +1996,7 @@ SurTab:Button({
                 repeat
                     if Root and TH then
                         if BP.Velocity.Magnitude<50 then
-                            Angle = Angle + 100
+                            Angle+=100
                             FPos(BP,CFrame.new(0,1.5,0)+TH.MoveDirection*BP.Velocity.Magnitude/1.25,CFrame.Angles(math.rad(Angle),0,0))
                             task.wait()
                             FPos(BP,CFrame.new(0,-1.5,0)+TH.MoveDirection*BP.Velocity.Magnitude/1.25,CFrame.Angles(math.rad(Angle),0,0))
@@ -2046,13 +2047,13 @@ SurTab:Button({ Title="Self UnHook (Not 100%)",
     Desc = "Attempts to free yourself from hooks", Callback=function() ReplicatedStorage.Remotes.Carry.SelfUnHookEvent:FireServer() end })
 
 -- ====================== KILLER TAB ======================
-DYHUB_AimbotEnabled=false; DYHUB_Aimbot28Enabled=false; DYHUB_LockedTarget=nil
-DYHUB_PredictionTime=0.14; DYHUB_MIN_DISTANCE=1; DYHUB_MAX_DISTANCE=250
-DYHUB_MIN_PITCH=Config:Get("DYHUB_MIN_PITCH",-1); DYHUB_MAX_PITCH=Config:Get("DYHUB_MAX_PITCH",30)
-DYHUB_LOW_HP_IGNORE=20; DYHUB_ToughWall=Config:Get("DYHUB_ToughWall",true)
-DYHUB_AimbotToggleGUIVisible=false; DYHUB_Aimbot28ToggleGUIVisible=false
-DYHUB_mobileButton,DYHUB_mobileButton28,DYHUB_guiFolder = nil
-DYHUB_Settings={Aimbot={DragUI=false,MobileButtonPosition=UDim2.new(1,-40,1,-40),MobileButton28Position=UDim2.new(1,-140,1,-40),SetKeybindLock=Config:Get("AimbotKey","Z"),SetKeybindLock28=Config:Get("AimbotKey28","V")}}
+local DYHUB_AimbotEnabled=false; local DYHUB_Aimbot28Enabled=false; local DYHUB_LockedTarget=nil
+local DYHUB_PredictionTime=0.14; local DYHUB_MIN_DISTANCE=1; local DYHUB_MAX_DISTANCE=250
+local DYHUB_MIN_PITCH=Config:Get("DYHUB_MIN_PITCH",-1); local DYHUB_MAX_PITCH=Config:Get("DYHUB_MAX_PITCH",30)
+local DYHUB_LOW_HP_IGNORE=20; local DYHUB_ToughWall=Config:Get("DYHUB_ToughWall",true)
+local DYHUB_AimbotToggleGUIVisible=false; local DYHUB_Aimbot28ToggleGUIVisible=false
+local DYHUB_mobileButton,DYHUB_mobileButton28,DYHUB_guiFolder
+local DYHUB_Settings={Aimbot={DragUI=false,MobileButtonPosition=UDim2.new(1,-40,1,-40),MobileButton28Position=UDim2.new(1,-140,1,-40),SetKeybindLock=Config:Get("AimbotKey","Z"),SetKeybindLock28=Config:Get("AimbotKey28","V")}}
 
 killerTab:Section({Title="Killer: The Veil",Icon="target"})
 killerTab:Paragraph({Title="Information: The Veil",Desc="• Aimbot is currently in BETA.\n• There is a chance of missing.\n• Aimbot will not support people at high places.",Image="rbxassetid://104487529937663",ImageSize=50})
@@ -2081,9 +2082,9 @@ killerTab:Toggle({Title="Enable Aimbot Charge (Toggle GUI)",
 killerTab:Toggle({Title="Custom Position Drag (Toggle GUI)",
     Desc = "Allows dragging the mobile aimbot buttons",Value=false,Callback=function(state) DYHUB_Settings.Aimbot.DragUI=state; DYHUB_EnableDrag(state) end})
 
-function DYHUB_GetLocalRoot() local c=LocalPlayer.Character; return c and c:FindFirstChild("HumanoidRootPart") end
-function DYHUB_HP_OK(plr) local hum=plr.Character and plr.Character:FindFirstChild("Humanoid"); return hum and hum.Health>DYHUB_LOW_HP_IGNORE end
-function DYHUB_GetClosestInScreen()
+local function DYHUB_GetLocalRoot() local c=LocalPlayer.Character; return c and c:FindFirstChild("HumanoidRootPart") end
+local function DYHUB_HP_OK(plr) local hum=plr.Character and plr.Character:FindFirstChild("Humanoid"); return hum and hum.Health>DYHUB_LOW_HP_IGNORE end
+local function DYHUB_GetClosestInScreen()
     local closest,minDist=nil,math.huge; local mouse=UserInputService:GetMouseLocation()
     for _,plr in pairs(Players:GetPlayers()) do
         if plr~=LocalPlayer and plr.Character and DYHUB_HP_OK(plr) then
@@ -2094,7 +2095,7 @@ function DYHUB_GetClosestInScreen()
         end
     end; return closest
 end
-function DYHUB_GetClosestByDistance()
+local function DYHUB_GetClosestByDistance()
     local root=DYHUB_GetLocalRoot(); if not root then return nil end
     local closest,distMin=nil,math.huge
     for _,plr in pairs(Players:GetPlayers()) do
@@ -2104,7 +2105,7 @@ function DYHUB_GetClosestByDistance()
         end
     end; return closest,distMin
 end
-function DYHUB_CanSeeTarget(target)
+local function DYHUB_CanSeeTarget(target)
     if DYHUB_ToughWall then return true end
     local head=target.Character and target.Character:FindFirstChild("Head"); local root=DYHUB_GetLocalRoot()
     if not head or not root then return false end
@@ -2112,8 +2113,8 @@ function DYHUB_CanSeeTarget(target)
     params.FilterDescendantsInstances={LocalPlayer.Character or {},target.Character}
     return not Workspace:Raycast(root.Position+Vector3.new(0,2,0),head.Position-root.Position,params)
 end
-function DYHUB_GetAutoPitchMax(dist) if dist>=190 then return 45.5 elseif dist>=150 then return 40.5 elseif dist>=90 then return 36.5 else return 30.5 end end
-function DYHUB_AimAt_Normal(target)
+local function DYHUB_GetAutoPitchMax(dist) if dist>=190 then return 45.5 elseif dist>=150 then return 40.5 elseif dist>=90 then return 36.5 else return 30.5 end end
+local function DYHUB_AimAt_Normal(target)
     if not target.Character then return end
     local head=target.Character:FindFirstChild("Head"); local hrp_=target.Character:FindFirstChild("HumanoidRootPart")
     local lr=DYHUB_GetLocalRoot(); if not head or not hrp_ or not lr then return end
@@ -2123,9 +2124,9 @@ function DYHUB_AimAt_Normal(target)
     local dir=(pred-Camera.CFrame.Position).Unit; local yaw=math.atan2(dir.X,dir.Z); local pr=math.rad(pitch)
     Camera.CFrame=CFrame.new(Camera.CFrame.Position,Camera.CFrame.Position+Vector3.new(math.sin(yaw)*math.cos(pr),math.sin(pr),math.cos(yaw)*math.cos(pr)))
 end
-_pitchTable={{1,0.09},{10,0.9},{20,1.9},{30,2.9},{40,3.9},{50,4.9},{60,5.9},{70,6.9},{80,7.9},{90,8.9},{100,10.9},{110,11.9},{120,12.9},{130,13.9},{140,14.9},{150,15.9},{160,16.9},{170,17.9},{180,18.9},{190,20.3},{200,22.3}}
-function DYHUB_GetPitchByDistance(d) for _,v in ipairs(_pitchTable) do if d<v[1] then return v[2] end end; return 23.3 end
-function DYHUB_AimAt_28(target)
+local _pitchTable={{1,0.09},{10,0.9},{20,1.9},{30,2.9},{40,3.9},{50,4.9},{60,5.9},{70,6.9},{80,7.9},{90,8.9},{100,10.9},{110,11.9},{120,12.9},{130,13.9},{140,14.9},{150,15.9},{160,16.9},{170,17.9},{180,18.9},{190,20.3},{200,22.3}}
+local function DYHUB_GetPitchByDistance(d) for _,v in ipairs(_pitchTable) do if d<v[1] then return v[2] end end; return 23.3 end
+local function DYHUB_AimAt_28(target)
     if not target.Character then return end
     local head=target.Character:FindFirstChild("Head"); local hrp_=target.Character:FindFirstChild("HumanoidRootPart")
     local lr=DYHUB_GetLocalRoot(); if not head or not hrp_ or not lr then return end
@@ -2150,7 +2151,7 @@ UserInputService.InputBegan:Connect(function(input,gp)
     end
 end)
 
-function DYHUB_ClearDragConnections() end
+local function DYHUB_ClearDragConnections() end
 function DYHUB_EnableDrag(state)
     if not state then
         if DYHUB_mobileButton then DYHUB_Settings.Aimbot.MobileButtonPosition=DYHUB_mobileButton.Position end
@@ -2178,13 +2179,13 @@ function DYHUB_EnableDrag(state)
     makeDrag(DYHUB_mobileButton,"MobileButtonPosition"); makeDrag(DYHUB_mobileButton28,"MobileButton28Position")
 end
 
-function DYHUB_EnsureGUIFolder()
+local function DYHUB_EnsureGUIFolder()
     if not DYHUB_guiFolder or not DYHUB_guiFolder.Parent then
         DYHUB_guiFolder=Instance.new("ScreenGui"); DYHUB_guiFolder.Name="DYHUB_AimbotGUI"
         DYHUB_guiFolder.ResetOnSpawn=false; DYHUB_guiFolder.Parent=PlayerGui
     end
 end
-function DYHUB_CreateMobileButtons()
+local function DYHUB_CreateMobileButtons()
     pcall(function() if DYHUB_mobileButton then DYHUB_mobileButton:Destroy() end end)
     pcall(function() if DYHUB_mobileButton28 then DYHUB_mobileButton28:Destroy() end end)
     local function makeBtn(text,pos,isEnabled)
@@ -2231,8 +2232,8 @@ end)
 
 killerTab:Section({Title="Killer: The Masked",Icon="venetian-mask"})
 killerTab:Paragraph({Title="Information: The Masked",Desc="• Richard (No Abilities)\n• Tony (One Shot, No hold)\n• Brandon (Speed Boost)\n• Jake (Lunge Range)\n• Richter (Removes terror radius)\n• Graham (Faster Vault)\n• Alex (Chainsaw, One Shot)",Image="rbxassetid://104487529937663",ImageSize=50})
-MaskedList={"Richard","Tony","Brandon","Jake","Richter","Graham","Alex"}
-selectedMasks=Config:Get("selectedMasks","Richard")
+local MaskedList={"Richard","Tony","Brandon","Jake","Richter","Graham","Alex"}
+local selectedMasks=Config:Get("selectedMasks","Richard")
 killerTab:Dropdown({Title="Select Mask",Values=MaskedList,Multi=false,Value=selectedMasks,Callback=function(value) selectedMasks=value; Config:Set("selectedMasks",value); Config:Save() end})
 killerTab:Button({Title="Choose Mask (Selected)",
     Desc = "Equips the selected mask ability",Callback=function() ReplicatedStorage.Remotes.Killers.Masked.Activatepower:FireServer(selectedMasks) end})
@@ -2240,11 +2241,11 @@ killerTab:Button({Title="Random Mask (Legit Mode)",
     Desc = "Chooses a random mask ability",Callback=function() ReplicatedStorage.Remotes.Killers.Masked.Activatepower:FireServer(MaskedList[math.random(#MaskedList)]) end})
 
 killerTab:Section({Title="Killer: The Stalker",Icon="eye-off"})
-Stalker=Config:Get("Stalker",false)
-_stalkerRemote = nil
-function getStalkerRemote()
+local Stalker=Config:Get("Stalker",false)
+local _stalkerRemote
+local function getStalkerRemote()
     if not _stalkerRemote or not _stalkerRemote.Parent then
-        _stalkerRemote=safePath(ReplicatedStorage,"Remotes","Killers","Stalker","StartStalking")
+        _stalkerRemote=ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Killers"):WaitForChild("Stalker"):WaitForChild("StartStalking")
     end; return _stalkerRemote
 end
 killerTab:Toggle({Title="Start Stalker (Raycast / Remote)",
@@ -2253,14 +2254,13 @@ killerTab:Toggle({Title="Start Stalker (Raycast / Remote)",
     if v then task.spawn(function()
         while Stalker do task.wait(0.2)
             local char=LocalPlayer.Character; local root=char and char:FindFirstChild("HumanoidRootPart")
-            if root and isKillerChar(char) then
-                local remote=getStalkerRemote()
-                for _,plr in ipairs(Players:GetPlayers()) do
-                    if plr~=LocalPlayer and plr.Character then
-                        local hrp_=plr.Character:FindFirstChild("HumanoidRootPart"); local hum=plr.Character:FindFirstChild("Humanoid")
-                        if hrp_ and hum then local dist=(root.Position-hrp_.Position).Magnitude
-                            if remote and dist>=30 and dist<=70 and hum.Health>20 then pcall(function() remote:FireServer(plr) end) end
-                        end
+            if not root or not isKillerChar(char) then continue end
+            local remote=getStalkerRemote()
+            for _,plr in ipairs(Players:GetPlayers()) do
+                if plr~=LocalPlayer and plr.Character then
+                    local hrp_=plr.Character:FindFirstChild("HumanoidRootPart"); local hum=plr.Character:FindFirstChild("Humanoid")
+                    if hrp_ and hum then local dist=(root.Position-hrp_.Position).Magnitude
+                        if dist>=30 and dist<=70 and hum.Health>20 then pcall(function() remote:FireServer(plr) end) end
                     end
                 end
             end
@@ -2269,15 +2269,14 @@ killerTab:Toggle({Title="Start Stalker (Raycast / Remote)",
 end})
 
 killerTab:Section({Title="Feature Killer",Icon="swords"})
-killallEnabled=Config:Get("killall",false)
+local killallEnabled=Config:Get("killall",false)
 killerTab:Toggle({Title="Kill All (Warning: Get Ban)",
     Desc = "Automatically teleport and kill all",Value=killallEnabled,Callback=function(v)
     killallEnabled=v; Config:Set("killall",killallEnabled); Config:Save()
     if v then task.spawn(function()
         local remote=ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Attacks"):WaitForChild("BasicAttack"); local startCFrame=nil
         while killallEnabled do task.wait(0.2)
-            local char=LocalPlayer.Character; local root=char and char:FindFirstChild("HumanoidRootPart")
-            if root then
+            local char=LocalPlayer.Character; local root=char and char:FindFirstChild("HumanoidRootPart"); if not root then continue end
             if not startCFrame then startCFrame=root.CFrame end
             local targets={}
             for _,plr in ipairs(Players:GetPlayers()) do
@@ -2292,19 +2291,17 @@ killerTab:Toggle({Title="Kill All (Warning: Get Ban)",
             end
             local allLow=true; for _,entry in ipairs(targets) do if entry.humanoid.Health>20 then allLow=false; break end end
             if allLow and startCFrame then root.CFrame=startCFrame; task.wait(1) end
-            end
         end
     end) end
 end})
 
-Autocarry=Config:Get("autocarry",false)
+local Autocarry=Config:Get("autocarry",false)
 killerTab:Toggle({Title="Auto Carry (Nearby Survivor / 2.5s)",
     Desc = "Automatically picks up nearby downed survivors",Value=Autocarry,Callback=function(v)
     Autocarry=v; Config:Set("autocarry",Autocarry); Config:Save()
     if v then task.spawn(function()
         while Autocarry do task.wait(2.5)
-            local char=LocalPlayer.Character; local hrp_=char and char:FindFirstChild("HumanoidRootPart")
-            if hrp_ then
+            local char=LocalPlayer.Character; local hrp_=char and char:FindFirstChild("HumanoidRootPart"); if not hrp_ then continue end
             local candidates={}
             for _,plr in pairs(Players:GetPlayers()) do
                 if plr~=LocalPlayer and plr.Character then
@@ -2312,28 +2309,25 @@ killerTab:Toggle({Title="Auto Carry (Nearby Survivor / 2.5s)",
                     if hum and oHrp and hum.Health==20 and (hrp_.Position-oHrp.Position).Magnitude<=10 then table.insert(candidates,plr) end
                 end
             end
-            if #candidates==1 then
-                local target=candidates[1]
-                if target and target.Character then
-                    local tHum=target.Character:FindFirstChild("Humanoid")
-                    if tHum and tHum.Health==20 then
-                        ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Carry"):WaitForChild("CarrySurvivorEvent"):FireServer(target.Character); task.wait(5)
-                    end
+            if #candidates~=1 then continue end
+            local target=candidates[1]
+            if target and target.Character then
+                local tHum=target.Character:FindFirstChild("Humanoid")
+                if tHum and tHum.Health==20 then
+                    ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Carry"):WaitForChild("CarrySurvivorEvent"):FireServer(target.Character); task.wait(5)
                 end
-            end
             end
         end
     end) end
 end})
 
-AutoHook=Config:Get("autohook",false)
+local AutoHook=Config:Get("autohook",false)
 killerTab:Toggle({Title="Auto Hook (Nearby Hook / 2.5s)",
     Desc = "Automatically hook nearby survivors",Value=AutoHook,Callback=function(v)
     AutoHook=v; Config:Set("autohook",AutoHook); Config:Save()
     if v then task.spawn(function()
         while AutoHook do task.wait(2.5)
-            local char=LocalPlayer.Character; local hrp_=char and char:FindFirstChild("HumanoidRootPart")
-            if hrp_ then
+            local char=LocalPlayer.Character; local hrp_=char and char:FindFirstChild("HumanoidRootPart"); if not hrp_ then continue end
             local candidates={}
             for _,target in ipairs(Players:GetPlayers()) do
                 if target~=LocalPlayer and target.Character then
@@ -2341,24 +2335,23 @@ killerTab:Toggle({Title="Auto Hook (Nearby Hook / 2.5s)",
                     if hum and thrp and hum.Health==20 and (hrp_.Position-thrp.Position).Magnitude<=10 then table.insert(candidates,target) end
                 end
             end
-            if #candidates==1 then
-                local nearestHook,nearestDist=nil,10
-                for _,desc in ipairs(Workspace:GetDescendants()) do
-                    if desc.Name=="HookPoint" then local d=(hrp_.Position-desc.Position).Magnitude; if d<=nearestDist then nearestDist=d; nearestHook=desc end end
-                end
-                if nearestHook then ReplicatedStorage.Remotes.Carry.HookEvent:FireServer(nearestHook); task.wait(5) end
+            if #candidates~=1 then continue end
+            local nearestHook,nearestDist=nil,10
+            for _,desc in ipairs(Workspace:GetDescendants()) do
+                if desc.Name=="HookPoint" then local d=(hrp_.Position-desc.Position).Magnitude; if d<=nearestDist then nearestDist=d; nearestHook=desc end end
             end
-            end
+            if not nearestHook then continue end
+            ReplicatedStorage.Remotes.Carry.HookEvent:FireServer(nearestHook); task.wait(5)
         end
     end) end
 end})
 
 killerTab:Section({Title="Feature Fun",Icon="crown"})
-GrabKey=Config:Get("GrabKey","C")
+local GrabKey=Config:Get("GrabKey","C")
 killerTab:Input({Title="Set Keybind Grab (PC ONLY)",Value=GrabKey,Placeholder="Grab (Default: C)",Callback=function(text)
     if type(text)=="string" and #text>0 then GrabKey=text:upper(); Config:Set("GrabKey",GrabKey); Config:Save() end
 end})
-function DoGrab()
+local function DoGrab()
     local char=LocalPlayer.Character; local hrp_=char and char:FindFirstChild("HumanoidRootPart"); if not hrp_ then return end
     local candidates={}
     for _,target in ipairs(Players:GetPlayers()) do
@@ -2378,15 +2371,14 @@ UserInputService.InputBegan:Connect(function(input,gp)
     if ok and keyEnum and input.KeyCode==keyEnum then DoGrab() end
 end)
 
-nocooldownskillEnabled=Config:Get("autoattack",false)
+local nocooldownskillEnabled=Config:Get("autoattack",false)
 killerTab:Toggle({Title="Auto Attack (No Animation)",
     Desc = "Automatically attack the player",Value=nocooldownskillEnabled,Callback=function(v)
     nocooldownskillEnabled=v; Config:Set("autoattack",nocooldownskillEnabled); Config:Save()
     if v then task.spawn(function()
         local remote=ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Attacks"):WaitForChild("BasicAttack")
         while nocooldownskillEnabled do task.wait(0.1)
-            local char=LocalPlayer.Character; local root=char and char:FindFirstChild("HumanoidRootPart")
-            if root then
+            local char=LocalPlayer.Character; local root=char and char:FindFirstChild("HumanoidRootPart"); if not root then continue end
             local closest,closestDist=nil,10
             for _,plr in ipairs(Players:GetPlayers()) do
                 if plr~=LocalPlayer and plr.Character then
@@ -2397,20 +2389,19 @@ killerTab:Toggle({Title="Auto Attack (No Animation)",
                 end
             end
             if closest then remote:FireServer() end
-            end
         end
     end) end
 end})
 
 killerTab:Section({Title="Feature Cheat",Icon="bug"})
-noFlashlightEnabled=Config:Get("noblind",false)
+local noFlashlightEnabled=Config:Get("noblind",false)
 killerTab:Toggle({Title="No Flashlight",
     Desc = "Prevents blind from using flash",Value=noFlashlightEnabled,Callback=function(state) noFlashlightEnabled=state; Config:Set("noblind",noFlashlightEnabled); Config:Save() end})
 PlayerGui.DescendantAdded:Connect(function(desc)
     if noFlashlightEnabled and desc:IsA("GuiObject") and desc.Name=="Blind" then pcall(function() desc:Destroy() end) end
 end)
 
-destroyPalletwrong=Config:Get("destroyPalletwrong",false)
+local destroyPalletwrong=Config:Get("destroyPalletwrong",false)
 killerTab:Toggle({Title="Remove Palletwrong (All)",
     Desc = "Removes all Palletwrong objects",Value=destroyPalletwrong,Callback=function(v)
     destroyPalletwrong=v; Config:Set("destroyPalletwrong",destroyPalletwrong); Config:Save()
@@ -2436,13 +2427,13 @@ killerTab:Button({Title="Fix Cam (3rd Person Camera)",
 end})
 
 -- ====================== PLAYER TAB ======================
-speedEnabled   = false
-flyNoclipSpeed = Config:Get("SpeedWalk", 3)
-NoClipEnabled  = Config:Get("NoClipEnabled", false)
-speedConnection, noclipConnection = nil
+local speedEnabled   = false
+local flyNoclipSpeed = Config:Get("SpeedWalk", 3)
+local NoClipEnabled  = Config:Get("NoClipEnabled", false)
+local speedConnection, noclipConnection
 
 -- [Fix] Restore speed on load
-function applySpeedToChar()
+local function applySpeedToChar()
     -- Speed ใน script นี้ใช้ RenderStepped hrp offset ไม่ใช่ WalkSpeed
     -- ถ้าเปิด Enable Speed ตอน load → restore
     if speedEnabled then
@@ -2507,39 +2498,35 @@ PlayerTab:Toggle({
     end
 })
 
-NoFallEnabled=false
-FallRemote = safePath(ReplicatedStorage, "Remotes", "Mechanics", "Fall")
-if FallRemote and type(getrawmetatable) == "function" and type(setreadonly) == "function" and type(newcclosure) == "function" and type(getnamecallmethod) == "function" then
-    local mt=getrawmetatable(game); local oldNamecall=mt.__namecall
-    setreadonly(mt,false)
-    mt.__namecall=newcclosure(function(self,...)
-        local method=getnamecallmethod()
-        if NoFallEnabled and self==FallRemote and method=="FireServer" then return nil end
-        return oldNamecall(self,...)
-    end)
-    setreadonly(mt,true)
-else
-    warn("[DYHUB] NoFall hook skipped: Fall remote or hook functions not available yet")
-end
+local NoFallEnabled=false
+local FallRemote=ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Mechanics"):WaitForChild("Fall")
+local mt=getrawmetatable(game); local oldNamecall=mt.__namecall
+setreadonly(mt,false)
+mt.__namecall=newcclosure(function(self,...)
+    local method=getnamecallmethod()
+    if NoFallEnabled and self==FallRemote and method=="FireServer" then return nil end
+    return oldNamecall(self,...)
+end)
+setreadonly(mt,true)
 PlayerTab:Toggle({Title="No Fall (Beta)",
     Desc = "Prevents movement slowdown after falling",Value=false,Callback=function(v) NoFallEnabled=v end})
 
 -- ====================== TELEPORT TAB ======================
-function getCFrame(obj)
+local function getCFrame(obj)
     if obj:IsA("BasePart") then return obj.CFrame
     elseif obj:IsA("Model") then local part=obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart"); return part and part.CFrame end
 end
-function getAllGenerators()
+local function getAllGenerators()
     local list,count={},0
     for _,obj in ipairs(Workspace:GetDescendants()) do
         if obj.Name=="Generator" and (obj:IsA("Model") or obj:IsA("BasePart")) then
-            count = count + 1; table.insert(list,{Name="Generator "..count,Object=obj})
+            count+=1; table.insert(list,{Name="Generator "..count,Object=obj})
         end
     end; return list
 end
 
 TeleportTab:Section({Title="Teleport: Place",Icon="map"})
-SelectedPlace = nil
+local SelectedPlace
 TeleportTab:Dropdown({Title="Select Place",Values={"Lobby","Game"},Callback=function(v) SelectedPlace=v end})
 TeleportTab:Button({Title="Teleport",
     Desc = "Teleports to selected generator",Callback=function()
@@ -2556,8 +2543,8 @@ TeleportTab:Button({Title="Teleport",
 end})
 
 TeleportTab:Section({Title="Teleport: Generator",Icon="zap"})
-generatorList=getAllGenerators(); GenTarget = nil
-GenDropdown=TeleportTab:Dropdown({
+local generatorList=getAllGenerators(); local GenTarget
+local GenDropdown=TeleportTab:Dropdown({
     Title="Select Generator",
     Values=(function() local t={}; for _,g in ipairs(generatorList) do table.insert(t,g.Name) end; return t end)(),
     Callback=function(v) for _,g in ipairs(generatorList) do if g.Name==v then GenTarget=g.Object end end end
@@ -2583,7 +2570,7 @@ Main3:Button({Title="Save Config (NOW)",
     Desc = "Saves all current settings immediately.",Callback=function()
     Config:Save(); WindUI:Notify({Title="Config Saved",Content="Config saved successfully!",Duration=2,Icon="save"})
 end})
-AutoSaveEnabled=Config:Get("AutoSaveEnabled",true); AutoSaveDelay=Config:Get("AutoSaveDelay",15)
+local AutoSaveEnabled=Config:Get("AutoSaveEnabled",true); local AutoSaveDelay=Config:Get("AutoSaveDelay",15)
 Main3:Toggle({Title="Auto Save Config",
     Desc = "Automatically saves config at set interval.",Value=AutoSaveEnabled,Callback=function(state)
     AutoSaveEnabled=state; Config:Set("AutoSaveEnabled",state); Config:Save()
@@ -2629,9 +2616,9 @@ ui.Creator.Request=function(requestData)
     if success then return result else error("HTTP Request failed: "..tostring(result)) end
 end
 
-InviteCode="jWNDPNMmyB"
-DiscordAPI="https://discord.com/api/v10/invites/"..InviteCode.."?with_counts=true&with_expiration=true"
-function LoadDiscordInfo()
+local InviteCode="jWNDPNMmyB"
+local DiscordAPI="https://discord.com/api/v10/invites/"..InviteCode.."?with_counts=true&with_expiration=true"
+local function LoadDiscordInfo()
     local success,result=pcall(function()
         return HttpService:JSONDecode(ui.Creator.Request({Url=DiscordAPI,Method="GET",Headers={["User-Agent"]="RobloxBot/1.0",["Accept"]="application/json"}}).Body)
     end)
@@ -2674,8 +2661,7 @@ if NoClipEnabled then
 end
 
 if AutoGenRepair    then startGenLoop() end
-if AutoSkillPerfect then startSkillLoop("perfect") end
-if AutoSkillNeutral then startSkillLoop("neutral") end
+if AutoSkillPerfect or AutoSkillNeutral then startSkillLoop() end
 
 -- init world ESP cache
 if espEnabled then
