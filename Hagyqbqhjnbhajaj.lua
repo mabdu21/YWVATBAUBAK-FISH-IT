@@ -1,13 +1,8 @@
--- Powered by nig | v522
+-- Powered by nig | v523
 -- =========================
 local version = "Rework"
 local ver     = "v015.05"
 -- =========================
--- CHANGELOG v015.05
--- [Fixed] Auto Generator lag/freeze when enabled
--- [Optimized] Cached generator/point/progress scans
--- [Optimized] No full generator scan every skill tick
--- [Kept] Cancel by X, WASD/arrow/space, or mobile joystick movement
 
 repeat task.wait() until game:IsLoaded()
 
@@ -255,7 +250,52 @@ Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/28/2026 | CL: " .. ver,
-    Desc  = "• [ Fixed ] Auto Generator lag/freeze on enable\n• [ Optimized ] generator scan cached + debounced\n• [ Optimized ] repair points/progress cached\n• [ Optimized ] skill loop no longer scans generator every tick\n• [ Kept ] cancel by X, WASD/arrow/space, or mobile joystick\n• [ Kept ] Auto Parry v6 rehook + fallback scan",
+    Desc  = [[• [ Reword ] Speed Walk description changed to a cleaner CFrame movement description
+• [ Reword ] Auto Parry description and mode info simplified for easier understanding
+• [ Reword ] Latest Update text updated to match the new v015.05 generator optimization changes
+
+• [ New ] Auto Parry v6 with rehook system for killer, weapon, and character changes
+• [ New ] Auto Parry heartbeat fallback scan if AnimationPlayed does not fire
+• [ New ] Recursive mobile parry button finder with PC fallback support
+• [ New ] Runtime bridge for sharing functions across do-scope safely
+
+• [ Added ] Auto Generator v4 Lite system
+• [ Added ] Cached generator list, repair point cache, and progress cache
+• [ Added ] Cached SkillCheck GUI / Check object lookup
+• [ Added ] Debounced generator cache invalidation when map objects change
+• [ Added ] Movement cancel support using X, WASD, arrow keys, space, and mobile joystick
+• [ Added ] Auto Generator restore after respawn / character reload
+
+• [ Fixed ] Auto Generator lag/freeze when enabled
+• [ Fixed ] SkillCheck loop no longer scans all generators every tick
+• [ Fixed ] Generator scan now prioritizes workspace.Map before fallback workspace scan
+• [ Fixed ] Repair loop no longer repeatedly teleports to the same point too fast
+• [ Fixed ] Generator cache clears when generators / repair points are added or removed
+• [ Fixed ] Auto Parry missing hooks after killer or weapon changes
+• [ Fixed ] Mobile parry button detection is more reliable
+
+• [ Improved ] Auto Generator now supports more generator and repair point names
+• [ Improved ] Teleport + Repair now avoids generators near the killer
+• [ Improved ] Repair retry timing is slower and safer to reduce lag
+• [ Improved ] Auto SkillCheck Perfect / Neutral now share one optimized system
+• [ Improved ] Settings now use a centralized settings table
+• [ Improved ] Anti-AFK toggle now updates settings table before saving
+• [ Improved ] Speed Walk slider now saves through settings table
+
+• [ Optimized ] Removed repeated full GetDescendants scans from active generator loops
+• [ Optimized ] Generator scan is cached and debounced
+• [ Optimized ] Repair point lookup is cached per generator
+• [ Optimized ] Generator progress check is cached briefly
+• [ Optimized ] GUI scan is throttled instead of checking deeply every tick
+• [ Optimized ] Auto Generator loop delay increased to reduce freezing
+
+• [ Kept ] Auto SkillCheck Perfect mode
+• [ Kept ] Auto SkillCheck Neutral mode
+• [ Kept ] Auto Generator teleport + repair
+• [ Kept ] Cancel by X, movement keys, and mobile joystick
+• [ Kept ] Premium-only Auto Parry system
+• [ Kept ] ESP cached world scan system
+• [ Kept ] No Clip, No Fall, Speed Walk, Teleport, and other existing features]],
 })
 Info:Divider()
 
@@ -494,22 +534,22 @@ local function getThreatLevel(killerChar)
 end
 
 local ANIM_HITFRAME = {
-    ["rbxassetid://139369275981139"] = { preDelay=0.00, hitAt=0.10 },
-    ["rbxassetid://110355011987939"] = { preDelay=0.00, hitAt=0.10 },
+    ["rbxassetid://139369275981139"] = { preDelay=0.00, hitAt=0.13 },
+    ["rbxassetid://110355011987939"] = { preDelay=0.00, hitAt=0.13 },
     ["rbxassetid://135002183282873"] = { preDelay=0.00, hitAt=0.8 },
     ["rbxassetid://121216847022485"] = { preDelay=0.00, hitAt=0.8 },
-    ["rbxassetid://105374834496520"] = { preDelay=0.00, hitAt=0.10 },
-    ["rbxassetid://111920872708571"] = { preDelay=0.00, hitAt=0.10 },
-    ["rbxassetid://118907603246885"] = { preDelay=0.00, hitAt=0.10 },
-    ["rbxassetid://78432063483146"]  = { preDelay=0.00, hitAt=0.10 },
-    ["rbxassetid://113255068724446"] = { preDelay=0.00, hitAt=0.8 },
-    ["rbxassetid://74968262036854"]  = { preDelay=0.00, hitAt=0.8 },
-    ["rbxassetid://129784271201071"] = { preDelay=0.00, hitAt=0.8 },
-    ["rbxassetid://132817836308238"] = { preDelay=0.00, hitAt=0.8 },
-    ["rbxassetid://112166042383605"] = { preDelay=0.00, hitAt=0.10 },
-    ["rbxassetid://122812055447896"] = { preDelay=0.00, hitAt=0.10 },
-    ["rbxassetid://117042998468241"] = { preDelay=0.00, hitAt=0.10 },
-    ["rbxassetid://133963973694098"] = { preDelay=0.00, hitAt=0.10 },
+    ["rbxassetid://105374834496520"] = { preDelay=0.00, hitAt=0.13 },
+    ["rbxassetid://111920872708571"] = { preDelay=0.00, hitAt=0.13 },
+    ["rbxassetid://118907603246885"] = { preDelay=0.00, hitAt=0.13 },
+    ["rbxassetid://78432063483146"]  = { preDelay=0.00, hitAt=0.13 },
+    ["rbxassetid://113255068724446"] = { preDelay=0.00, hitAt=0.9 },
+    ["rbxassetid://74968262036854"]  = { preDelay=0.00, hitAt=0.9 },
+    ["rbxassetid://129784271201071"] = { preDelay=0.00, hitAt=0.9 },
+    ["rbxassetid://132817836308238"] = { preDelay=0.00, hitAt=0.9 },
+    ["rbxassetid://112166042383605"] = { preDelay=0.00, hitAt=0.13 },
+    ["rbxassetid://122812055447896"] = { preDelay=0.00, hitAt=0.13 },
+    ["rbxassetid://117042998468241"] = { preDelay=0.00, hitAt=0.13 },
+    ["rbxassetid://133963973694098"] = { preDelay=0.00, hitAt=0.13 },
 }
 
 local function execParry(killerChar, minThreat)
@@ -531,13 +571,13 @@ local function scheduleParry(kc, animId, track, fallback)
     local mode = _G.AutoParryMode or "Fast"
     local info = ANIM_HITFRAME[animId]
     if not info and fallback then
-        info = { preDelay = 0, hitAt = 0.08 }
+        info = { preDelay = 0, hitAt = 0.09 }
     elseif not info then
         return
     end
 
     if mode == "Fast" then
-        execParry(kc, fallback and 0.28 or 0.01)
+        execParry(kc, fallback and 0.28 or 0.02)
         return
     end
 
@@ -656,12 +696,12 @@ SurTab:Section({ Title = "Feature Survivor", Icon = "user" })
 if isPremium then
     SurTab:Paragraph({
         Title = "Information: Parry Mode",
-        Desc  = "• Fast = Instant\n• Smart = Small hitframe delay\n• Predict = Hitframe delay scaled by anim speed\n• Fallback = close threat scan when AnimationPlayed misses",
+        Desc  = "• Fast = Instant\n• Smart = Small hitframe delay\n• Predict = Hitframe delay scaled by anim speed",
         Image = "rbxassetid://104487529937663", ImageSize = 30,
     })
     SurTab:Toggle({
         Title    = "Auto Parry",
-        Desc     = "Automatically parries killer attacks. Rehooks after new rounds/maps.",
+        Desc     = "Automatically parries killer attacks.",
         Value    = settings.AutoParry,
         Callback = function(v)
             settings.AutoParry = v; _G.AutoParry = v
@@ -2777,13 +2817,17 @@ local speedConnection, noclipConnection
 
 PlayerTab:Section({Title="Feature Player",Icon="rabbit"})
 PlayerTab:Slider({
-    Title="Set Speed (Legit = 3)", Value={Min=1,Max=677,Value=flyNoclipSpeed}, Step=1,
-    Callback=function(val)
-        flyNoclipSpeed=val; settings.SpeedWalk=val; Config:Set("SpeedWalk",flyNoclipSpeed); Config:Save()
+    Title    = "Set Speed Walk",
+    Desc     = "Adjust your walking speed with smooth movement. (CFrame)",
+    Value    = { Min=1, Max=677, Default=settings.SpeedWalk },
+    Step     = 1,
+    Callback = function(v)
+        flyNoclipSpeed = v; settings.SpeedWalk = v
+        Config:Set("SpeedWalk", v); Config:Save()
     end
 })
 PlayerTab:Toggle({
-    Title="Enable Speed", Desc = "Adjusts your character movement speed", Value=speedEnabled,
+    Title="Enable Speed", Desc = "Adjusts your character movement speed (Slider)", Value=speedEnabled,
     Callback=function(v)
         speedEnabled=v; settings.SpeedEnabled=v
         if speedEnabled then
