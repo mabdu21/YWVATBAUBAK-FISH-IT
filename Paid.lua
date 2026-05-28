@@ -1,7 +1,7 @@
--- v085
+-- v085123213
 -- =========================
 local version = "Rework"
-local ver = "v023.4"
+local ver = "v023.5"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -14,7 +14,7 @@ repeat task.wait() until game:IsLoaded()
 local p = game:GetService("Players").LocalPlayer
 local pg = p:WaitForChild("PlayerGui")
 
-local function waitLoadingGone()
+function waitLoadingGone()
     local gui = pg:FindFirstChild("LoadingGui")
     if gui then
         WindUI:Notify({ Title = "Initialization", Content = "Game is loading, Please wait.", Duration = 3, Icon = "download" })
@@ -114,7 +114,7 @@ local FreeVersion    = "Free Version"
 local PremiumVersion = "Premium Version"
 local ExtraVersion   = "Extra Version"
 
-local function getData(url)
+function getData(url)
     local success, response = pcall(function() return game:HttpGet(url) end)
     if not success then return nil end
     local func = loadstring(response)
@@ -122,7 +122,7 @@ local function getData(url)
     return nil
 end
 
-local function checkVersion(playerName)
+function checkVersion(playerName)
     local extraData = getData("https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/STBBList.lua")
     if extraData and extraData[playerName] then return ExtraVersion end
     local premiumData = getData("https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/listpremium.lua")
@@ -207,7 +207,7 @@ end
 local InviteCode = "jWNDPNMmyB"
 local DiscordAPI = "https://discord.com/api/v10/invites/" .. InviteCode .. "?with_counts=true&with_expiration=true"
 
-local function LoadDiscordInfo()
+function LoadDiscordInfo()
     local success, result = pcall(function()
         local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request
         if not httpRequest then return nil end
@@ -320,7 +320,7 @@ local AutoAttackEnabled      = false
 local AutoSkillEnabled       = false
 local AutoSkipHeliEnabled    = false
 local BoostFPS_Active_dummy  = false -- managed by BoostFPS system
-local AutoStartEnabled       = false
+local AutoStartEnabled       = Config:Get("AutoStartEnabled", table.find(MiscOptions, "Auto Start") ~= nil)
 local AutoFillUpEnabled      = false
 local SelectedSkills         = Config:Get("SelectedSkills", { "All" })
 local SafeModeEnabled        = false
@@ -361,7 +361,7 @@ local FILLUP_TARGET_POS  = Vector3.new(44.2756729, 26.3595276, -32.7318268)
 local FILLUP_POS_THRESHOLD = 0.5
 local FillUpRunning = false
 
-local function GetFillUpPart()
+function GetFillUpPart()
     local obj = workspace
     for _, key in ipairs(FILLUP_PART_PATH) do
         obj = obj:FindFirstChild(key)
@@ -370,7 +370,7 @@ local function GetFillUpPart()
     return obj
 end
 
-local function IsFillUpPartReady()
+function IsFillUpPartReady()
     local p = GetFillUpPart()
     if not p then return false end
     return (p.CFrame.Position - FILLUP_TARGET_POS).Magnitude < FILLUP_POS_THRESHOLD
@@ -390,7 +390,7 @@ local AllyNames = {
     ["Huge DJ Toilet"]           = true,
 }
 
-local function IsAlly(mob)
+function IsAlly(mob)
     return AllyNames[mob.Name] ~= nil
 end
 
@@ -435,7 +435,7 @@ function tp1(p89)
 end
 
 -- ====================== UTILITY FUNCTIONS ======================
-local function IsValidMob(obj)
+function IsValidMob(obj)
     if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
         if Players:GetPlayerFromCharacter(obj) then return false end
         if IsAlly(obj) then return false end
@@ -445,21 +445,21 @@ local function IsValidMob(obj)
     return false
 end
 
-local function IsMobDead(mob)
+function IsMobDead(mob)
     if not mob or not mob.Parent then return true end
     local humanoid = mob:FindFirstChild("Humanoid")
     if not humanoid or humanoid.Health <= 0 then return true end
     return false
 end
 
-local function GetMobMaxHP(mob)
+function GetMobMaxHP(mob)
     local humanoid = mob and mob:FindFirstChild("Humanoid")
     if not humanoid then return 0 end
     return humanoid.MaxHealth or 0
 end
 
 -- ====================== MOB SELECTION ======================
-local function GetNearestMob()
+function GetNearestMob()
     local nearestMob, nearestDist = nil, math.huge
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return nil end
@@ -475,7 +475,7 @@ local function GetNearestMob()
     return nearestMob
 end
 
-local function GetHighestMob()
+function GetHighestMob()
     local highestMob, highestY = nil, -math.huge
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return nil end
@@ -498,7 +498,7 @@ end
 -- ถ้า HighHP MaxHP ต่ำกว่า HighHPThreshold → ข้ามไปใช้ Nearest แทน
 -- ============================================================
 
-local function GetHelicopter()
+function GetHelicopter()
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return nil end
     for _, mob in ipairs(livingFolder:GetChildren()) do
@@ -509,7 +509,7 @@ local function GetHelicopter()
     return nil
 end
 
-local function GetGiantSTToilet()
+function GetGiantSTToilet()
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return nil end
     local giant = livingFolder:FindFirstChild("Giant ST toilet")
@@ -524,7 +524,7 @@ local function GetGiantSTToilet()
 end
 
 -- หา mob ที่มี MaxHP สูงสุด และ MaxHP ต้องเกิน HighHPThreshold
-local function GetHighHPMob()
+function GetHighHPMob()
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return nil end
     local bestMob, bestHP = nil, HighHPThreshold  -- ต้องเกิน threshold ถึงจะนับ
@@ -542,7 +542,7 @@ end
 
 -- ─── GetPriorityMob: คืน mob, mobType, extraData, priorityLevel ───
 -- priorityLevel: 4=GiantST, 3=Heli, 2=HighHP, 1=Nearest
-local function GetPriorityMob()
+function GetPriorityMob()
     -- ลำดับ 1: GiantST
     local giant, prompt = GetGiantSTToilet()
     if giant and prompt then return giant, "GiantST", prompt, 4 end
@@ -559,7 +559,7 @@ local function GetPriorityMob()
 end
 
 -- ─── Interrupt Check: เช็คว่ามี priority mob ระดับสูงกว่า current หรือไม่ ───
-local function CheckInterrupt(currentPriority)
+function CheckInterrupt(currentPriority)
     -- GiantST ปรากฏ → interrupt เสมอ (ถ้า current ไม่ใช่ GiantST)
     if currentPriority < 4 then
         local g, pr = GetGiantSTToilet()
@@ -580,7 +580,7 @@ end
 -- ====================== MOB VISUAL BOUNDS ===================
 -- ============================================================
 
-local function GetMobVisualBounds(mob)
+function GetMobVisualBounds(mob)
     local minY, maxY = math.huge, -math.huge
     local centerX, centerZ, count = 0, 0, 0
 
@@ -625,26 +625,26 @@ local MobConfirmedPadding = {}
 local MobLastHealth       = {}
 local MobCheckerCancelled = {}
 
-local function GetAntiClipFloor(mob, position)
+function GetAntiClipFloor(mob, position)
     local _, minY, maxY = GetMobVisualBounds(mob)
     local visualHeight = maxY - minY
     return -(visualHeight) + PLAYER_HALF_HEIGHT + ANTI_CLIP_MARGIN
 end
 
-local function GetEffectivePadding(mob)
+function GetEffectivePadding(mob)
     if MobConfirmedPadding[mob] ~= nil then return MobConfirmedPadding[mob] end
     if MobHeightOverride[mob] ~= nil then return MobHeightOverride[mob] end
     return HeightValue
 end
 
-local function ClampPaddingToAntiClip(mob, padding)
+function ClampPaddingToAntiClip(mob, padding)
     local antiFloor = GetAntiClipFloor(mob, FarmPosition)
     local clamped = math.max(padding, antiFloor)
     clamped = math.max(clamped, PADDING_SAFE_MIN)
     return clamped
 end
 
-local function StartDamageChecker(mob)
+function StartDamageChecker(mob)
     MobCheckerCancelled[mob] = false
     task.spawn(function()
         local humanoid = mob and mob:FindFirstChild("Humanoid")
@@ -724,7 +724,7 @@ local function StartDamageChecker(mob)
     end)
 end
 
-local function ResetMobOverride(mob)
+function ResetMobOverride(mob)
     MobCheckerCancelled[mob] = true  -- บอกให้ DamageChecker หยุด
     MobHeightOverride[mob]   = nil
     MobConfirmedPadding[mob] = nil
@@ -737,7 +737,7 @@ end
 -- ============================================================
 -- ====================== TARGET CFRAME =======================
 -- ============================================================
-local function GetTargetCFrame(mob, position)
+function GetTargetCFrame(mob, position)
     local mobRoot = mob:FindFirstChild("HumanoidRootPart")
     if not mobRoot then return nil end
 
@@ -762,7 +762,7 @@ local function GetTargetCFrame(mob, position)
     end
 end
 
-local function TeleportToMob(mob)
+function TeleportToMob(mob)
     local cf = GetTargetCFrame(mob, FarmPosition)
     if not cf then return end
     if FarmMode == "Tween" then
@@ -779,7 +779,7 @@ local function TeleportToMob(mob)
     end
 end
 
-local function LockToMob(mob)
+function LockToMob(mob)
     LockActive = true
     local connection
     connection = RunService.RenderStepped:Connect(function()
@@ -799,7 +799,12 @@ local function LockToMob(mob)
 end
 
 -- ====================== AUTO LOOPS ======================
-local function StartAutoAttack()
+AutoAttackRunning = AutoAttackRunning or false
+
+function StartAutoAttack()
+    if AutoAttackRunning then return end
+    AutoAttackRunning = true
+
     task.spawn(function()
         while AutoAttackEnabled and AutoFarmEnabled do
             local mob = GetPriorityMob()
@@ -808,10 +813,16 @@ local function StartAutoAttack()
             end
             task.wait(0.05)
         end
+        AutoAttackRunning = false
     end)
 end
 
-local function StartAutoSkill()
+AutoSkillRunning = AutoSkillRunning or false
+
+function StartAutoSkill()
+    if AutoSkillRunning then return end
+    AutoSkillRunning = true
+
     task.spawn(function()
         while AutoSkillEnabled and AutoFarmEnabled do
             local mob = GetPriorityMob()
@@ -837,21 +848,22 @@ local function StartAutoSkill()
             end
             task.wait(LoopDelay)
         end
+        AutoSkillRunning = false
     end)
 end
 
-local function TriggerAutoSkipHeli(state)
+function TriggerAutoSkipHeli(state)
     pcall(function() ReplicatedStorage.SetSettingAutoSkipWave:FireServer(state) end)
 end
 
-local function HasHumanoid(obj)
+function HasHumanoid(obj)
     if obj:IsA("Model") then
         return obj:FindFirstChildOfClass("Humanoid") ~= nil
     end
     return false
 end
 
-local function IsLivingDescendant(obj)
+function IsLivingDescendant(obj)
     local current = obj
     while current and current ~= workspace do
         if current:IsA("Model") and current:FindFirstChildOfClass("Humanoid") then
@@ -868,7 +880,7 @@ local BoostFPS_Active = false
 local BoostFPS_RestoreConnection = nil
 local BoostFPS_LightingData = {}
 
-local function SaveAndBoostFPS()
+function SaveAndBoostFPS()
     if BoostFPS_Active then return end
     BoostFPS_Active = true
     BoostFPS_OriginalData = {}
@@ -955,7 +967,7 @@ local function SaveAndBoostFPS()
     print("[DYHUB] Delete Map: ON")
 end
 
-local function RestoreBoostFPS()
+function RestoreBoostFPS()
     if not BoostFPS_Active then return end
     BoostFPS_Active = false
 
@@ -1023,19 +1035,19 @@ task.spawn(function()
 end)
 
 -- ====================== PLAYER HP HELPERS ======================
-local function GetPlayerHPInfo()
+function GetPlayerHPInfo()
     local humanoid = Character and Character:FindFirstChild("Humanoid")
     if not humanoid then return 100, 100 end
     return humanoid.Health, humanoid.MaxHealth
 end
 
-local function IsPlayerHPFull()
+function IsPlayerHPFull()
     local hp, maxHp = GetPlayerHPInfo()
     if maxHp <= 0 then return true end
     return hp >= maxHp
 end
 
-local function GetPlayerHealthPercent()
+function GetPlayerHealthPercent()
     local humanoid = Character and Character:FindFirstChild("Humanoid")
     if not humanoid then return 100 end
     if humanoid.MaxHealth <= 0 then return 100 end
@@ -1070,14 +1082,14 @@ task.spawn(function()
 end)
 
 -- ====================== AUTO FILL UP ======================
-local function DoFillUp()
+function DoFillUp()
     for i = 1, 2 do
         pcall(function() ReplicatedStorage.ShopSystem:FireServer("Buy", "FillHP") end)
         if i < 2 then task.wait(0.3) end
     end
 end
 
-local function StartAutoFillUpLoop()
+function StartAutoFillUpLoop()
     if FillUpRunning then return end
     FillUpRunning = true
     task.spawn(function()
@@ -1100,7 +1112,7 @@ local function StartAutoFillUpLoop()
 end
 
 -- ====================== BARRIER BYPASS ======================
-local function startNoBarrier()
+function startNoBarrier()
     if noBarrierConnection then return end
     noBarrierConnection = RunService.Heartbeat:Connect(function()
         pcall(function()
@@ -1118,7 +1130,7 @@ local function startNoBarrier()
     end)
 end
 
-local function stopNoBarrier()
+function stopNoBarrier()
     if noBarrierConnection then
         noBarrierConnection:Disconnect()
         noBarrierConnection = nil
@@ -1134,106 +1146,304 @@ local AutoGameValue         = Config:Get("AutoGameValue", "Normal Mode")
 local AutoVoteinGameEnabled = Config:Get("AutoVoteinGameEnabled", false)
 local AutoVoteValue         = Config:Get("AutoVoteValue", "Normal")
 
-local _voteRespawnConn   = nil
-local _voteIGRespawnConn = nil
-local _syncRespawnConn   = nil
+local _voteWatcherRunning = false
+local _voteSyncToken      = 0
+local _voteRoundBusy      = false
+local _lastVoteVisible    = false
+local _autoRestoreDone    = false
+local _restoreDebounce    = false
+local _voteCharacterConn  = nil
+local _autoStartOnlyConn  = nil
 
-local function FireVote_Solo()
-    if not AutoGameValue then return end
-    pcall(function()
-        ReplicatedStorage.MainHandler:FireServer({ [1] = "StartSolo", [2] = AutoGameValue })
+function GetRemoteSafe(name)
+    local remote = ReplicatedStorage and ReplicatedStorage:FindFirstChild(name)
+    if remote and remote.FireServer then
+        return remote
+    end
+    return nil
+end
+
+function GetOpenVoteFrame()
+    local playerGui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return nil end
+
+    local voteGui = playerGui:FindFirstChild("OpenVoteUI")
+    if not voteGui then return nil end
+
+    return voteGui:FindFirstChild("OPEN UI")
+end
+
+function IsOpenVoteVisible()
+    local frame = GetOpenVoteFrame()
+    return frame ~= nil and frame.Visible == true
+end
+
+function SetOpenVoteVisible(state)
+    local frame = GetOpenVoteFrame()
+    if frame then
+        pcall(function()
+            frame.Visible = state == true
+        end)
+    end
+end
+
+function FireVote_Solo()
+    if not AutoGameValue then return false end
+    local remote = GetRemoteSafe("MainHandler")
+    if not remote then return false end
+
+    local ok = pcall(function()
+        remote:FireServer({ [1] = "StartSolo", [2] = AutoGameValue })
     end)
-    print("[DYHUB] AutoVote Solo fired: " .. tostring(AutoGameValue))
+
+    if ok then
+        print("[DYHUB] Auto Game Mode fired: " .. tostring(AutoGameValue))
+    end
+    return ok
 end
 
-local function FireGetReady()
-    task.wait(2.5)
-    pcall(function() ReplicatedStorage.GetReadyRemote:FireServer("1", true) end)
-    --print("[DYHUB] AutoStart fired")
+function FireGetReady(delayBefore)
+    if delayBefore == nil then delayBefore = 0 end
+    if delayBefore > 0 then task.wait(delayBefore) end
+
+    local remote = GetRemoteSafe("GetReadyRemote")
+    if not remote then
+        warn("[DYHUB] GetReadyRemote not found")
+        return false
+    end
+
+    local ok, err = pcall(function()
+        remote:FireServer("1", true)
+        task.wait(0.5)
+        remote:FireServer("1", false)
+        task.wait(0.5)
+        remote:FireServer("2", false)
+        task.wait(0.5)
+        remote:FireServer("3", false)
+    end)
+
+    if not ok then
+        warn("[DYHUB] FireGetReady failed:", err)
+    end
+
+    return ok
 end
 
-local function FireVote_InGame()
-    if not AutoVoteValue then return end
-    pcall(function() ReplicatedStorage.Vote:FireServer(AutoVoteValue) end)
-    --print("[DYHUB] AutoVote IG fired: " .. tostring(AutoVoteValue))
+function FireVote_InGame()
+    if not AutoVoteValue then return false end
+
+    local remote = GetRemoteSafe("Vote")
+    if not remote then
+        warn("[DYHUB] Vote remote not found")
+        return false
+    end
+
+    local ok, err = pcall(function()
+        remote:FireServer(AutoVoteValue)
+    end)
+
+    if not ok then
+        warn("[DYHUB] Auto Vote failed:", err)
+    end
+
+    return ok
 end
 
-local function SetupSyncVoteAndStart()
-    if _voteRespawnConn then _voteRespawnConn:Disconnect(); _voteRespawnConn = nil end
-    if _syncRespawnConn then _syncRespawnConn:Disconnect(); _syncRespawnConn = nil end
-    FireVote_Solo()
+function RunRestoreVoteSystem(quiet)
+    if _restoreDebounce then return false end
+
+    local now = tick()
+    if _lastRestoreVoteTime and (now - _lastRestoreVoteTime) < 20 then
+        return false
+    end
+
+    _restoreDebounce = true
+    _lastRestoreVoteTime = now
+
+    if not quiet then
+        WindUI:Notify({
+            Title = "Restore Loading",
+            Content = "Ready, Restore Vote System...",
+            Duration = 2,
+            Icon = "loader-circle"
+        })
+    end
+
     task.spawn(function()
-        task.wait(2.5)
-        if AutoVoteEnabled and AutoStartEnabled then FireGetReady() end
+        pcall(function()
+            FireGetReady(0)
+        end)
+
+        task.wait(5)
+
+        pcall(function()
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.CFrame = CFrame.new(-220, 3, -600)
+            end
+        end)
+
+        if not quiet then
+            WindUI:Notify({
+                Title = "Restore Loading",
+                Content = "Restore Vote System, please wait.",
+                Duration = 5,
+                Icon = "loader-circle"
+            })
+        end
+
+        task.wait(8)
+
+        pcall(function()
+            FireGetReady(0)
+        end)
+
+        if not quiet then
+            WindUI:Notify({
+                Title = "Restore Complete",
+                Content = "Vote System restored. Auto Vote watcher is ready.",
+                Duration = 4,
+                Icon = "check-circle"
+            })
+        end
+
+        _restoreDebounce = false
     end)
-    _syncRespawnConn = LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(1.5)
-        if AutoVoteEnabled and AutoStartEnabled then
-            FireVote_Solo()
-            task.spawn(function()
-                task.wait(2.5)
-                if AutoVoteEnabled and AutoStartEnabled then FireGetReady() end
-            end)
+
+    return true
+end
+
+function StopVoteWatcher()
+    _voteSyncToken = _voteSyncToken + 1
+    _voteWatcherRunning = false
+    _voteRoundBusy = false
+    _lastVoteVisible = false
+end
+
+function StartVoteWatcher()
+    if _voteWatcherRunning then return end
+
+    _voteWatcherRunning = true
+    _voteSyncToken = _voteSyncToken + 1
+    local myToken = _voteSyncToken
+
+    task.spawn(function()
+        while _voteWatcherRunning and myToken == _voteSyncToken do
+            local frame = GetOpenVoteFrame()
+            local visible = frame ~= nil and frame.Visible == true
+
+            if AutoVoteinGameEnabled and visible and not _lastVoteVisible and not _voteRoundBusy then
+                _voteRoundBusy = true
+
+                FireVote_InGame()
+                task.wait(0.12)
+
+                if frame and frame.Parent then
+                    pcall(function()
+                        frame.Visible = false
+                    end)
+                end
+
+                if AutoStartEnabled then
+                    FireGetReady(0)
+                end
+
+                _lastVoteVisible = true
+                _voteRoundBusy = false
+            else
+                _lastVoteVisible = visible
+            end
+
+            task.wait(0.2)
+        end
+
+        if myToken == _voteSyncToken then
+            _voteWatcherRunning = false
         end
     end)
 end
 
-local function SetupAutoVote_SoloOnly(enabled)
-    if _voteRespawnConn then _voteRespawnConn:Disconnect(); _voteRespawnConn = nil end
-    if not enabled then return end
-    FireVote_Solo()
-    _voteRespawnConn = LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(1.5)
-        if AutoVoteEnabled and not AutoStartEnabled then FireVote_Solo() end
-    end)
-end
+function SetupAutoStartOnly(enabled)
+    if _autoStartOnlyConn then
+        _autoStartOnlyConn:Disconnect()
+        _autoStartOnlyConn = nil
+    end
 
-local function SetupAutoStartOnly(enabled)
-    if AutoStartConnection then AutoStartConnection:Disconnect(); AutoStartConnection = nil end
     if not enabled then return end
-    FireGetReady()
-    AutoStartConnection = LocalPlayer.CharacterAdded:Connect(function()
+
+    FireGetReady(0)
+
+    _autoStartOnlyConn = LocalPlayer.CharacterAdded:Connect(function()
         task.wait(1)
-        if AutoStartEnabled and not AutoVoteEnabled then task.spawn(FireGetReady) end
+        if AutoStartEnabled and not AutoVoteinGameEnabled then
+            FireGetReady(0)
+        end
     end)
 end
 
-local function RefreshVoteAndStartSetup()
-    if _voteRespawnConn   then _voteRespawnConn:Disconnect();   _voteRespawnConn   = nil end
-    if _syncRespawnConn   then _syncRespawnConn:Disconnect();   _syncRespawnConn   = nil end
-    if AutoStartConnection then AutoStartConnection:Disconnect(); AutoStartConnection = nil end
+function RefreshVoteAndStartSetup()
+    if AutoVoteinGameEnabled then
+        if _autoStartOnlyConn then
+            _autoStartOnlyConn:Disconnect()
+            _autoStartOnlyConn = nil
+        end
+        StartVoteWatcher()
 
-    if AutoVoteEnabled and AutoStartEnabled then
-        SetupSyncVoteAndStart()
-    elseif AutoVoteEnabled and not AutoStartEnabled then
-        SetupAutoVote_SoloOnly(true)
-    elseif not AutoVoteEnabled and AutoStartEnabled then
-        SetupAutoStartOnly(true)
+        if not _autoRestoreDone then
+            _autoRestoreDone = true
+            task.delay(3, function()
+                if AutoVoteinGameEnabled and not IsOpenVoteVisible() then
+                    RunRestoreVoteSystem(true)
+                end
+            end)
+        end
+    else
+        StopVoteWatcher()
+
+        if AutoStartEnabled then
+            SetupAutoStartOnly(true)
+        else
+            SetupAutoStartOnly(false)
+        end
     end
 end
 
-local function SetupAutoVote_InGame(enabled)
-    if _voteIGRespawnConn then _voteIGRespawnConn:Disconnect(); _voteIGRespawnConn = nil end
-    if not enabled then return end
-    FireVote_InGame()
-    _voteIGRespawnConn = LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(1.5)
-        if AutoVoteinGameEnabled then FireVote_InGame() end
-    end)
+function SetupAutoVote_InGame(enabled)
+    AutoVoteinGameEnabled = enabled == true
+    Config:Set("AutoVoteinGameEnabled", AutoVoteinGameEnabled)
+    Config:Save()
+    RefreshVoteAndStartSetup()
 end
 
-local function StartAutoStart()
+function StartAutoStart()
     AutoStartEnabled = true
+    Config:Set("AutoStartEnabled", true)
+    Config:Save()
     RefreshVoteAndStartSetup()
 end
 
-local function StopAutoStart()
+function StopAutoStart()
     AutoStartEnabled = false
+    Config:Set("AutoStartEnabled", false)
+    Config:Save()
     RefreshVoteAndStartSetup()
 end
+
+if _voteCharacterConn then
+    _voteCharacterConn:Disconnect()
+    _voteCharacterConn = nil
+end
+
+_voteCharacterConn = LocalPlayer.CharacterAdded:Connect(function()
+    _voteRoundBusy = false
+    _lastVoteVisible = false
+    task.wait(1.5)
+    RefreshVoteAndStartSetup()
+end)
 
 -- ====================== TELEPORT TO IDLE ======================
-local function TeleportToIdle()
+function TeleportToIdle()
     LockActive = false
     task.wait(0.1)
     WaitingRespawn = true
@@ -1245,7 +1455,7 @@ local function TeleportToIdle()
 end
 
 -- ====================== PROXIMITY PROMPT HELPERS ======================
-local function ActivateProximityPrompt(prompt)
+function ActivateProximityPrompt(prompt)
     pcall(function()
         prompt.HoldDuration = 0
         prompt.MaxActivationDistance = 50
@@ -1256,7 +1466,7 @@ local function ActivateProximityPrompt(prompt)
     end)
 end
 
-local function ActivateAllFlushPrompts()
+function ActivateAllFlushPrompts()
     pcall(function()
         for _, part in pairs(workspace:GetDescendants()) do
             if part:IsA("BasePart") or part:IsA("Model") then
@@ -1302,7 +1512,7 @@ local CollectMode          = Config:Get("CollectMode", "Clean")
 local KnownCollectItems = {}
 local CollectRunning    = false
 
-local function MatchesPattern(objectName, pattern)
+function MatchesPattern(objectName, pattern)
     local objL, patL = objectName:lower(), pattern:lower()
     if objL == patL then return true end
     if #objL > #patL and objL:sub(1, #patL) == patL then
@@ -1317,14 +1527,14 @@ local function MatchesPattern(objectName, pattern)
     return false
 end
 
-local function IsCollectTarget(objectName)
+function IsCollectTarget(objectName)
     for _, pattern in ipairs(SelectedCollectItems) do
         if MatchesPattern(objectName, pattern) then return true end
     end
     return false
 end
 
-local function FindNewCollectItems()
+function FindNewCollectItems()
     local found = {}
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj and obj.Parent and IsCollectTarget(obj.Name) then
@@ -1336,13 +1546,13 @@ local function FindNewCollectItems()
     return found
 end
 
-local function GetItemRootPart(obj)
+function GetItemRootPart(obj)
     if obj:IsA("Model") then return obj.PrimaryPart or obj:FindFirstChildOfClass("BasePart")
     elseif obj:IsA("BasePart") or obj:IsA("MeshPart") then return obj end
     return nil
 end
 
-local function TweenToItem(itemRoot)
+function TweenToItem(itemRoot)
     if not itemRoot or not HumanoidRootPart then return end
     local targetPos = itemRoot.Position + Vector3.new(0, 3, 0)
     local targetCF  = CFrame.new(targetPos, itemRoot.Position)
@@ -1351,7 +1561,7 @@ local function TweenToItem(itemRoot)
     tween.Completed:Wait()
 end
 
-local function ActivateItemPrompts(obj)
+function ActivateItemPrompts(obj)
     pcall(function()
         for _, child in ipairs(obj:GetDescendants()) do
             if child:IsA("ProximityPrompt") then
@@ -1363,9 +1573,9 @@ local function ActivateItemPrompts(obj)
     end)
 end
 
-local function IsItemGone(obj) return not obj or not obj.Parent end
+function IsItemGone(obj) return not obj or not obj.Parent end
 
-local function CollectSingleItem(obj)
+function CollectSingleItem(obj)
     if IsItemGone(obj) then return end
     local itemRoot = GetItemRootPart(obj)
     if not itemRoot then return end
@@ -1390,7 +1600,7 @@ local function CollectSingleItem(obj)
     KnownCollectItems[obj] = true
 end
 
-local function AllMobsDead()
+function AllMobsDead()
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return true end
     for _, mob in ipairs(livingFolder:GetChildren()) do
@@ -1399,7 +1609,7 @@ local function AllMobsDead()
     return true
 end
 
-local function StartAutoCollectLoop()
+function StartAutoCollectLoop()
     if CollectRunning then return end
     CollectRunning = true
     task.spawn(function()
@@ -1461,7 +1671,12 @@ end)
 -- Priority: GiantST(4) → Heli(3) → HighHP>threshold(2) → Nearest(1)
 -- Interrupt: ถ้ากำลังตีมอนระดับต่ำ และมอบระดับสูงกว่าปรากฏ → หยุดทันที
 -- ============================================================
-local function StartFarmLoop()
+FarmLoopRunning = FarmLoopRunning or false
+
+function StartFarmLoop()
+    if FarmLoopRunning then return end
+    FarmLoopRunning = true
+
     task.spawn(function()
         -- Sub-loop: รักษา Idle Position ขณะ WaitingRespawn
         task.spawn(function()
@@ -1585,13 +1800,14 @@ local function StartFarmLoop()
 
         WaitingRespawn = false
         _currentTargetPriority = 0
+        FarmLoopRunning = false
     end)
 end
 
 -- ====================== MISC OPTIONS HANDLER ======================
 local SyncFarmOnly = Config:Get("SyncFarmOnly", true)
 
-local function HandleMiscOptions(selectedOptions)
+function HandleMiscOptions(selectedOptions)
     MiscOptions = selectedOptions
 
     -- ถ้า Sync Farm Only ปิด: ระบบทำงานได้แม้ AutoFarm ปิด
@@ -1650,6 +1866,30 @@ local function HandleMiscOptions(selectedOptions)
     Config:Save()
 end
 
+
+-- ====================== CAMERA MODE ======================
+local CameraMode = Config:Get("CameraMode", "Manuel")
+
+function ApplyCameraMode()
+    local char = LocalPlayer.Character
+    local cam = workspace.CurrentCamera
+    if not char or not cam then return end
+
+    local subject = nil
+    if CameraMode == "Classic" then
+        subject = char:FindFirstChild("Head") or char:FindFirstChildOfClass("Humanoid")
+    else
+        subject = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildOfClass("Humanoid")
+    end
+
+    if subject then
+        pcall(function()
+            cam.CameraType = Enum.CameraType.Custom
+            cam.CameraSubject = subject
+        end)
+    end
+end
+
 -- ====================== CHARACTER RESPAWN HANDLER ======================
 LocalPlayer.CharacterAdded:Connect(function(char)
     Character        = char
@@ -1659,9 +1899,7 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     MobConfirmedPadding = {}
     MobLastHealth       = {}
     task.wait(1)
-    local cam = workspace.CurrentCamera
-    cam.CameraSubject = HumanoidRootPart
-    cam.CameraType    = Enum.CameraType.Custom
+    ApplyCameraMode()
 end)
 
 -- ====================== UI: MAIN ======================
@@ -1950,7 +2188,7 @@ local ESP = {
     },
 }
 
-local function IsESPItemTarget(objectName, selectedList)
+function IsESPItemTarget(objectName, selectedList)
     for _, pattern in ipairs(selectedList) do
         if objectName:lower() == pattern:lower() then return true end
         if #objectName > #pattern then
@@ -1968,7 +2206,7 @@ local function IsESPItemTarget(objectName, selectedList)
     return false
 end
 
-local function CreateESPLabel(parent, labelText)
+function CreateESPLabel(parent, labelText)
     local existing = parent:FindFirstChild("DYHUB_ESP_LABEL")
     if existing then existing:Destroy() end
     local billboard = Instance.new("BillboardGui")
@@ -1985,7 +2223,7 @@ local function CreateESPLabel(parent, labelText)
     return billboard, label
 end
 
-local function CreateHighlight(model, outlineColor, fillColor, fillTransparency)
+function CreateHighlight(model, outlineColor, fillColor, fillTransparency)
     local existing = model:FindFirstChild("DYHUB_ESP_HIGHLIGHT")
     if existing then existing:Destroy() end
     local hl = Instance.new("Highlight")
@@ -1996,7 +2234,7 @@ local function CreateHighlight(model, outlineColor, fillColor, fillTransparency)
     return hl
 end
 
-local function RemoveESP(model)
+function RemoveESP(model)
     pcall(function()
         local hl = model:FindFirstChild("DYHUB_ESP_HIGHLIGHT"); if hl then hl:Destroy() end
         local hb = model:FindFirstChild("DYHUB_ESP_LABEL"); if hb then hb:Destroy() end
@@ -2005,12 +2243,12 @@ local function RemoveESP(model)
     end)
 end
 
-local function IsInRange(targetPart)
+function IsInRange(targetPart)
     if not targetPart or not HumanoidRootPart then return false end
     return (HumanoidRootPart.Position - targetPart.Position).Magnitude <= ESP.MaxDistance
 end
 
-local function BuildLabelText(model, showName, showHealth, showDistance)
+function BuildLabelText(model, showName, showHealth, showDistance)
     local parts = {}
     if showName then table.insert(parts, model.Name) end
     if showHealth then
@@ -2024,7 +2262,7 @@ local function BuildLabelText(model, showName, showHealth, showDistance)
     return table.concat(parts, "\n")
 end
 
-local function BuildItemLabelText(obj, showName, showDistance)
+function BuildItemLabelText(obj, showName, showDistance)
     local parts = {}
     if showName then table.insert(parts, obj.Name) end
     if showDistance then
@@ -2034,7 +2272,7 @@ local function BuildItemLabelText(obj, showName, showDistance)
     return table.concat(parts, "\n")
 end
 
-local function GetESPSettings()
+function GetESPSettings()
     local s = ESP.Settings
     return {
         highlight = table.find(s, "Highlight") ~= nil,
@@ -2044,7 +2282,7 @@ local function GetESPSettings()
     }
 end
 
-local function ApplyMobESP(mob)
+function ApplyMobESP(mob)
     if not mob or not mob.Parent then return end
     local hrp = mob:FindFirstChild("HumanoidRootPart"); if not hrp then return end
     local settings = GetESPSettings()
@@ -2064,7 +2302,7 @@ local function ApplyMobESP(mob)
     ESP._mobHighlights[mob] = true
 end
 
-local function ScanMobs()
+function ScanMobs()
     local livingFolder = workspace:FindFirstChild("Living"); if not livingFolder then return end
     for _, mob in ipairs(livingFolder:GetChildren()) do
         if IsValidMob(mob) and not ESP._mobHighlights[mob] then
@@ -2074,7 +2312,7 @@ local function ScanMobs()
     end
 end
 
-local function ApplyPlayerESP(playerChar)
+function ApplyPlayerESP(playerChar)
     if not playerChar or not playerChar.Parent then return end
     local hrp = playerChar:FindFirstChild("HumanoidRootPart"); if not hrp then return end
     if playerChar == LocalPlayer.Character then return end
@@ -2095,7 +2333,7 @@ local function ApplyPlayerESP(playerChar)
     ESP._playerHighlights[playerChar] = true
 end
 
-local function ScanPlayers()
+function ScanPlayers()
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
             local char = player.Character
@@ -2107,13 +2345,13 @@ local function ScanPlayers()
     end
 end
 
-local function GetItemRoot(obj)
+function GetItemRoot(obj)
     if obj:IsA("Model") then return obj.PrimaryPart or obj:FindFirstChildOfClass("BasePart")
     elseif obj:IsA("BasePart") or obj:IsA("MeshPart") then return obj end
     return nil
 end
 
-local function ApplyItemESP(obj)
+function ApplyItemESP(obj)
     if not obj or not obj.Parent then return end
     local root = GetItemRoot(obj); if not root then return end
     local settings = GetESPSettings()
@@ -2132,7 +2370,7 @@ local function ApplyItemESP(obj)
     ESP._itemHighlights[obj] = true
 end
 
-local function ScanItems()
+function ScanItems()
     if #ESP.SelectedItems == 0 then return end
     for _, obj in ipairs(workspace:GetDescendants()) do
         if not ESP._itemHighlights[obj] and IsESPItemTarget(obj.Name, ESP.SelectedItems) then
@@ -2142,7 +2380,7 @@ local function ScanItems()
     end
 end
 
-local function ClearAllESP()
+function ClearAllESP()
     for mob, _ in pairs(ESP._mobHighlights) do RemoveESP(mob) end
     ESP._mobHighlights = {}
     for char, _ in pairs(ESP._playerHighlights) do RemoveESP(char) end
@@ -2153,7 +2391,7 @@ end
 
 local ESPConnection = nil
 
-local function StartESPLoop()
+function StartESPLoop()
     if ESPConnection then ESPConnection:Disconnect(); ESPConnection = nil end
     local tickCounter = 0
     ESPConnection = RunService.Heartbeat:Connect(function()
@@ -2165,7 +2403,7 @@ local function StartESPLoop()
     end)
 end
 
-local function StopESPLoop()
+function StopESPLoop()
     if ESPConnection then ESPConnection:Disconnect(); ESPConnection = nil end
     ClearAllESP()
 end
@@ -2190,7 +2428,7 @@ Players.PlayerAdded:Connect(function(player)
     end)
 end)
 
-local function WatchLivingFolder()
+function WatchLivingFolder()
     local living = workspace:FindFirstChild("Living")
     if living then
         living.ChildAdded:Connect(function(obj)
@@ -2284,7 +2522,7 @@ local WSValue = Config:Get("WSValue", 16)
 local JPValue = Config:Get("JPValue", 50)
 local NoClip  = Config:Get("NoClip", false)
 
-local function updatePlayerStats()
+function updatePlayerStats()
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
         LocalPlayer.Character.Humanoid.WalkSpeed = WSValue
         LocalPlayer.Character.Humanoid.JumpPower = JPValue
@@ -2326,7 +2564,7 @@ nocliptoggle = Main2:Toggle({
 
 Main2:Section({ Title = "Redeem Codes", Icon = "bird" })
 
-local SelectedCodes = Config:Get("SelectedCodes", {})
+SelectedCodes = Config:Get("SelectedCodes", {})
 
 CodeDropdown = Main2:Dropdown({
     Title = "Select Redeem Codes", Multi = true,
@@ -2357,7 +2595,7 @@ Main2:Button({
 -- ====================== UI: UNLOCK GAMEPASS ======================
 Main2:Section({ Title = "Unlock Gamepass for real!", Icon = "badge-dollar-sign" })
 
-local SelectedGamepass = Config:Get("SelectedGamepass", {})
+SelectedGamepass = Config:Get("SelectedGamepass", {})
 GlobalTables.Gamepassts = SelectedGamepass
 
 GamepassDropdown = Main2:Dropdown({
@@ -2433,56 +2671,12 @@ Main7:Section({ Title = "Vote Mode", Icon = "gamepad-2" })
 
 Main7:Button({
     Title = "Restore Vote System",
-    Desc = "⚠️ Press this once before using Auto Vote Mode for the first time.",
+    Desc = "Runs the safe restore sequence once, then lets Auto Vote watcher continue.",
     Callback = function()
-        pcall(function()
-            ReplicatedStorage.GetReadyRemote:FireServer("3", true)
-            task.wait(1.25)
-            ReplicatedStorage.GetReadyRemote:FireServer("3", false)
-            task.wait(0.67)
-            ReplicatedStorage.GetReadyRemote:FireServer("2", true)
-            task.wait(1.25)
-            ReplicatedStorage.GetReadyRemote:FireServer("2", false)
-            task.wait(0.67)
-            ReplicatedStorage.GetReadyRemote:FireServer("1", true)
-        end)
-        WindUI:Notify({
-            Title = "Restore Loading",
-            Content = "Ready, Restore Vote System...",
-            Duration = 2,
-            Icon = "check-circle"
-        })
-        task.wait(6)
-        pcall(function()
-            local char = LocalPlayer.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                char.HumanoidRootPart.CFrame = CFrame.new(-220, 3, -600)
-            end
-        end)
-        WindUI:Notify({
-            Title = "Restore Loading",
-            Content = "Restore Vote System, please wait.",
-            Duration = 5,
-            Icon = "check-circle"
-        })
-        task.wait(10)
-        WindUI:Notify({
-            Title = "Restore Complete",
-            Content = "Vote System restored! You can now use Auto Vote Mode.",
-            Duration = 5,
-            Icon = "check-circle"
-        })
-        pcall(function()
-            ReplicatedStorage.GetReadyRemote:FireServer("3", true)
-            task.wait(1.25)
-            ReplicatedStorage.GetReadyRemote:FireServer("3", false)
-            task.wait(0.67)
-            ReplicatedStorage.GetReadyRemote:FireServer("2", true)
-            task.wait(1.25)
-            ReplicatedStorage.GetReadyRemote:FireServer("2", false)
-        end)
+        RunRestoreVoteSystem(false)
     end
 })
+
 
 GameModeDropdown2 = Main7:Dropdown({
     Title = "Set Vote Mode",
@@ -2500,7 +2694,6 @@ AutoVoteIGToggle = Main7:Toggle({
     Desc = "Automatically votes for the selected mode each round.",
     Value = AutoVoteinGameEnabled,
     Callback = function(enabled)
-        AutoVoteinGameEnabled = enabled; Config:Set("AutoVoteinGameEnabled", enabled); Config:Save()
         SetupAutoVote_InGame(enabled)
     end
 })
@@ -2529,9 +2722,9 @@ GameModeDropdown = Main7:Dropdown({
 
 -- PLAY SYSTEM (auto-navigate to Classic/Casual on load)
 --// PLAY + LOBBY SYSTEM
-local DELAY = 1
+DELAY = 1
 
-local function click_btn(btn)
+function click_btn(btn)
     if btn and (btn:IsA("ImageButton") or btn:IsA("TextButton")) then
         pcall(function()
             if firesignal then
@@ -2544,7 +2737,7 @@ local function click_btn(btn)
     end
 end
 
-local function notify(title, content, icon)
+function notify(title, content, icon)
     WindUI:Notify({
         Title = title,
         Content = content,
@@ -2675,8 +2868,165 @@ AutoVoteToggle = Main7:Toggle({
 
         if enabled then
             notify("Auto Game Mode", "Enabled")
+            task.spawn(FireVote_Solo)
         else
             notify("Auto Game Mode", "Disabled", "x")
+        end
+    end
+})
+
+-- ====================== UI: AUTO GACHA / AUTO USE ITEM ======================
+DYHUB_GachaArgs = { "1Spin", "10Spins", "100Spins", "1SpinLucky", "10SpinLucky" }
+
+AutoGachaCharacterEnabled = Config:Get("AutoGachaCharacterEnabled", false)
+SelectedGachaCharacter = Config:Get("SelectedGachaCharacter", "1Spin")
+AutoGachaCharacterRunning = false
+
+AutoGachaSkinEnabled = Config:Get("AutoGachaSkinEnabled", false)
+SelectedGachaSkin = Config:Get("SelectedGachaSkin", "1Spin")
+AutoGachaSkinRunning = false
+
+AutoUseItemEnabled = Config:Get("AutoUseItemEnabled", false)
+SelectedUseItem = Config:Get("SelectedUseItem", "Presents")
+AutoUseItemRunning = false
+
+function StartAutoGachaCharacterLoop()
+    if AutoGachaCharacterRunning then return end
+    AutoGachaCharacterRunning = true
+
+    task.spawn(function()
+        while AutoGachaCharacterEnabled do
+            local remote = ReplicatedStorage:FindFirstChild("GachaCharacter")
+            if remote and SelectedGachaCharacter then
+                pcall(function()
+                    remote:FireServer(SelectedGachaCharacter)
+                end)
+            end
+            task.wait(1)
+        end
+
+        AutoGachaCharacterRunning = false
+    end)
+end
+
+function StartAutoGachaSkinLoop()
+    if AutoGachaSkinRunning then return end
+    AutoGachaSkinRunning = true
+
+    task.spawn(function()
+        while AutoGachaSkinEnabled do
+            local remote = ReplicatedStorage:FindFirstChild("GachaSkins")
+            if remote and SelectedGachaSkin then
+                pcall(function()
+                    remote:FireServer(SelectedGachaSkin)
+                end)
+            end
+            task.wait(1)
+        end
+
+        AutoGachaSkinRunning = false
+    end)
+end
+
+function StartAutoUseItemLoop()
+    if AutoUseItemRunning then return end
+    AutoUseItemRunning = true
+
+    task.spawn(function()
+        while AutoUseItemEnabled do
+            if SelectedUseItem == "Presents" then
+                local remote = ReplicatedStorage:FindFirstChild("GachaCapsule")
+                if remote then
+                    pcall(function()
+                        remote:FireServer()
+                    end)
+                end
+            end
+            task.wait(1)
+        end
+
+        AutoUseItemRunning = false
+    end)
+end
+
+Main5:Section({ Title = "Auto Gacha", Icon = "sparkles" })
+
+GachaCharacterDropdown = Main5:Dropdown({
+    Title = "Character Gacha Args",
+    Values = DYHUB_GachaArgs,
+    Multi = false,
+    Value = SelectedGachaCharacter,
+    Callback = function(value)
+        SelectedGachaCharacter = value
+        Config:Set("SelectedGachaCharacter", value)
+        Config:Save()
+    end
+})
+
+AutoGachaCharacterToggle = Main5:Toggle({
+    Title = "Auto Gacha Character",
+    Desc = "Automatically rolls character gacha with the selected args.",
+    Value = AutoGachaCharacterEnabled,
+    Callback = function(enabled)
+        AutoGachaCharacterEnabled = enabled == true
+        Config:Set("AutoGachaCharacterEnabled", AutoGachaCharacterEnabled)
+        Config:Save()
+        if AutoGachaCharacterEnabled then
+            StartAutoGachaCharacterLoop()
+        end
+    end
+})
+
+GachaSkinDropdown = Main5:Dropdown({
+    Title = "Skin Gacha Args",
+    Values = DYHUB_GachaArgs,
+    Multi = false,
+    Value = SelectedGachaSkin,
+    Callback = function(value)
+        SelectedGachaSkin = value
+        Config:Set("SelectedGachaSkin", value)
+        Config:Save()
+    end
+})
+
+AutoGachaSkinToggle = Main5:Toggle({
+    Title = "Auto Gacha Skin",
+    Desc = "Automatically rolls skin gacha with the selected args.",
+    Value = AutoGachaSkinEnabled,
+    Callback = function(enabled)
+        AutoGachaSkinEnabled = enabled == true
+        Config:Set("AutoGachaSkinEnabled", AutoGachaSkinEnabled)
+        Config:Save()
+        if AutoGachaSkinEnabled then
+            StartAutoGachaSkinLoop()
+        end
+    end
+})
+
+Main5:Section({ Title = "Auto Use Item", Icon = "package-open" })
+
+UseItemDropdown = Main5:Dropdown({
+    Title = "Use Item",
+    Values = { "Presents" },
+    Multi = false,
+    Value = SelectedUseItem,
+    Callback = function(value)
+        SelectedUseItem = value
+        Config:Set("SelectedUseItem", value)
+        Config:Save()
+    end
+})
+
+AutoUseItemToggle = Main5:Toggle({
+    Title = "Auto Use Item",
+    Desc = "Automatically uses the selected item.",
+    Value = AutoUseItemEnabled,
+    Callback = function(enabled)
+        AutoUseItemEnabled = enabled == true
+        Config:Set("AutoUseItemEnabled", AutoUseItemEnabled)
+        Config:Save()
+        if AutoUseItemEnabled then
+            StartAutoUseItemLoop()
         end
     end
 })
@@ -2685,8 +3035,31 @@ AutoVoteToggle = Main7:Toggle({
 Main5:Section({ Title = "BUG, UNDER FIXING", TextXAlignment = "Center", TextSize = 20 })
 Main5:Section({ Title = "Shop Weapon", Icon = "helicopter" })
 
-local AutoBuyWeaponValue         = Config:Get("AutoBuyWeaponValue", "Stungun")
-local AutoBuyWeaponToggleEnabled = Config:Get("AutoBuyWeaponEnabled", false)
+AutoBuyWeaponValue         = Config:Get("AutoBuyWeaponValue", "Stungun")
+AutoBuyWeaponToggleEnabled = Config:Get("AutoBuyWeaponEnabled", false)
+
+AutoBuyWeaponRunning = false
+
+function StartAutoBuyWeaponLoop()
+    if AutoBuyWeaponRunning then return end
+    AutoBuyWeaponRunning = true
+
+    task.spawn(function()
+        while AutoBuyWeaponToggleEnabled do
+            if AutoBuyWeaponValue then
+                local remote = ReplicatedStorage:FindFirstChild("ShopSystem")
+                if remote then
+                    pcall(function()
+                        remote:FireServer("Buy", AutoBuyWeaponValue)
+                    end)
+                end
+            end
+            task.wait(10)
+        end
+
+        AutoBuyWeaponRunning = false
+    end)
+end
 
 WeaponDropdown = Main5:Dropdown({
     Title = "Select Buy (Weapon)",
@@ -2698,16 +3071,7 @@ AutoBuyWeaponToggle = Main5:Toggle({
     Title = "Auto Buy (Weapon)", Value = AutoBuyWeaponToggleEnabled,
     Callback = function(enabled)
         AutoBuyWeaponToggleEnabled = enabled; Config:Set("AutoBuyWeaponEnabled", enabled); Config:Save()
-        if enabled then
-            task.spawn(function()
-                while AutoBuyWeaponToggleEnabled do
-                    if AutoBuyWeaponValue then
-                        pcall(function() ReplicatedStorage.ShopSystem:FireServer("Buy", AutoBuyWeaponValue) end)
-                    end
-                    task.wait(10)
-                end
-            end)
-        end
+        if enabled then StartAutoBuyWeaponLoop() end
     end
 })
 
@@ -2720,8 +3084,31 @@ Main5:Button({
 
 Main5:Section({ Title = "Shop Misc", Icon = "helicopter" })
 
-local AutoBuyMiscValue         = Config:Get("AutoBuyMiscValue", "HeadPhone")
-local AutoBuyMiscToggleEnabled = Config:Get("AutoBuyMiscEnabled", false)
+AutoBuyMiscValue         = Config:Get("AutoBuyMiscValue", "HeadPhone")
+AutoBuyMiscToggleEnabled = Config:Get("AutoBuyMiscEnabled", false)
+
+AutoBuyMiscRunning = false
+
+function StartAutoBuyMiscLoop()
+    if AutoBuyMiscRunning then return end
+    AutoBuyMiscRunning = true
+
+    task.spawn(function()
+        while AutoBuyMiscToggleEnabled do
+            if AutoBuyMiscValue then
+                local remote = ReplicatedStorage:FindFirstChild("ShopSystem")
+                if remote then
+                    pcall(function()
+                        remote:FireServer("Buy", AutoBuyMiscValue)
+                    end)
+                end
+            end
+            task.wait(10)
+        end
+
+        AutoBuyMiscRunning = false
+    end)
+end
 
 MiscShopDropdown = Main5:Dropdown({
     Title = "Select Buy (Misc)",
@@ -2733,16 +3120,7 @@ AutoBuyMiscToggle = Main5:Toggle({
     Title = "Auto Buy (Misc)", Value = AutoBuyMiscToggleEnabled,
     Callback = function(enabled)
         AutoBuyMiscToggleEnabled = enabled; Config:Set("AutoBuyMiscEnabled", enabled); Config:Save()
-        if enabled then
-            task.spawn(function()
-                while AutoBuyMiscToggleEnabled do
-                    if AutoBuyMiscValue then
-                        pcall(function() ReplicatedStorage.ShopSystem:FireServer("Buy", AutoBuyMiscValue) end)
-                    end
-                    task.wait(10)
-                end
-            end)
-        end
+        if enabled then StartAutoBuyMiscLoop() end
     end
 })
 
@@ -2792,11 +3170,11 @@ Main3:Button({
     end
 })
 
-local AutoSaveEnabled = Config:Get("AutoSaveEnabled", true)
-local AutoSaveDelay   = Config:Get("AutoSaveDelay", 15)
-local AutoSaveThread  = nil
+AutoSaveEnabled = Config:Get("AutoSaveEnabled", true)
+AutoSaveDelay   = Config:Get("AutoSaveDelay", 15)
+AutoSaveThread  = nil
 
-local function RestartAutoSave()
+function RestartAutoSave()
     if AutoSaveThread then task.cancel(AutoSaveThread); AutoSaveThread = nil end
     if AutoSaveEnabled then
         AutoSaveThread = task.spawn(function()
@@ -2863,6 +3241,19 @@ Main3:Button({
 
 Main3:Section({ Title = "Miscellaneous", Icon = "settings" })
 
+CameraDropdown = Main3:Dropdown({
+    Title = "Camera",
+    Values = { "Classic", "Manuel" },
+    Multi = false,
+    Value = CameraMode,
+    Callback = function(value)
+        CameraMode = value
+        Config:Set("CameraMode", value)
+        Config:Save()
+        ApplyCameraMode()
+    end
+})
+
 NoBarrierToggle = Main3:Toggle({
     Title = "Bypass Barrier (PATCHED)", Value = noBarrierActive,
     Desc = "Attempts to bypass invisible barriers.",
@@ -2872,24 +3263,58 @@ NoBarrierToggle = Main3:Toggle({
     end
 })
 
-local antiafk = Main3:Toggle({
+AntiAFKRunning = false
+AntiAFKConnection = nil
+AntiAFKToken = 0
+
+function StartAntiAFKLoop()
+    AntiAFKToken = AntiAFKToken + 1
+    local myToken = AntiAFKToken
+
+    if AntiAFKConnection then
+        AntiAFKConnection:Disconnect()
+        AntiAFKConnection = nil
+    end
+
+    AntiAFKRunning = true
+
+    AntiAFKConnection = LocalPlayer.Idled:Connect(function()
+        if AntiAFK and myToken == AntiAFKToken then
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
+        end
+    end)
+
+    task.spawn(function()
+        while AntiAFK and myToken == AntiAFKToken do
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
+            task.wait(60)
+        end
+
+        if myToken == AntiAFKToken then
+            AntiAFKRunning = false
+        end
+    end)
+end
+
+function StopAntiAFKLoop()
+    AntiAFKToken = AntiAFKToken + 1
+    AntiAFKRunning = false
+    AntiAFK = false
+
+    if AntiAFKConnection then
+        AntiAFKConnection:Disconnect()
+        AntiAFKConnection = nil
+    end
+end
+
+antiafk = Main3:Toggle({
     Title = "Anti AFK", Value = AntiAFK,
     Desc = "Prevents the game from kicking you for being idle.",
     Callback = function(enabled)
         AntiAFK = enabled; Config:Set("AntiAfk", enabled); Config:Save()
-        if enabled then
-            task.spawn(function()
-                game.Players.LocalPlayer.Idled:Connect(function()
-                    VirtualUser:CaptureController()
-                    VirtualUser:ClickButton2(Vector2.new())
-                end)
-                while AntiAFK do
-                    VirtualUser:CaptureController()
-                    VirtualUser:ClickButton2(Vector2.new())
-                    task.wait(60)
-                end
-            end)
-        end
+        if enabled then StartAntiAFKLoop() else StopAntiAFKLoop() end
     end
 })
 
@@ -2907,34 +3332,33 @@ if ESP.Enabled then
     StartESPLoop()
 end
 
-if AutoBuyWeaponToggleEnabled then
-    task.spawn(function()
-        while AutoBuyWeaponToggleEnabled do
-            if AutoBuyWeaponValue then pcall(function() ReplicatedStorage.ShopSystem:FireServer("Buy", AutoBuyWeaponValue) end) end
-            task.wait(10)
-        end
-    end)
-end
+if AutoBuyWeaponToggleEnabled then StartAutoBuyWeaponLoop() end
 
-if AutoBuyMiscToggleEnabled then
-    task.spawn(function()
-        while AutoBuyMiscToggleEnabled do
-            if AutoBuyMiscValue then pcall(function() ReplicatedStorage.ShopSystem:FireServer("Buy", AutoBuyMiscValue) end) end
-            task.wait(10)
-        end
-    end)
-end
+if AutoBuyMiscToggleEnabled then StartAutoBuyMiscLoop() end
 
 if AutoCollectEnabled then
     task.wait(2)
     StartAutoCollectLoop()
 end
 
-if AutoVoteEnabled or AutoStartEnabled then
-    RefreshVoteAndStartSetup()
+pcall(updatePlayerStats)
+pcall(ApplyCameraMode)
+
+if AntiAFK then StartAntiAFKLoop() end
+
+if AutoGachaCharacterEnabled then StartAutoGachaCharacterLoop() end
+if AutoGachaSkinEnabled then StartAutoGachaSkinLoop() end
+if AutoUseItemEnabled then StartAutoUseItemLoop() end
+
+if AutoVoteEnabled then
+    task.delay(1.5, function()
+        if AutoVoteEnabled then FireVote_Solo() end
+    end)
 end
 
-if AutoVoteinGameEnabled then SetupAutoVote_InGame(true) end
+if AutoVoteinGameEnabled or AutoStartEnabled then
+    RefreshVoteAndStartSetup()
+end
 
 print("[DYHUB] Version " .. version .. " " .. ver .. " loaded successfully!")
 print("[DYHUB] Config system active | Auto saving every 15 seconds")
