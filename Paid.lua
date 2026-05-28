@@ -1,7 +1,7 @@
 -- v085
 -- =========================
 local version = "Rework"
-local ver = "v023.6"
+local ver = "v024.3"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -49,7 +49,7 @@ end
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
-local ConfigFolder = "DYHUB_STBB_V0234"
+local ConfigFolder = "DYHUB_STBB"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
@@ -57,7 +57,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config.json"
+    self.ConfigPath = ConfigFolder .. "/config_main.json"
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
     self:Load()
     return self
@@ -3278,6 +3278,7 @@ Main3:Section({ Title = "Miscellaneous", Icon = "settings" })
 
 CameraDropdown = Main3:Dropdown({
     Title = "Camera",
+    Desc = "Adjust the camera angle",
     Values = { "Classic", "Manuel" },
     Multi = false,
     Value = CameraMode,
