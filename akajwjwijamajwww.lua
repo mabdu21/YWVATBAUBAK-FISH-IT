@@ -1,4 +1,4 @@
--- v086-register-fix | v1
+-- v086-register-fix | v2
 -- =========================
 local version = "Rework"
 local ver = "v023.65"
@@ -2940,7 +2940,7 @@ GachaCharacterDropdown = Main5:Dropdown({
 AutoGachaCharacterToggle = Main5:Toggle({
     Title = "Auto Gacha Character",
     Value = AutoGachaCharacterEnabled,
-    Desc = "Automatically fires GachaCharacter with the selected spin.",
+    Desc = "Automatically Gacha Character with the selected spin.",
     Callback = function(enabled)
         AutoGachaCharacterEnabled = enabled
         Config:Set("AutoGachaCharacterEnabled", enabled)
@@ -2965,7 +2965,7 @@ GachaSkinDropdown = Main5:Dropdown({
 AutoGachaSkinToggle = Main5:Toggle({
     Title = "Auto Gacha Skin",
     Value = AutoGachaSkinEnabled,
-    Desc = "Automatically fires GachaSkins with the selected spin.",
+    Desc = "Automatically Gacha Skins with the selected spin.",
     Callback = function(enabled)
         AutoGachaSkinEnabled = enabled
         Config:Set("AutoGachaSkinEnabled", enabled)
@@ -2992,7 +2992,7 @@ UseItemDropdown = Main5:Dropdown({
 AutoUseItemToggle = Main5:Toggle({
     Title = "Auto Use Item",
     Value = AutoUseItemEnabled,
-    Desc = "Automatically uses the selected item. Presents = GachaCapsule.",
+    Desc = "Automatically uses the selected item.",
     Callback = function(enabled)
         AutoUseItemEnabled = enabled
         Config:Set("AutoUseItemEnabled", enabled)
