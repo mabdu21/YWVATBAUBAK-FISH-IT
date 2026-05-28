@@ -1,7 +1,7 @@
--- v085123213
+-- v085
 -- =========================
 local version = "Rework"
-local ver = "v023.5"
+local ver = "v023.6"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -339,6 +339,7 @@ local LockActive             = false
 local AutoStartConnection    = nil
 local noBarrierConnection    = nil
 local noBarrierActive        = Config:Get("NoBarrier", false)
+local SyncFarmOnly           = Config:Get("SyncFarmOnly", true)
 
 -- ====================== NEW PRIORITY SYSTEM CONFIG ======================
 -- มอนที่เลือดสูงสุดต่ำกว่า HighHPThreshold จะถูกข้ามไป → ไปฆ่ามอนปกติที่ใกล้ที่สุดแทน
@@ -806,7 +807,7 @@ function StartAutoAttack()
     AutoAttackRunning = true
 
     task.spawn(function()
-        while AutoAttackEnabled and AutoFarmEnabled do
+        while AutoAttackEnabled and (AutoFarmEnabled or not SyncFarmOnly) do
             local mob = GetPriorityMob()
             if mob and not WaitingRespawn then
                 pcall(function() ReplicatedStorage.LMB:FireServer() end)
@@ -824,7 +825,7 @@ function StartAutoSkill()
     AutoSkillRunning = true
 
     task.spawn(function()
-        while AutoSkillEnabled and AutoFarmEnabled do
+        while AutoSkillEnabled and (AutoFarmEnabled or not SyncFarmOnly) do
             local mob = GetPriorityMob()
             if mob and not WaitingRespawn then
                 local keysToPress = {}
@@ -834,7 +835,7 @@ function StartAutoSkill()
                     keysToPress = SelectedSkills
                 end
                 for _, key in ipairs(keysToPress) do
-                    if not AutoSkillEnabled or not AutoFarmEnabled then break end
+                    if (not AutoSkillEnabled) or (not AutoFarmEnabled and SyncFarmOnly) then break end
                     local keyCode = Enum.KeyCode[key]
                     if keyCode then
                         pcall(function()
@@ -1093,7 +1094,7 @@ function StartAutoFillUpLoop()
     if FillUpRunning then return end
     FillUpRunning = true
     task.spawn(function()
-        while AutoFillUpEnabled and AutoFarmEnabled do
+        while AutoFillUpEnabled and (AutoFarmEnabled or not SyncFarmOnly) do
             if not IsPlayerHPFull() then
                 if AutoSkipHeliEnabled then TriggerAutoSkipHeli(false) end
                 local waited = 0
@@ -1154,6 +1155,7 @@ local _autoRestoreDone    = false
 local _restoreDebounce    = false
 local _voteCharacterConn  = nil
 local _autoStartOnlyConn  = nil
+local _lastGetReadyFireTime = 0
 
 function GetRemoteSafe(name)
     local remote = ReplicatedStorage and ReplicatedStorage:FindFirstChild(name)
@@ -1205,6 +1207,12 @@ end
 function FireGetReady(delayBefore)
     if delayBefore == nil then delayBefore = 0 end
     if delayBefore > 0 then task.wait(delayBefore) end
+
+    local now = tick()
+    if _lastGetReadyFireTime > 0 and (now - _lastGetReadyFireTime) < 1.8 then
+        return false
+    end
+    _lastGetReadyFireTime = now
 
     local remote = GetRemoteSafe("GetReadyRemote")
     if not remote then
@@ -1417,10 +1425,24 @@ function SetupAutoVote_InGame(enabled)
 end
 
 function StartAutoStart()
+    local wasEnabled = AutoStartEnabled
     AutoStartEnabled = true
     Config:Set("AutoStartEnabled", true)
     Config:Save()
+
+    -- Force the vote watcher to re-check the current GUI state.
+    -- This fixes the case where Auto Vote fired first, then Auto Start is enabled afterward.
+    _lastVoteVisible = false
     RefreshVoteAndStartSetup()
+
+    if AutoVoteinGameEnabled and not wasEnabled then
+        task.spawn(function()
+            task.wait(0.15)
+            if AutoStartEnabled and AutoVoteinGameEnabled and not _voteRoundBusy and not IsOpenVoteVisible() then
+                FireGetReady(0)
+            end
+        end)
+    end
 end
 
 function StopAutoStart()
@@ -1805,67 +1827,79 @@ function StartFarmLoop()
 end
 
 -- ====================== MISC OPTIONS HANDLER ======================
-local SyncFarmOnly = Config:Get("SyncFarmOnly", true)
+SyncFarmOnly = Config:Get("SyncFarmOnly", SyncFarmOnly)
 
 function HandleMiscOptions(selectedOptions)
+    selectedOptions = selectedOptions or {}
     MiscOptions = selectedOptions
 
-    -- ถ้า Sync Farm Only ปิด: ระบบทำงานได้แม้ AutoFarm ปิด
-    -- ถ้า Sync Farm Only เปิด: ต้องเปิด AutoFarm ก่อนถึงจะทำงาน
-    -- ถ้า AutoFarm ปิดและ Sync Farm Only ปิด: ระบบใน MiscFarm ยังทำงาน
-    -- ถ้า AutoFarm ปิดและ Sync Farm Only เปิด: ระบบหยุดทำงาน
-
+    -- SyncFarmOnly ON  = Misc Farm systems require Auto Farm, except Auto Start.
+    -- SyncFarmOnly OFF = Misc Farm systems can run without Auto Farm.
+    -- Auto Start is intentionally independent so Auto Vote + Auto Start can sync even when Auto Farm is off.
     local canRun = AutoFarmEnabled or not SyncFarmOnly
 
-    local hasAutoAttack = table.find(selectedOptions, "Auto Attack")
-    if hasAutoAttack and not AutoAttackEnabled and canRun then
-        AutoAttackEnabled = true; StartAutoAttack()
-    elseif not hasAutoAttack then
+    local hasAutoAttack = table.find(selectedOptions, "Auto Attack") ~= nil
+    if hasAutoAttack and canRun then
+        AutoAttackEnabled = true
+        StartAutoAttack()
+    else
         AutoAttackEnabled = false
     end
 
-    local hasAutoSkill = table.find(selectedOptions, "Auto Skill")
-    if hasAutoSkill and not AutoSkillEnabled and canRun then
-        AutoSkillEnabled = true; StartAutoSkill()
-    elseif not hasAutoSkill then
+    local hasAutoSkill = table.find(selectedOptions, "Auto Skill") ~= nil
+    if hasAutoSkill and canRun then
+        AutoSkillEnabled = true
+        StartAutoSkill()
+    else
         AutoSkillEnabled = false
     end
 
-    local hasAutoSkipHeli = table.find(selectedOptions, "Auto Skip Helicopter")
-    if hasAutoSkipHeli and not AutoSkipHeliEnabled and canRun then
-        AutoSkipHeliEnabled = true; TriggerAutoSkipHeli(true)
-    elseif not hasAutoSkipHeli and AutoSkipHeliEnabled then
-        AutoSkipHeliEnabled = false; TriggerAutoSkipHeli(false)
+    local hasAutoSkipHeli = table.find(selectedOptions, "Auto Skip Helicopter") ~= nil
+    if hasAutoSkipHeli and canRun then
+        if not AutoSkipHeliEnabled then
+            AutoSkipHeliEnabled = true
+            TriggerAutoSkipHeli(true)
+        end
+    else
+        if AutoSkipHeliEnabled then
+            AutoSkipHeliEnabled = false
+            TriggerAutoSkipHeli(false)
+        end
     end
 
-    local hasBoostFPS = table.find(selectedOptions, "Delete Map")
+    local hasBoostFPS = table.find(selectedOptions, "Delete Map") ~= nil
     if hasBoostFPS and not BoostFPS_Active then
         SaveAndBoostFPS()
     elseif not hasBoostFPS and BoostFPS_Active then
         RestoreBoostFPS()
     end
 
-    SafeModeEnabled = table.find(selectedOptions, "Safe Mode") ~= nil
+    SafeModeEnabled = canRun and (table.find(selectedOptions, "Safe Mode") ~= nil)
     GodModeEnabled  = table.find(selectedOptions, "God Mode") ~= nil
 
-    local hasAutoStart = table.find(selectedOptions, "Auto Start")
-    if hasAutoStart and not AutoStartEnabled and canRun then
-        StartAutoStart()
-    elseif not hasAutoStart and AutoStartEnabled then
-        StopAutoStart()
+    local hasAutoStart = table.find(selectedOptions, "Auto Start") ~= nil
+    if hasAutoStart then
+        if not AutoStartEnabled then
+            StartAutoStart()
+        else
+            RefreshVoteAndStartSetup()
+        end
+    else
+        if AutoStartEnabled then StopAutoStart() end
     end
 
-    local hasAutoFillUp = table.find(selectedOptions, "Auto Fill Up")
-    if hasAutoFillUp and not AutoFillUpEnabled then
-        if canRun then AutoFillUpEnabled = true; StartAutoFillUpLoop() end
-    elseif not hasAutoFillUp then
-        AutoFillUpEnabled = false; FillUpRunning = false
+    local hasAutoFillUp = table.find(selectedOptions, "Auto Fill Up") ~= nil
+    if hasAutoFillUp and canRun then
+        AutoFillUpEnabled = true
+        StartAutoFillUpLoop()
+    else
+        AutoFillUpEnabled = false
+        FillUpRunning = false
     end
 
     Config:Set("MiscOptions", selectedOptions)
     Config:Save()
 end
-
 
 -- ====================== CAMERA MODE ======================
 local CameraMode = Config:Get("CameraMode", "Manuel")
@@ -1916,16 +1950,18 @@ AutoFarmToggle = Main:Toggle({
             HandleMiscOptions(MiscOptions)
             WindUI:Notify({ Title = "Auto Farm", Content = "Enabled, Auto Farm now!", Duration = 2, Icon = "play" })
         else
-            AutoAttackEnabled = false; AutoSkillEnabled = false
-            AutoSkipHeliEnabled = false; AutoFillUpEnabled = false
-            FillUpRunning = false; LockActive = false
-            if AutoStartEnabled then StopAutoStart() end
-            -- ถ้า SyncFarmOnly เปิดอยู่ ให้หยุดระบบ Misc ที่ต้องการ AutoFarm
+            LockActive = false
+            WaitingRespawn = false
             if SyncFarmOnly then
+                AutoAttackEnabled = false; AutoSkillEnabled = false
+                AutoSkipHeliEnabled = false; AutoFillUpEnabled = false
+                FillUpRunning = false
                 TriggerAutoSkipHeli(false)
-                WindUI:Notify({ Title = "Auto Farm", Content = "Turn off Auto Farm: Misc Farm system stops working (Sync Farm Only)", Duration = 3, Icon = "square" })
+                HandleMiscOptions(MiscOptions)
+                WindUI:Notify({ Title = "Auto Farm", Content = "Turn off Auto Farm: Misc Farm systems stop working (Sync Farm Only). Auto Start can still sync with Auto Vote.", Duration = 3, Icon = "square" })
             else
-                WindUI:Notify({ Title = "Auto Farm", Content = "Auto Farm is turned off", Duration = 2, Icon = "square" })
+                HandleMiscOptions(MiscOptions)
+                WindUI:Notify({ Title = "Auto Farm", Content = "Auto Farm is turned off. Misc Farm systems can keep running because Sync Farm Only is OFF.", Duration = 2, Icon = "square" })
             end
         end
         Config:Set("AutoFarmEnabled", state); Config:Save()
@@ -1986,12 +2022,11 @@ Main:Toggle({
         SyncFarmOnly = state
         Config:Set("SyncFarmOnly", state)
         Config:Save()
+        HandleMiscOptions(MiscOptions)
         if state then
-            WindUI:Notify({ Title = "Sync Farm Only", Content = "ON: Misc Farm system must have Auto Farm enabled first", Duration = 3, Icon = "link" })
+            WindUI:Notify({ Title = "Sync Farm Only", Content = "ON: Misc Farm systems follow Auto Farm. Auto Start still syncs with Auto Vote.", Duration = 3, Icon = "link" })
         else
-            WindUI:Notify({ Title = "Sync Farm Only", Content = "OFF: Misc Farm system works without needing Auto Farm.", Duration = 3, Icon = "unlink" })
-            -- re-apply misc options ตอนปิด sync
-            HandleMiscOptions(MiscOptions)
+            WindUI:Notify({ Title = "Sync Farm Only", Content = "OFF: Misc Farm systems work without needing Auto Farm.", Duration = 3, Icon = "unlink" })
         end
     end
 })
