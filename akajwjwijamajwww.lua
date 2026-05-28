@@ -1,7 +1,7 @@
--- v086-register-fix
+-- v086-register-fix | v1
 -- =========================
 local version = "Rework"
-local ver = "v023.5"
+local ver = "v023.65"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -49,7 +49,7 @@ end
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
-local ConfigFolder = "DYHUB_STBB_V0234"
+local ConfigFolder = "DYHUB_STBB"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
@@ -57,7 +57,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config.json"
+    self.ConfigPath = ConfigFolder .. "/config_main_01.json"
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
     self:Load()
     return self
@@ -1155,11 +1155,33 @@ local function FireVote_Solo()
     print("[DYHUB] AutoVote Solo fired: " .. tostring(AutoGameValue))
 end
 
+local GetReadyRemote = ReplicatedStorage:WaitForChild("GetReadyRemote")
+
 local function FireGetReady(delayBefore)
-    if delayBefore == nil then delayBefore = 2.5 end
-    if delayBefore > 0 then task.wait(delayBefore) end
-    pcall(function() ReplicatedStorage.GetReadyRemote:FireServer("1", true) end)
-    --print("[DYHUB] AutoStart fired")
+    delayBefore = delayBefore or 1.67
+
+    if delayBefore > 0 then
+        task.wait(delayBefore)
+    end
+
+    local ok, err = pcall(function()
+        GetReadyRemote:FireServer("1", true)
+
+        task.wait(1)
+        GetReadyRemote:FireServer("1", false)
+
+        task.wait(0.5)
+        GetReadyRemote:FireServer("2", false)
+
+        task.wait(0.5)
+        GetReadyRemote:FireServer("3", false)
+    end)
+
+    if not ok then
+        warn("[DYHUB] Get Ready error:", err)
+    end
+
+    -- print("[DYHUB] AutoStart fired")
 end
 
 local function GetOpenVoteFrame()
@@ -2583,51 +2605,40 @@ Main7:Button({
     Desc = "⚠️ Press this once before using Auto Vote Mode for the first time.",
     Callback = function()
         pcall(function()
-            ReplicatedStorage.GetReadyRemote:FireServer("3", true)
-            task.wait(1.25)
-            ReplicatedStorage.GetReadyRemote:FireServer("3", false)
-            task.wait(0.67)
-            ReplicatedStorage.GetReadyRemote:FireServer("2", true)
-            task.wait(1.25)
-            ReplicatedStorage.GetReadyRemote:FireServer("2", false)
-            task.wait(0.67)
             ReplicatedStorage.GetReadyRemote:FireServer("1", true)
+            task.wait(1)
+            ReplicatedStorage.GetReadyRemote:FireServer("1", false)
+            task.wait(0.5)
+            ReplicatedStorage.GetReadyRemote:FireServer("2", false)
+            task.wait(0.5)
+            ReplicatedStorage.GetReadyRemote:FireServer("3", false)
         end)
         WindUI:Notify({
             Title = "Restore Loading",
             Content = "Ready, Restore Vote System...",
             Duration = 2,
-            Icon = "check-circle"
+            Icon = "loader-circle"
         })
         task.wait(6)
         pcall(function()
             local char = LocalPlayer.Character
             if char and char:FindFirstChild("HumanoidRootPart") then
-                char.HumanoidRootPart.CFrame = CFrame.new(-220, 3, -600)
+                char.HumanoidRootPart.CFrame = CFrame.new(-220, -50, -600)
             end
         end)
         WindUI:Notify({
             Title = "Restore Loading",
-            Content = "Restore Vote System, please wait.",
+            Content = "Restore Vote System, please wait...",
             Duration = 5,
-            Icon = "check-circle"
+            Icon = "loader-circle"
         })
         task.wait(10)
         WindUI:Notify({
             Title = "Restore Complete",
             Content = "Vote System restored! You can now use Auto Vote Mode.",
             Duration = 5,
-            Icon = "check-circle"
+            Icon = "check"
         })
-        pcall(function()
-            ReplicatedStorage.GetReadyRemote:FireServer("3", true)
-            task.wait(1.25)
-            ReplicatedStorage.GetReadyRemote:FireServer("3", false)
-            task.wait(0.67)
-            ReplicatedStorage.GetReadyRemote:FireServer("2", true)
-            task.wait(1.25)
-            ReplicatedStorage.GetReadyRemote:FireServer("2", false)
-        end)
     end
 })
 
@@ -2644,7 +2655,7 @@ GameModeDropdown2 = Main7:Dropdown({
 
 AutoVoteIGToggle = Main7:Toggle({
     Title = "Auto Vote Mode (In-Game)",
-    Desc = "Waits for OpenVoteUI, votes x10 instantly, hides the UI, and syncs with Auto Start if enabled.",
+    Desc = "Automatically votes for the selected mode each round.",
     Value = AutoVoteinGameEnabled,
     Callback = function(enabled)
         AutoVoteinGameEnabled = enabled; Config:Set("AutoVoteinGameEnabled", enabled); Config:Save()
