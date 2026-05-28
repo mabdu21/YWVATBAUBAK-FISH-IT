@@ -1,20 +1,20 @@
--- v235
+-- v251
 -- =========================
 local version = "Rework"
-local ver = "v023.5"
+local ver = "v024.1"
 -- =========================
 
 -- ====================== LOAD UI ======================
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 -- ====================== GameLoad ======================
 repeat task.wait() until game:IsLoaded()
 
 -- ====================== LoadingGui ======================
-local p = game:GetService("Players").LocalPlayer
-local pg = p:WaitForChild("PlayerGui")
+p = game:GetService("Players").LocalPlayer
+pg = p:WaitForChild("PlayerGui")
 
-local function waitLoadingGone()
+function waitLoadingGone()
     local gui = pg:FindFirstChild("LoadingGui")
     if gui then
         WindUI:Notify({ Title = "Initialization", Content = "Game is loading, Please wait.", Duration = 3, Icon = "download" })
@@ -28,7 +28,7 @@ WindUI:Notify({ Title = "Initialization", Content = "Load complete, Starting in 
 task.wait(3)
 
 -- ====================== FPS UNLOCK ======================
-local part = Instance.new("Part")
+part = Instance.new("Part")
 part.Size = Vector3.new(10, 1, 10)
 part.Position = Vector3.new(-23.3435822, 61, 0.341766357)
 part.Transparency = 1
@@ -48,10 +48,10 @@ else
 end
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
-local HttpService = game:GetService("HttpService")
-local ConfigFolder = "DYHUB_STBB_V0235"
+HttpService = game:GetService("HttpService")
+ConfigFolder = "DYHUB_STBB_V0235"
 
-local CustomConfig = {}
+CustomConfig = {}
 CustomConfig.__index = CustomConfig
 
 function CustomConfig.new()
@@ -104,17 +104,17 @@ function CustomConfig:AutoSave(interval)
     end)
 end
 
-local Config = CustomConfig.new()
+Config = CustomConfig.new()
 Config:AutoSave(15)
 
 -- ====================== WINDOW 2 ======================
-local Players = game:GetService("Players")
+Players = game:GetService("Players")
 
-local FreeVersion    = "Free Version"
-local PremiumVersion = "Premium Version"
-local ExtraVersion   = "Extra Version"
+FreeVersion    = "Free Version"
+PremiumVersion = "Premium Version"
+ExtraVersion   = "Extra Version"
 
-local function getData(url)
+function getData(url)
     local success, response = pcall(function() return game:HttpGet(url) end)
     if not success then return nil end
     local func = loadstring(response)
@@ -122,7 +122,7 @@ local function getData(url)
     return nil
 end
 
-local function checkVersion(playerName)
+function checkVersion(playerName)
     local extraData = getData("https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/STBBList.lua")
     if extraData and extraData[playerName] then return ExtraVersion end
     local premiumData = getData("https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/listpremium.lua")
@@ -130,11 +130,11 @@ local function checkVersion(playerName)
     return FreeVersion
 end
 
-local player      = Players.LocalPlayer
-local userversion = checkVersion(player.Name)
+player      = Players.LocalPlayer
+userversion = checkVersion(player.Name)
 
 -- ====================== WINDOW ======================
-local Window = WindUI:CreateWindow({
+Window = WindUI:CreateWindow({
     Title = "DYHUB",
     IconThemed = true,
     Icon = "rbxassetid://104487529937663",
@@ -162,17 +162,17 @@ Window:EditOpenButton({
 })
 
 -- ====================== TABS ======================
-local Info   = Window:Tab({ Title = "Information", Icon = "info" })
-local MainDivider  = Window:Divider()
-local Main   = Window:Tab({ Title = "Main", Icon = "rocket" })
-local Main4  = Window:Tab({ Title = "Esp", Icon = "eye" })
-local Main2  = Window:Tab({ Title = "Player", Icon = "user" })
-local MainDivider1 = Window:Divider()
-local Main5  = Window:Tab({ Title = "Shop", Icon = "shopping-cart" })
-local Main6  = Window:Tab({ Title = "Collect", Icon = "hand" })
-local Main7  = Window:Tab({ Title = "Gamemode", Icon = "gamepad-2" })
-local MainDivider2 = Window:Divider()
-local Main3  = Window:Tab({ Title = "Setting", Icon = "settings" })
+Info   = Window:Tab({ Title = "Information", Icon = "info" })
+MainDivider  = Window:Divider()
+Main   = Window:Tab({ Title = "Main", Icon = "rocket" })
+Main4  = Window:Tab({ Title = "Esp", Icon = "eye" })
+Main2  = Window:Tab({ Title = "Player", Icon = "user" })
+MainDivider1 = Window:Divider()
+Main5  = Window:Tab({ Title = "Shop", Icon = "shopping-cart" })
+Main6  = Window:Tab({ Title = "Collect", Icon = "hand" })
+Main7  = Window:Tab({ Title = "Gamemode", Icon = "gamepad-2" })
+MainDivider2 = Window:Divider()
+Main3  = Window:Tab({ Title = "Setting", Icon = "settings" })
 Window:SelectTab(1)
 
 -- ======================== INFO ========================
@@ -204,10 +204,10 @@ ui.Creator.Request = function(requestData)
     if success then return result else error("HTTP Request failed: " .. tostring(result)) end
 end
 
-local InviteCode = "jWNDPNMmyB"
-local DiscordAPI = "https://discord.com/api/v10/invites/" .. InviteCode .. "?with_counts=true&with_expiration=true"
+InviteCode = "jWNDPNMmyB"
+DiscordAPI = "https://discord.com/api/v10/invites/" .. InviteCode .. "?with_counts=true&with_expiration=true"
 
-local function LoadDiscordInfo()
+function LoadDiscordInfo()
     local success, result = pcall(function()
         local httpRequest = (syn and syn.request) or (http and http.request) or http_request or request
         if not httpRequest then return nil end
@@ -281,17 +281,17 @@ Info:Paragraph({
 })
 
 -- ====================== SERVICES ======================
-local TweenService        = game:GetService("TweenService")
-local ReplicatedStorage   = game:GetService("ReplicatedStorage")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local RunService          = game:GetService("RunService")
-local VirtualUser         = game:GetService("VirtualUser")
+TweenService        = game:GetService("TweenService")
+ReplicatedStorage   = game:GetService("ReplicatedStorage")
+VirtualInputManager = game:GetService("VirtualInputManager")
+RunService          = game:GetService("RunService")
+VirtualUser         = game:GetService("VirtualUser")
 
 -- ====================== PLAYER ======================
-local LocalPlayer      = Players.LocalPlayer
-local Client           = LocalPlayer
-local Character        = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+LocalPlayer      = Players.LocalPlayer
+Client           = LocalPlayer
+Character        = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 
 -- ====================== GLOBAL TABLES ======================
 GlobalTables = {
@@ -311,50 +311,50 @@ GlobalTables = {
 }
 
 -- ====================== CONFIG VARIABLES ======================
-local skillList           = { "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B", "U" }
-local skillDropdownValues = { "All", "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B", "U" }
+skillList           = { "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B", "U" }
+skillDropdownValues = { "All", "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B", "U" }
 
 -- ====================== STATE VARIABLES ======================
-local AutoFarmEnabled       = Config:Get("AutoFarmEnabled", false)
-local FarmPosition          = Config:Get("FarmPosition", "Above")
-local FarmMode              = Config:Get("FarmMode", "Tween")
-local MiscOptions           = Config:Get("MiscOptions", {})
-local AutoAttackEnabled     = false
-local AutoSkillEnabled      = false
-local AutoSkipHeliEnabled   = false
-local AutoStartEnabled      = false
-local AutoFillUpEnabled     = false
-local SelectedSkills        = Config:Get("SelectedSkills", { "All" })
-local SafeModeEnabled       = false
-local SafeValue             = Config:Get("SafeValue", 30)
-local GodModeEnabled        = false
-local GodModeValue          = Config:Get("GodModeValue", 30)
-local WaitingRespawn        = false
-local IdlePosition          = CFrame.new(-23.3435822, 67, 0.341766357) * CFrame.Angles(math.rad(0), 0, 0)
-local SkillDelay            = Config:Get("SkillDelay", 1)
-local LoopDelay             = 0.5
-local TweenSpeed            = 1
-local HeightValue           = Config:Get("HeightValue", 3)
-local NeedNoClip            = false
-local LockActive            = false
-local AutoStartConnection   = nil
-local noBarrierConnection   = nil
-local noBarrierActive       = Config:Get("NoBarrier", false)
+AutoFarmEnabled       = Config:Get("AutoFarmEnabled", false)
+FarmPosition          = Config:Get("FarmPosition", "Above")
+FarmMode              = Config:Get("FarmMode", "Tween")
+MiscOptions           = Config:Get("MiscOptions", {})
+AutoAttackEnabled     = false
+AutoSkillEnabled      = false
+AutoSkipHeliEnabled   = false
+AutoStartEnabled      = false
+AutoFillUpEnabled     = false
+SelectedSkills        = Config:Get("SelectedSkills", { "All" })
+SafeModeEnabled       = false
+SafeValue             = Config:Get("SafeValue", 30)
+GodModeEnabled        = false
+GodModeValue          = Config:Get("GodModeValue", 30)
+WaitingRespawn        = false
+IdlePosition          = CFrame.new(-23.3435822, 67, 0.341766357) * CFrame.Angles(math.rad(0), 0, 0)
+SkillDelay            = Config:Get("SkillDelay", 1)
+LoopDelay             = 0.5
+TweenSpeed            = 1
+HeightValue           = Config:Get("HeightValue", 3)
+NeedNoClip            = false
+LockActive            = false
+AutoStartConnection   = nil
+noBarrierConnection   = nil
+noBarrierActive       = Config:Get("NoBarrier", false)
 
 -- ====================== NEW PRIORITY SYSTEM CONFIG ======================
-local HighHPThreshold        = Config:Get("HighHPThreshold", 200)
-local _currentTargetPriority = 0
-local _interruptSignal       = false
+HighHPThreshold        = Config:Get("HighHPThreshold", 200)
+_currentTargetPriority = 0
+_interruptSignal       = false
 
-local AntiAFK = Config:Get("AntiAfk", true)
+AntiAFK = Config:Get("AntiAfk", true)
 
 -- ====================== FILL UP PART CONFIG ======================
-local FILLUP_PART_PATH   = { "HelicopterShop", "ShopXDD", "PartForShop" }
-local FILLUP_TARGET_POS  = Vector3.new(44.2756729, 26.3595276, -32.7318268)
-local FILLUP_POS_THRESHOLD = 0.5
-local FillUpRunning = false
+FILLUP_PART_PATH   = { "HelicopterShop", "ShopXDD", "PartForShop" }
+FILLUP_TARGET_POS  = Vector3.new(44.2756729, 26.3595276, -32.7318268)
+FILLUP_POS_THRESHOLD = 0.5
+FillUpRunning = false
 
-local function GetFillUpPart()
+function GetFillUpPart()
     local obj = workspace
     for _, key in ipairs(FILLUP_PART_PATH) do
         obj = obj:FindFirstChild(key)
@@ -363,14 +363,14 @@ local function GetFillUpPart()
     return obj
 end
 
-local function IsFillUpPartReady()
+function IsFillUpPartReady()
     local fp = GetFillUpPart()
     if not fp then return false end
     return (fp.CFrame.Position - FILLUP_TARGET_POS).Magnitude < FILLUP_POS_THRESHOLD
 end
 
 -- ====================== ALLY SYSTEM ======================
-local AllyNames = {
+AllyNames = {
     ["Heavy Soldier Toilet V2"] = true,
     ["Quad Laser Toilet"]       = true,
     ["Strider Rocket Laser"]    = true,
@@ -383,7 +383,7 @@ local AllyNames = {
     ["Huge DJ Toilet"]          = true,
 }
 
-local function IsAlly(mob)
+function IsAlly(mob)
     return AllyNames[mob.Name] ~= nil
 end
 
@@ -424,7 +424,7 @@ function tp1(p89)
 end
 
 -- ====================== UTILITY FUNCTIONS ======================
-local function IsValidMob(obj)
+function IsValidMob(obj)
     if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
         if Players:GetPlayerFromCharacter(obj) then return false end
         if IsAlly(obj) then return false end
@@ -434,21 +434,21 @@ local function IsValidMob(obj)
     return false
 end
 
-local function IsMobDead(mob)
+function IsMobDead(mob)
     if not mob or not mob.Parent then return true end
     local humanoid = mob:FindFirstChild("Humanoid")
     if not humanoid or humanoid.Health <= 0 then return true end
     return false
 end
 
-local function GetMobMaxHP(mob)
+function GetMobMaxHP(mob)
     local humanoid = mob and mob:FindFirstChild("Humanoid")
     if not humanoid then return 0 end
     return humanoid.MaxHealth or 0
 end
 
 -- ====================== MOB SELECTION ======================
-local function GetNearestMob()
+function GetNearestMob()
     local nearestMob, nearestDist = nil, math.huge
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return nil end
@@ -464,7 +464,7 @@ local function GetNearestMob()
     return nearestMob
 end
 
-local function GetHighestMob()
+function GetHighestMob()
     local highestMob, highestY = nil, -math.huge
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return nil end
@@ -482,7 +482,7 @@ local function GetHighestMob()
 end
 
 -- ====================== PRIORITY SYSTEM ======================
-local function GetHelicopter()
+function GetHelicopter()
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return nil end
     for _, mob in ipairs(livingFolder:GetChildren()) do
@@ -493,7 +493,7 @@ local function GetHelicopter()
     return nil
 end
 
-local function GetGiantSTToilet()
+function GetGiantSTToilet()
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return nil, nil end
     local giant = livingFolder:FindFirstChild("Giant ST toilet")
@@ -507,7 +507,7 @@ local function GetGiantSTToilet()
     return nil, nil
 end
 
-local function GetHighHPMob()
+function GetHighHPMob()
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return nil end
     local bestMob, bestHP = nil, HighHPThreshold
@@ -520,7 +520,7 @@ local function GetHighHPMob()
     return bestMob
 end
 
-local function GetPriorityMob()
+function GetPriorityMob()
     local giant, prompt = GetGiantSTToilet()
     if giant and prompt then return giant, "GiantST", prompt, 4 end
     local heli = GetHelicopter()
@@ -532,7 +532,7 @@ local function GetPriorityMob()
     return nil, nil, nil, 0
 end
 
-local function CheckInterrupt(currentPriority)
+function CheckInterrupt(currentPriority)
     if currentPriority < 4 then
         local g, pr = GetGiantSTToilet()
         if g and pr then return true, 4 end
@@ -547,7 +547,7 @@ local function CheckInterrupt(currentPriority)
 end
 
 -- ====================== MOB VISUAL BOUNDS ======================
-local function GetMobVisualBounds(mob)
+function GetMobVisualBounds(mob)
     local minY, maxY = math.huge, -math.huge
     local centerX, centerZ, count = 0, 0, 0
     for _, part in ipairs(mob:GetDescendants()) do
@@ -573,37 +573,37 @@ local function GetMobVisualBounds(mob)
 end
 
 -- ====================== MOB HEIGHT OVERRIDE ======================
-local PADDING_REDUCE_STEP = Config:Get("PaddingReduceStep", 2)
-local PADDING_SAFE_MIN    = Config:Get("PaddingSafeMin", -30)
-local DMG_THRESHOLD       = Config:Get("DmgThreshold", 40)
-local ANTI_CLIP_MARGIN    = Config:Get("AntiClipMargin", 3)
-local PLAYER_HALF_HEIGHT  = 3
+PADDING_REDUCE_STEP = Config:Get("PaddingReduceStep", 2)
+PADDING_SAFE_MIN    = Config:Get("PaddingSafeMin", -30)
+DMG_THRESHOLD       = Config:Get("DmgThreshold", 40)
+ANTI_CLIP_MARGIN    = Config:Get("AntiClipMargin", 3)
+PLAYER_HALF_HEIGHT  = 3
 
-local MobHeightOverride   = {}
-local MobConfirmedPadding = {}
-local MobLastHealth       = {}
-local MobCheckerCancelled = {}
+MobHeightOverride   = {}
+MobConfirmedPadding = {}
+MobLastHealth       = {}
+MobCheckerCancelled = {}
 
-local function GetAntiClipFloor(mob)
+function GetAntiClipFloor(mob)
     local _, minY, maxY = GetMobVisualBounds(mob)
     local visualHeight = maxY - minY
     return -(visualHeight) + PLAYER_HALF_HEIGHT + ANTI_CLIP_MARGIN
 end
 
-local function GetEffectivePadding(mob)
+function GetEffectivePadding(mob)
     if MobConfirmedPadding[mob] ~= nil then return MobConfirmedPadding[mob] end
     if MobHeightOverride[mob] ~= nil then return MobHeightOverride[mob] end
     return HeightValue
 end
 
-local function ClampPaddingToAntiClip(mob, padding)
+function ClampPaddingToAntiClip(mob, padding)
     local antiFloor = GetAntiClipFloor(mob)
     local clamped = math.max(padding, antiFloor)
     clamped = math.max(clamped, PADDING_SAFE_MIN)
     return clamped
 end
 
-local function StartDamageChecker(mob)
+function StartDamageChecker(mob)
     MobCheckerCancelled[mob] = false
     task.spawn(function()
         local humanoid = mob and mob:FindFirstChild("Humanoid")
@@ -683,7 +683,7 @@ local function StartDamageChecker(mob)
     end)
 end
 
-local function ResetMobOverride(mob)
+function ResetMobOverride(mob)
     MobCheckerCancelled[mob] = true
     MobHeightOverride[mob]   = nil
     MobConfirmedPadding[mob] = nil
@@ -694,7 +694,7 @@ local function ResetMobOverride(mob)
 end
 
 -- ====================== TARGET CFRAME ======================
-local function GetTargetCFrame(mob, position)
+function GetTargetCFrame(mob, position)
     local mobRoot = mob:FindFirstChild("HumanoidRootPart")
     if not mobRoot then return nil end
     local padding = GetEffectivePadding(mob)
@@ -714,7 +714,7 @@ local function GetTargetCFrame(mob, position)
     end
 end
 
-local function TeleportToMob(mob)
+function TeleportToMob(mob)
     local cf = GetTargetCFrame(mob, FarmPosition)
     if not cf then return end
     if FarmMode == "Tween" then
@@ -732,7 +732,7 @@ local function TeleportToMob(mob)
 end
 
 -- ====================== AUTO LOOPS ======================
-local function StartAutoAttack()
+function StartAutoAttack()
     task.spawn(function()
         while AutoAttackEnabled and AutoFarmEnabled do
             local mob = GetPriorityMob()
@@ -744,7 +744,7 @@ local function StartAutoAttack()
     end)
 end
 
-local function StartAutoSkill()
+function StartAutoSkill()
     task.spawn(function()
         while AutoSkillEnabled and AutoFarmEnabled do
             local mob = GetPriorityMob()
@@ -773,18 +773,18 @@ local function StartAutoSkill()
     end)
 end
 
-local function TriggerAutoSkipHeli(state)
+function TriggerAutoSkipHeli(state)
     pcall(function() ReplicatedStorage.SetSettingAutoSkipWave:FireServer(state) end)
 end
 
-local function HasHumanoid(obj)
+function HasHumanoid(obj)
     if obj:IsA("Model") then
         return obj:FindFirstChildOfClass("Humanoid") ~= nil
     end
     return false
 end
 
-local function IsLivingDescendant(obj)
+function IsLivingDescendant(obj)
     local current = obj
     while current and current ~= workspace do
         if current:IsA("Model") and current:FindFirstChildOfClass("Humanoid") then
@@ -796,12 +796,12 @@ local function IsLivingDescendant(obj)
 end
 
 -- ====================== DELETE MAP SYSTEM ======================
-local BoostFPS_OriginalData    = {}
-local BoostFPS_Active          = false
-local BoostFPS_RestoreConnection = nil
-local BoostFPS_LightingData    = {}
+BoostFPS_OriginalData    = {}
+BoostFPS_Active          = false
+BoostFPS_RestoreConnection = nil
+BoostFPS_LightingData    = {}
 
-local function SaveAndBoostFPS()
+function SaveAndBoostFPS()
     if BoostFPS_Active then return end
     BoostFPS_Active = true
     BoostFPS_OriginalData = {}
@@ -881,7 +881,7 @@ local function SaveAndBoostFPS()
     print("[DYHUB] Delete Map: ON")
 end
 
-local function RestoreBoostFPS()
+function RestoreBoostFPS()
     if not BoostFPS_Active then return end
     BoostFPS_Active = false
 
@@ -945,19 +945,19 @@ task.spawn(function()
 end)
 
 -- ====================== PLAYER HP HELPERS ======================
-local function GetPlayerHPInfo()
+function GetPlayerHPInfo()
     local humanoid = Character and Character:FindFirstChild("Humanoid")
     if not humanoid then return 100, 100 end
     return humanoid.Health, humanoid.MaxHealth
 end
 
-local function IsPlayerHPFull()
+function IsPlayerHPFull()
     local hp, maxHp = GetPlayerHPInfo()
     if maxHp <= 0 then return true end
     return hp >= maxHp
 end
 
-local function GetPlayerHealthPercent()
+function GetPlayerHealthPercent()
     local humanoid = Character and Character:FindFirstChild("Humanoid")
     if not humanoid then return 100 end
     if humanoid.MaxHealth <= 0 then return 100 end
@@ -990,14 +990,14 @@ task.spawn(function()
 end)
 
 -- ====================== AUTO FILL UP ======================
-local function DoFillUp()
+function DoFillUp()
     for i = 1, 2 do
         pcall(function() ReplicatedStorage.ShopSystem:FireServer("Buy", "FillHP") end)
         if i < 2 then task.wait(0.3) end
     end
 end
 
-local function StartAutoFillUpLoop()
+function StartAutoFillUpLoop()
     if FillUpRunning then return end
     FillUpRunning = true
     task.spawn(function()
@@ -1020,7 +1020,7 @@ local function StartAutoFillUpLoop()
 end
 
 -- ====================== BARRIER BYPASS ======================
-local function startNoBarrier()
+function startNoBarrier()
     if noBarrierConnection then return end
     noBarrierConnection = RunService.Heartbeat:Connect(function()
         pcall(function()
@@ -1038,7 +1038,7 @@ local function startNoBarrier()
     end)
 end
 
-local function stopNoBarrier()
+function stopNoBarrier()
     if noBarrierConnection then
         noBarrierConnection:Disconnect()
         noBarrierConnection = nil
@@ -1049,20 +1049,20 @@ end
 -- ====================== AUTO VOTE + AUTO START (REWORKED) ===
 -- ============================================================
 
-local AutoVoteEnabled       = Config:Get("AutoVoteEnabled", false)
-local AutoGameValue         = Config:Get("AutoGameValue", "Normal Mode")
-local AutoVoteinGameEnabled = Config:Get("AutoVoteinGameEnabled", false)
-local AutoVoteValue         = Config:Get("AutoVoteValue", "Normal")
+AutoVoteEnabled       = Config:Get("AutoVoteEnabled", false)
+AutoGameValue         = Config:Get("AutoGameValue", "Normal Mode")
+AutoVoteinGameEnabled = Config:Get("AutoVoteinGameEnabled", false)
+AutoVoteValue         = Config:Get("AutoVoteValue", "Normal")
 
 -- connection references — เก็บไว้เพื่อ disconnect ป้องกัน duplicate
-local _voteWatchConn      = nil  -- watcher loop สำหรับ OpenVoteUI
-local _voteIGRespawnConn  = nil
-local _syncRespawnConn    = nil
-local _voteRespawnConn    = nil
-local _startOnlyConn      = nil
+_voteWatchConn      = nil  -- watcher loop สำหรับ OpenVoteUI
+_voteIGRespawnConn  = nil
+_syncRespawnConn    = nil
+_voteRespawnConn    = nil
+_startOnlyConn      = nil
 
 -- ─── FireGetReady: ลำดับใหม่ตาม spec ───
-local function FireGetReady()
+function FireGetReady()
     local remote = ReplicatedStorage:FindFirstChild("GetReadyRemote")
     if not remote then warn("[DYHUB] GetReadyRemote not found!"); return end
     pcall(function() remote:FireServer("1", true) end)
@@ -1074,7 +1074,7 @@ local function FireGetReady()
     pcall(function() remote:FireServer("3", false) end)
 end
 
-local function FireVote_Solo()
+function FireVote_Solo()
     if not AutoGameValue then return end
     pcall(function()
         ReplicatedStorage.MainHandler:FireServer({ [1] = "StartSolo", [2] = AutoGameValue })
@@ -1082,21 +1082,21 @@ local function FireVote_Solo()
     print("[DYHUB] AutoVote Solo fired: " .. tostring(AutoGameValue))
 end
 
-local function FireVote_InGame()
+function FireVote_InGame()
     if not AutoVoteValue then return end
     pcall(function() ReplicatedStorage.Vote:FireServer(AutoVoteValue) end)
 end
 
 -- ─── OpenVoteUI watcher: ตรวจสอบ Visible และยิง vote/start ───
 -- ระบบใช้ flag ป้องกัน fire ซ้ำในรอบเดิม
-local function StopVoteWatcher()
+function StopVoteWatcher()
     if _voteWatchConn then
         _voteWatchConn:Disconnect()
         _voteWatchConn = nil
     end
 end
 
-local function StartVoteWatcher()
+function StartVoteWatcher()
     StopVoteWatcher()
     task.spawn(function()
         -- รอ OpenVoteUI ปรากฏใน PlayerGui ก่อน (timeout 60s)
@@ -1154,10 +1154,10 @@ local function StartVoteWatcher()
 end
 
 -- ─── Auto Restore Vote System: ยิงครั้งเดียวเมื่อ load script และ AutoVote เปิดไว้ ───
-local _restoreVoteDone   = false
-local _restoreCooldown   = false
+_restoreVoteDone   = false
+_restoreCooldown   = false
 
-local function DoRestoreVoteOnce()
+function DoRestoreVoteOnce()
     if _restoreVoteDone or _restoreCooldown then return end
     _restoreCooldown = true
     _restoreVoteDone = true
@@ -1202,7 +1202,7 @@ local function DoRestoreVoteOnce()
 end
 
 -- ─── Setup ─── 
-local function SetupAutoVote_InGame(enabled)
+function SetupAutoVote_InGame(enabled)
     if _voteIGRespawnConn then _voteIGRespawnConn:Disconnect(); _voteIGRespawnConn = nil end
     if not enabled then return end
     FireVote_InGame()
@@ -1212,7 +1212,7 @@ local function SetupAutoVote_InGame(enabled)
     end)
 end
 
-local function SetupAutoStartOnly(enabled)
+function SetupAutoStartOnly(enabled)
     if _startOnlyConn then _startOnlyConn:Disconnect(); _startOnlyConn = nil end
     if AutoStartConnection then AutoStartConnection:Disconnect(); AutoStartConnection = nil end
     if not enabled then return end
@@ -1225,7 +1225,7 @@ local function SetupAutoStartOnly(enabled)
     end)
 end
 
-local function RefreshVoteAndStartSetup()
+function RefreshVoteAndStartSetup()
     -- cleanup connections เก่า
     if _voteRespawnConn   then _voteRespawnConn:Disconnect();   _voteRespawnConn   = nil end
     if _syncRespawnConn   then _syncRespawnConn:Disconnect();   _syncRespawnConn   = nil end
@@ -1250,18 +1250,18 @@ local function RefreshVoteAndStartSetup()
     end
 end
 
-local function StartAutoStart()
+function StartAutoStart()
     AutoStartEnabled = true
     RefreshVoteAndStartSetup()
 end
 
-local function StopAutoStart()
+function StopAutoStart()
     AutoStartEnabled = false
     RefreshVoteAndStartSetup()
 end
 
 -- ====================== TELEPORT TO IDLE ======================
-local function TeleportToIdle()
+function TeleportToIdle()
     LockActive = false
     task.wait(0.1)
     WaitingRespawn = true
@@ -1273,7 +1273,7 @@ local function TeleportToIdle()
 end
 
 -- ====================== PROXIMITY PROMPT HELPERS ======================
-local function ActivateProximityPrompt(prompt)
+function ActivateProximityPrompt(prompt)
     pcall(function()
         prompt.HoldDuration = 0
         prompt.MaxActivationDistance = 50
@@ -1284,7 +1284,7 @@ local function ActivateProximityPrompt(prompt)
     end)
 end
 
-local function ActivateAllFlushPrompts()
+function ActivateAllFlushPrompts()
     pcall(function()
         for _, part in pairs(workspace:GetDescendants()) do
             if part:IsA("BasePart") or part:IsA("Model") then
@@ -1304,13 +1304,13 @@ end
 -- ====================== COLLECT SYSTEM ======================
 -- ============================================================
 
-local CollectItems = {
+CollectItems = {
     "Clock Spider", "X-18 Core", "Green Energy Core", "Weird Transmitter",
     "Astro Samples", "Weird Prism", "Key Card", "Zombie Core",
     "Flash Drives", "Presents",
 }
 
-local CollectGroupMap = {
+CollectGroupMap = {
     ["Astro Samples"] = {
         "Trooper Blast","Trooper Spinner","Specialist Blaster","Specialist Spinner",
         "Specialist Sword Arm","Strider Leg","Interceptor Wing","Interceptor Goggles",
@@ -1323,14 +1323,14 @@ local CollectGroupMap = {
     },
 }
 
-local AutoCollectEnabled   = Config:Get("AutoCollectEnabled", false)
-local SelectedCollectItems = Config:Get("SelectedCollectItems", {})
-local CollectMode          = Config:Get("CollectMode", "Clean")
+AutoCollectEnabled   = Config:Get("AutoCollectEnabled", false)
+SelectedCollectItems = Config:Get("SelectedCollectItems", {})
+CollectMode          = Config:Get("CollectMode", "Clean")
 
-local KnownCollectItems = {}
-local CollectRunning    = false
+KnownCollectItems = {}
+CollectRunning    = false
 
-local function MatchesPattern(objectName, pattern)
+function MatchesPattern(objectName, pattern)
     local objL, patL = objectName:lower(), pattern:lower()
     if objL == patL then return true end
     if #objL > #patL and objL:sub(1, #patL) == patL then
@@ -1345,14 +1345,14 @@ local function MatchesPattern(objectName, pattern)
     return false
 end
 
-local function IsCollectTarget(objectName)
+function IsCollectTarget(objectName)
     for _, pattern in ipairs(SelectedCollectItems) do
         if MatchesPattern(objectName, pattern) then return true end
     end
     return false
 end
 
-local function FindNewCollectItems()
+function FindNewCollectItems()
     local found = {}
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj and obj.Parent and IsCollectTarget(obj.Name) then
@@ -1364,13 +1364,13 @@ local function FindNewCollectItems()
     return found
 end
 
-local function GetItemRootPart(obj)
+function GetItemRootPart(obj)
     if obj:IsA("Model") then return obj.PrimaryPart or obj:FindFirstChildOfClass("BasePart")
     elseif obj:IsA("BasePart") or obj:IsA("MeshPart") then return obj end
     return nil
 end
 
-local function TweenToItem(itemRoot)
+function TweenToItem(itemRoot)
     if not itemRoot or not HumanoidRootPart then return end
     local targetPos = itemRoot.Position + Vector3.new(0, 3, 0)
     local targetCF  = CFrame.new(targetPos, itemRoot.Position)
@@ -1379,7 +1379,7 @@ local function TweenToItem(itemRoot)
     tween.Completed:Wait()
 end
 
-local function ActivateItemPrompts(obj)
+function ActivateItemPrompts(obj)
     pcall(function()
         for _, child in ipairs(obj:GetDescendants()) do
             if child:IsA("ProximityPrompt") then
@@ -1391,9 +1391,9 @@ local function ActivateItemPrompts(obj)
     end)
 end
 
-local function IsItemGone(obj) return not obj or not obj.Parent end
+function IsItemGone(obj) return not obj or not obj.Parent end
 
-local function CollectSingleItem(obj)
+function CollectSingleItem(obj)
     if IsItemGone(obj) then return end
     local itemRoot = GetItemRootPart(obj)
     if not itemRoot then return end
@@ -1418,7 +1418,7 @@ local function CollectSingleItem(obj)
     KnownCollectItems[obj] = true
 end
 
-local function AllMobsDead()
+function AllMobsDead()
     local livingFolder = workspace:FindFirstChild("Living")
     if not livingFolder then return true end
     for _, mob in ipairs(livingFolder:GetChildren()) do
@@ -1427,7 +1427,7 @@ local function AllMobsDead()
     return true
 end
 
-local function StartAutoCollectLoop()
+function StartAutoCollectLoop()
     if CollectRunning then return end
     CollectRunning = true
     task.spawn(function()
@@ -1486,7 +1486,7 @@ end)
 -- ============================================================
 -- ====================== MAIN FARM LOOP ======================
 -- ============================================================
-local function StartFarmLoop()
+function StartFarmLoop()
     task.spawn(function()
         task.spawn(function()
             while AutoFarmEnabled do
@@ -1605,9 +1605,9 @@ local function StartFarmLoop()
 end
 
 -- ====================== MISC OPTIONS HANDLER ======================
-local SyncFarmOnly = Config:Get("SyncFarmOnly", true)
+SyncFarmOnly = Config:Get("SyncFarmOnly", true)
 
-local function HandleMiscOptions(selectedOptions)
+function HandleMiscOptions(selectedOptions)
     MiscOptions = selectedOptions
     local canRun = AutoFarmEnabled or not SyncFarmOnly
 
@@ -1661,7 +1661,7 @@ local function HandleMiscOptions(selectedOptions)
 end
 
 -- ====================== CHARACTER RESPAWN HANDLER ======================
-local _charRespawnConn = nil
+_charRespawnConn = nil
 do
     -- ใช้ do...end เพื่อจัดการ scope
     local function OnCharacterAdded(char)
@@ -1873,8 +1873,8 @@ Main:Button({
 
 Main:Section({ Title = "Flush Settings", Icon = "toilet" })
 
-local Flushaura      = Config:Get("flushaura", false)
-local FlushAuraValue = Config:Get("FlushAuraValue", 5)
+Flushaura      = Config:Get("flushaura", false)
+FlushAuraValue = Config:Get("FlushAuraValue", 5)
 
 Main:Slider({
     Title = "Flush Aura (stud)",
@@ -1924,7 +1924,7 @@ Main:Toggle({
 -- ====================== ESP SYSTEM =========================
 -- ============================================================
 
-local ESP = {
+ESP = {
     Enabled       = Config:Get("EspEnabled", false),
     MobEnabled    = Config:Get("EspMobEnabled", true),
     PlayerEnabled = Config:Get("EspPlayerEnabled", true),
@@ -1941,7 +1941,7 @@ local ESP = {
     },
 }
 
-local function IsESPItemTarget(objectName, selectedList)
+function IsESPItemTarget(objectName, selectedList)
     for _, pattern in ipairs(selectedList) do
         if objectName:lower() == pattern:lower() then return true end
         if #objectName > #pattern then
@@ -1959,7 +1959,7 @@ local function IsESPItemTarget(objectName, selectedList)
     return false
 end
 
-local function CreateESPLabel(parent, labelText)
+function CreateESPLabel(parent, labelText)
     local existing = parent:FindFirstChild("DYHUB_ESP_LABEL")
     if existing then existing:Destroy() end
     local billboard = Instance.new("BillboardGui")
@@ -1976,7 +1976,7 @@ local function CreateESPLabel(parent, labelText)
     return billboard, label
 end
 
-local function CreateHighlight(model, outlineColor, fillColor, fillTransparency)
+function CreateHighlight(model, outlineColor, fillColor, fillTransparency)
     local existing = model:FindFirstChild("DYHUB_ESP_HIGHLIGHT")
     if existing then existing:Destroy() end
     local hl = Instance.new("Highlight")
@@ -1987,7 +1987,7 @@ local function CreateHighlight(model, outlineColor, fillColor, fillTransparency)
     return hl
 end
 
-local function RemoveESP(model)
+function RemoveESP(model)
     pcall(function()
         local hl = model:FindFirstChild("DYHUB_ESP_HIGHLIGHT"); if hl then hl:Destroy() end
         local hb = model:FindFirstChild("DYHUB_ESP_LABEL"); if hb then hb:Destroy() end
@@ -1996,12 +1996,12 @@ local function RemoveESP(model)
     end)
 end
 
-local function IsInRange(targetPart)
+function IsInRange(targetPart)
     if not targetPart or not HumanoidRootPart then return false end
     return (HumanoidRootPart.Position - targetPart.Position).Magnitude <= ESP.MaxDistance
 end
 
-local function BuildLabelText(model, showName, showHealth, showDistance)
+function BuildLabelText(model, showName, showHealth, showDistance)
     local parts = {}
     if showName then table.insert(parts, model.Name) end
     if showHealth then
@@ -2015,7 +2015,7 @@ local function BuildLabelText(model, showName, showHealth, showDistance)
     return table.concat(parts, "\n")
 end
 
-local function BuildItemLabelText(obj, showName, showDistance)
+function BuildItemLabelText(obj, showName, showDistance)
     local parts = {}
     if showName then table.insert(parts, obj.Name) end
     if showDistance then
@@ -2025,7 +2025,7 @@ local function BuildItemLabelText(obj, showName, showDistance)
     return table.concat(parts, "\n")
 end
 
-local function GetESPSettings()
+function GetESPSettings()
     local s = ESP.Settings
     return {
         highlight = table.find(s, "Highlight") ~= nil,
@@ -2035,7 +2035,7 @@ local function GetESPSettings()
     }
 end
 
-local function ApplyMobESP(mob)
+function ApplyMobESP(mob)
     if not mob or not mob.Parent then return end
     local hrp = mob:FindFirstChild("HumanoidRootPart"); if not hrp then return end
     local settings = GetESPSettings()
@@ -2055,7 +2055,7 @@ local function ApplyMobESP(mob)
     ESP._mobHighlights[mob] = true
 end
 
-local function ScanMobs()
+function ScanMobs()
     local livingFolder = workspace:FindFirstChild("Living"); if not livingFolder then return end
     for _, mob in ipairs(livingFolder:GetChildren()) do
         if IsValidMob(mob) and not ESP._mobHighlights[mob] then
@@ -2065,7 +2065,7 @@ local function ScanMobs()
     end
 end
 
-local function ApplyPlayerESP(playerChar)
+function ApplyPlayerESP(playerChar)
     if not playerChar or not playerChar.Parent then return end
     local hrp = playerChar:FindFirstChild("HumanoidRootPart"); if not hrp then return end
     if playerChar == LocalPlayer.Character then return end
@@ -2086,7 +2086,7 @@ local function ApplyPlayerESP(playerChar)
     ESP._playerHighlights[playerChar] = true
 end
 
-local function ScanPlayers()
+function ScanPlayers()
     for _, pl in ipairs(Players:GetPlayers()) do
         if pl ~= LocalPlayer and pl.Character then
             local char = pl.Character
@@ -2098,13 +2098,13 @@ local function ScanPlayers()
     end
 end
 
-local function GetItemRoot(obj)
+function GetItemRoot(obj)
     if obj:IsA("Model") then return obj.PrimaryPart or obj:FindFirstChildOfClass("BasePart")
     elseif obj:IsA("BasePart") or obj:IsA("MeshPart") then return obj end
     return nil
 end
 
-local function ApplyItemESP(obj)
+function ApplyItemESP(obj)
     if not obj or not obj.Parent then return end
     local root = GetItemRoot(obj); if not root then return end
     local settings = GetESPSettings()
@@ -2123,7 +2123,7 @@ local function ApplyItemESP(obj)
     ESP._itemHighlights[obj] = true
 end
 
-local function ScanItems()
+function ScanItems()
     if #ESP.SelectedItems == 0 then return end
     for _, obj in ipairs(workspace:GetDescendants()) do
         if not ESP._itemHighlights[obj] and IsESPItemTarget(obj.Name, ESP.SelectedItems) then
@@ -2133,7 +2133,7 @@ local function ScanItems()
     end
 end
 
-local function ClearAllESP()
+function ClearAllESP()
     for mob, _ in pairs(ESP._mobHighlights) do RemoveESP(mob) end
     ESP._mobHighlights = {}
     for char, _ in pairs(ESP._playerHighlights) do RemoveESP(char) end
@@ -2142,9 +2142,9 @@ local function ClearAllESP()
     ESP._itemHighlights = {}
 end
 
-local ESPConnection = nil
+ESPConnection = nil
 
-local function StartESPLoop()
+function StartESPLoop()
     if ESPConnection then ESPConnection:Disconnect(); ESPConnection = nil end
     local tickCounter = 0
     ESPConnection = RunService.Heartbeat:Connect(function()
@@ -2156,7 +2156,7 @@ local function StartESPLoop()
     end)
 end
 
-local function StopESPLoop()
+function StopESPLoop()
     if ESPConnection then ESPConnection:Disconnect(); ESPConnection = nil end
     ClearAllESP()
 end
@@ -2181,7 +2181,7 @@ Players.PlayerAdded:Connect(function(pl)
     end)
 end)
 
-local function WatchLivingFolder()
+function WatchLivingFolder()
     local living = workspace:FindFirstChild("Living")
     if living then
         living.ChildAdded:Connect(function(obj)
@@ -2270,11 +2270,11 @@ Main4:Dropdown({
 -- ====================== UI: PLAYER TAB ======================
 Main2:Section({ Title = "Local Player", Icon = "user" })
 
-local WSValue = Config:Get("WSValue", 16)
-local JPValue = Config:Get("JPValue", 50)
-local NoClip  = Config:Get("NoClip", false)
+WSValue = Config:Get("WSValue", 16)
+JPValue = Config:Get("JPValue", 50)
+NoClip  = Config:Get("NoClip", false)
 
-local function updatePlayerStats()
+function updatePlayerStats()
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
         LocalPlayer.Character.Humanoid.WalkSpeed = WSValue
         LocalPlayer.Character.Humanoid.JumpPower = JPValue
@@ -2309,7 +2309,7 @@ Main2:Toggle({
 
 Main2:Section({ Title = "Redeem Codes", Icon = "bird" })
 
-local SelectedCodes = Config:Get("SelectedCodes", {})
+SelectedCodes = Config:Get("SelectedCodes", {})
 
 Main2:Dropdown({
     Title = "Select Redeem Codes", Multi = true,
@@ -2339,7 +2339,7 @@ Main2:Button({
 
 Main2:Section({ Title = "Unlock Gamepass for real!", Icon = "badge-dollar-sign" })
 
-local SelectedGamepass = Config:Get("SelectedGamepass", {})
+SelectedGamepass = Config:Get("SelectedGamepass", {})
 GlobalTables.Gamepassts = SelectedGamepass
 
 Main2:Dropdown({
@@ -2486,9 +2486,9 @@ Main7:Dropdown({
 })
 
 -- ====================== PLAY SYSTEM ======================
-local DELAY = 1
+DELAY = 1
 
-local function click_btn(btn)
+function click_btn(btn)
     if btn and (btn:IsA("ImageButton") or btn:IsA("TextButton")) then
         pcall(function()
             if firesignal then
@@ -2501,7 +2501,7 @@ local function click_btn(btn)
     end
 end
 
-local function notify(title, content)
+function notify(title, content)
     WindUI:Notify({ Title = title, Content = content, Duration = 3, Icon = "check" })
 end
 
@@ -2617,13 +2617,13 @@ AutoVoteToggle = Main7:Toggle({
 -- ─── Auto Gacha ─── (ด้านบนสุดของ Shop tab)
 Main5:Section({ Title = "Auto Gacha", Icon = "sparkles" })
 
-local AutoGachaCharEnabled  = Config:Get("AutoGachaCharEnabled", false)
-local SelectedGachaChar     = Config:Get("SelectedGachaChar", "1Spin")
-local _gachaCharRunning     = false
+AutoGachaCharEnabled  = Config:Get("AutoGachaCharEnabled", false)
+SelectedGachaChar     = Config:Get("SelectedGachaChar", "1Spin")
+_gachaCharRunning     = false
 
-local AutoGachaSkinEnabled  = Config:Get("AutoGachaSkinEnabled", false)
-local SelectedGachaSkin     = Config:Get("SelectedGachaSkin", "1Spin")
-local _gachaSkinRunning     = false
+AutoGachaSkinEnabled  = Config:Get("AutoGachaSkinEnabled", false)
+SelectedGachaSkin     = Config:Get("SelectedGachaSkin", "1Spin")
+_gachaSkinRunning     = false
 
 -- Gacha Character
 Main5:Dropdown({
@@ -2694,9 +2694,9 @@ Main5:Divider()
 -- ─── Auto Use Item ───
 Main5:Section({ Title = "Auto Use Item", Icon = "gift" })
 
-local AutoUseItemEnabled = Config:Get("AutoUseItemEnabled", false)
-local SelectedUseItem    = Config:Get("SelectedUseItem", "Presents")
-local _useItemRunning    = false
+AutoUseItemEnabled = Config:Get("AutoUseItemEnabled", false)
+SelectedUseItem    = Config:Get("SelectedUseItem", "Presents")
+_useItemRunning    = false
 
 Main5:Dropdown({
     Title = "Select Use Item",
@@ -2736,9 +2736,9 @@ Main5:Divider()
 Main5:Section({ Title = "BUG, UNDER FIXING", TextXAlignment = "Center", TextSize = 20 })
 Main5:Section({ Title = "Shop Weapon", Icon = "helicopter" })
 
-local AutoBuyWeaponValue         = Config:Get("AutoBuyWeaponValue", "Stungun")
-local AutoBuyWeaponToggleEnabled = Config:Get("AutoBuyWeaponEnabled", false)
-local _buyWeaponRunning          = false
+AutoBuyWeaponValue         = Config:Get("AutoBuyWeaponValue", "Stungun")
+AutoBuyWeaponToggleEnabled = Config:Get("AutoBuyWeaponEnabled", false)
+_buyWeaponRunning          = false
 
 Main5:Dropdown({
     Title = "Select Buy (Weapon)",
@@ -2774,9 +2774,9 @@ Main5:Button({
 
 Main5:Section({ Title = "Shop Misc", Icon = "helicopter" })
 
-local AutoBuyMiscValue         = Config:Get("AutoBuyMiscValue", "HeadPhone")
-local AutoBuyMiscToggleEnabled = Config:Get("AutoBuyMiscEnabled", false)
-local _buyMiscRunning          = false
+AutoBuyMiscValue         = Config:Get("AutoBuyMiscValue", "HeadPhone")
+AutoBuyMiscToggleEnabled = Config:Get("AutoBuyMiscEnabled", false)
+_buyMiscRunning          = false
 
 Main5:Dropdown({
     Title = "Select Buy (Misc)",
@@ -2849,11 +2849,11 @@ Main3:Button({
     end
 })
 
-local AutoSaveEnabled = Config:Get("AutoSaveEnabled", true)
-local AutoSaveDelay   = Config:Get("AutoSaveDelay", 15)
-local AutoSaveThread  = nil
+AutoSaveEnabled = Config:Get("AutoSaveEnabled", true)
+AutoSaveDelay   = Config:Get("AutoSaveDelay", 15)
+AutoSaveThread  = nil
 
-local function RestartAutoSave()
+function RestartAutoSave()
     if AutoSaveThread then task.cancel(AutoSaveThread); AutoSaveThread = nil end
     if AutoSaveEnabled then
         AutoSaveThread = task.spawn(function()
