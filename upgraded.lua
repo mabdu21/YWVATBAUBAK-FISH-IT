@@ -1,4 +1,4 @@
--- v251
+-- v252
 -- =========================
 local version = "Rework"
 local ver = "v024.1"
@@ -1185,16 +1185,7 @@ function DoRestoreVoteOnce()
             end
         end)
 
-        task.wait(10)
-
-        pcall(function()
-            local rr = ReplicatedStorage:FindFirstChild("GetReadyRemote")
-            if not rr then return end
-            rr:FireServer("3", true);  task.wait(1.25)
-            rr:FireServer("3", false); task.wait(0.67)
-            rr:FireServer("2", true);  task.wait(1.25)
-            rr:FireServer("2", false)
-        end)
+        task.wait(15)
 
         print("[DYHUB] Auto Restore Vote: complete. VoteWatcher will handle from here.")
         _restoreCooldown = false
@@ -2708,7 +2699,7 @@ Main5:Dropdown({
 
 Main5:Toggle({
     Title = "Auto Use Item", Value = AutoUseItemEnabled,
-    Desc = "Automatically uses the selected item (e.g. Presents → GachaCapsule).",
+    Desc = "Automatically uses the selected items.",
     Callback = function(enabled)
         AutoUseItemEnabled = enabled
         Config:Set("AutoUseItemEnabled", enabled); Config:Save()
