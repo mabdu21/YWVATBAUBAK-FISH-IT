@@ -1,7 +1,4 @@
 -- ============================================================================
--- ANIME CARD COLLECTION  ―  DYHUB-style Hub
--- Game: PlaceId 76285745979410
--- Framework: Madwork ProfileStore + ReplicaService + Standard group remotes
 -- UI: MacLib fork @ https://raw.githubusercontent.com/dvorfkar6-lab/uis/refs/heads/main/Mac
 -- ============================================================================
 
