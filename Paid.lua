@@ -1,7 +1,7 @@
 -- v085
 -- =========================
 local version = "Rework"
-local ver = "v023.55"
+local ver = "v023.56"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -57,7 +57,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config_2.json"
+    self.ConfigPath = ConfigFolder .. "/config_main.json"
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
     self:Load()
     return self
@@ -186,8 +186,8 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 05/09/2026",
-    Desc = "- [ New ] Mode Farm: Teleport / Tween \n- [ Fixed ] Auto Vote syncs before Auto Start \n- [ Fixed ] Auto Collect \n- [ Fixed ] Camera shake \n- [ Added ] Auto Use Item \n- [ Added ] Auto Gacha \n- [ Improved ] Delete Map",
+    Title = "Update: 05/29/2026 | CL: " .. ver,
+    Desc = "- [ New ] Mode Farm: Teleport / Tween \n- [ Fixed ] God Mode \n- [ Fixed ] Auto Vote syncs before Auto Start \n- [ Fixed ] Auto Collect \n- [ Fixed ] Camera shake \n- [ Added ] Auto Use Item \n- [ Added ] Auto Gacha \n- [ Improved ] Delete Map",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
