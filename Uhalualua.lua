@@ -840,14 +840,14 @@ do
 end
 
 -- // 10. LIBRARY SETUP
-local MacLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/dvorfkar6-lab/uis/refs/heads/main/Mac"))()
+local MacLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/mabdu21/YWVATBAUBAK-FISH-IT/refs/heads/main/uaiui.lua"))()
 local Window = MacLib:Window({
-    Title    = "Anime Card Collection | DYHUB",
-    Subtitle = "",
+    Title    = "DYHUB",
+    Subtitle = "Anime Card Collection",
     Icon     = "rbxassetid://104487529937663",
     Size     = UDim2.fromOffset(865, 650),
     DragStyle = 2,
-    Keybind  = Enum.KeyCode.LeftControl,
+    Keybind  = Enum.KeyCode.K,
     AcrylicBlur = false,
 })
 getgenv()._ACCUI = Window
@@ -859,8 +859,8 @@ end
 local tabGroups = { Main = Window:TabGroup() }
 local tabs = {
     AutoFarm  = tabGroups.Main:Tab({ Name = "Auto Farm",  Image = "rbxassetid://10723416765" }),
+    AutoClaim = tabGroups.Main:Tab({ Name = "Auto Claim", Image = "rbxassetid://10723416765" }),
     Combat    = tabGroups.Main:Tab({ Name = "Combat",     Image = "rbxassetid://10734975692" }),
-    AutoClaim = tabGroups.Main:Tab({ Name = "Auto Claim", Image = "rbxassetid://10723348925" }),
     Shops     = tabGroups.Main:Tab({ Name = "Shops",      Image = "rbxassetid://10747372992" }),
     Inventory = tabGroups.Main:Tab({ Name = "Inventory",  Image = "rbxassetid://10723396225" }),
     Gallery   = tabGroups.Main:Tab({ Name = "Gallery",    Image = "rbxassetid://10747372992" }),
