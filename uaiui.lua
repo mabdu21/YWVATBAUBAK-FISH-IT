@@ -1,6 +1,8 @@
+-- acc
+
 local MacLib = { 
 	Options = {}, 
-	Folder = "DYHUB", 
+	Folder = "DYHUB_ACC", 
 	ConfigMode = "shared", -- "shared" = one config for all accounts, "perUser" = separate config per account
 	GetService = function(service)
 		local svc
@@ -5774,7 +5776,7 @@ function MacLib:Window(Settings)
 
 	local function _SetUserInfoState(State)
 		-- Картинка всегда отображается одинаково
-		customImage.Image = "rbxassetid://138310609771261"
+		customImage.Image = "rbxassetid://104487529937663"
 	end
 
 	local showUserInfo
