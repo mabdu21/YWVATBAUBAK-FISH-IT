@@ -2,7 +2,7 @@
 -- Patched: added Teleport farm mode, vote/start sync, and camera stabilization
 -- =========================
 local version = "Rework"
-local ver = "v023.53"
+local ver = "v023.54"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -50,7 +50,7 @@ end
 
 -- ====================== CUSTOM CONFIG SYSTEM ======================
 local HttpService = game:GetService("HttpService")
-local ConfigFolder = "DYHUB_STBB_V0234"
+local ConfigFolder = "DYHUB_STBB"
 
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
@@ -58,7 +58,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config.json"
+    self.ConfigPath = ConfigFolder .. "/config_2.json"
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
     self:Load()
     return self
@@ -346,6 +346,10 @@ local GodModeValue           = Config:Get("GodModeValue", 30)
 local GodModeTriggered       = false
 local WaitingRespawn         = false
 local IdlePosition           = CFrame.new(-23.3435822, 67, 0.341766357) * CFrame.Angles(math.rad(0), 0, 0)
+local IdleHoldDistance       = 12       -- distance allowed before re-teleporting to idle
+local IdleTeleportCooldown   = 1.25     -- prevents repeated idle teleport / camera shake
+local LastIdleTeleportAt     = 0
+local IdlePositionReached    = false
 local SkillDelay             = Config:Get("SkillDelay", 1)
 local LoopDelay              = 0.5
 local TweenSpeed             = 1
@@ -1342,6 +1346,8 @@ function FireGetReady(delayBefore)
         remote:FireServer("2", false)
         task.wait(0.2)
         remote:FireServer("3", false)
+        task.wait(0.2)
+        remote:FireServer("1", true)
     end)
 
     if not ok then warn("[DYHUB] GetReadyRemote failed:", err) end
@@ -1377,10 +1383,44 @@ function StopAutoStart()
 end
 
 -- ====================== TELEPORT TO IDLE ======================
-function TeleportToIdle()
+local function StopIdleVelocity()
+    pcall(function()
+        if HumanoidRootPart then
+            HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+            HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+        end
+    end)
+end
+
+local function IsNearIdlePosition()
+    if not HumanoidRootPart then return false end
+    return (HumanoidRootPart.Position - IdlePosition.Position).Magnitude <= IdleHoldDistance
+end
+
+function TeleportToIdle(force)
     LockActive = false
-    task.wait(0.1)
     WaitingRespawn = true
+
+    if not Character or not Character.Parent or not HumanoidRootPart then return end
+
+    local now = tick()
+
+    -- Already at idle: do NOT PivotTo again. This fixes camera shake.
+    if not force and IsNearIdlePosition() then
+        IdlePositionReached = true
+        StopIdleVelocity()
+        return
+    end
+
+    -- Anti-spam: if the loop calls this many times, teleport only after cooldown.
+    if not force and (now - LastIdleTeleportAt) < IdleTeleportCooldown then
+        StopIdleVelocity()
+        return
+    end
+
+    LastIdleTeleportAt = now
+    IdlePositionReached = true
+
     pcall(function()
         Character:PivotTo(IdlePosition)
         HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
@@ -1609,18 +1649,26 @@ function StartFarmLoop()
     if FarmLoopRunning then return end
     FarmLoopRunning = true
     task.spawn(function()
-        -- Sub-loop: รักษา Idle Position ขณะ WaitingRespawn
+        -- Sub-loop: keep Idle stable without repeated PivotTo/Tween spam.
+        -- Old system tweened/PivotTo'd every 0.1s while WaitingRespawn, which caused camera shake.
         task.spawn(function()
             while AutoFarmEnabled do
                 if WaitingRespawn and not LockActive then
                     pcall(function()
-                        local tween = TweenService:Create(HumanoidRootPart, TweenInfo.new(TweenSpeed, Enum.EasingStyle.Linear), { CFrame = IdlePosition })
-                        tween:Play(); tween.Completed:Wait()
-                        HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
-                        HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+                        if Character and HumanoidRootPart then
+                            if IsNearIdlePosition() then
+                                IdlePositionReached = true
+                                HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+                                HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+                            else
+                                TeleportToIdle(false)
+                            end
+                        end
                     end)
+                else
+                    IdlePositionReached = false
                 end
-                task.wait(0.1)
+                task.wait(0.5)
             end
         end)
 
@@ -1636,6 +1684,7 @@ function StartFarmLoop()
 
             if mob then
                 WaitingRespawn = false
+                IdlePositionReached = false
                 _currentTargetPriority = priority
 
                 -- ============ CASE: GiantST ============
@@ -1800,6 +1849,8 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     MobHeightOverride   = {}
     MobConfirmedPadding = {}
     MobLastHealth       = {}
+    IdlePositionReached = false
+    LastIdleTeleportAt  = 0
     task.wait(1)
     ApplyCameraMode()
 end)
@@ -3074,5 +3125,5 @@ end
 
 ApplySavedConfigOnStartup()
 
-print("[DYHUB] Version " .. version .. " | " .. ver .. " loaded successfully!")
+print("[DYHUB] Version " .. version .. " " .. ver .. " loaded successfully!")
 print("[DYHUB] Config system active | Auto saving every " .. tostring(AutoSaveDelay) .. " seconds")
