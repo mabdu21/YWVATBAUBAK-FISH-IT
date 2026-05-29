@@ -1,8 +1,8 @@
 -- v085
--- Patched: reduced top-level local registers from Auto Vote/UI sections to avoid Luau 200-local limit
+-- Patched: added Teleport farm mode, vote/start sync, and camera stabilization
 -- =========================
 local version = "Rework"
-local ver = "v023.51"
+local ver = "v023.52"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -188,7 +188,7 @@ Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/09/2026",
-    Desc = "- [ New ] Priority System \n- [ New ] Restore Vote System \n- [ Added ] God Mode \n- [ Added ] Unlock Gamepass \n- [ Fixed ] Mob Height Override  \n- [ Fixed ] Esp Core \n- [ Improved ] Delete Map",
+    Desc = "- [ New ] Mode Farm: Teleport / Tween \n- [ Fixed ] Auto Vote syncs before Auto Start \n- [ Fixed ] Auto Farm camera shake \n- [ Added ] God Mode \n- [ Improved ] Delete Map",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
@@ -300,12 +300,6 @@ local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 -- ====================== GLOBAL TABLES ======================
 GlobalTables = {
     redeemCodes = { "100MVisit2", "100MVisit1", "CamArmada", "CCTVBase", "ADelayedGameIsEventuallyGoodButRushedGameIsForeverBad" },
-    Mode  = { "Normal Mode", "Vague Memory", "Extreme Mode", "Hard Mode", "Insane Mode", "Nightmare Mode", "Boss Rush", "Dark Dimension", "Hell", "Mist", "Christmas Act 1", "Zombie Act 1", "Holdout", "Invasion" },
-    Votes = {
-        "Normal","VeryHard","Hard","Insane","Nightmare","BossRush",
-        "DarkDimension","Hell","ThunderStorm","Christmas","Zombie",
-        "AstroV2","Astro","100MVisit"
-    },
     Weapon   = { "Stungun", "Flamethrower", "Harpoon Gun", "Shot Gun", "Pulse Rifle", "Shot Harpoon Gun", "EPD", "Small Laser Gun" },
     MiscShop = { "HeadPhone", "Titan-Request", "SpecialTitan-Request", "Speaker-Request", "Grenade", "Jetpack", "Lens" },
     Gamepasst = { "All", "LuckyBoost", "RareLuckyBoost", "LegendaryLuckyBoost" },
@@ -316,10 +310,22 @@ GlobalTables = {
 local skillList          = { "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B", "U" }
 local skillDropdownValues = { "All", "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B", "U" }
 
+-- ====================== FARM MODE HELPERS ======================
+local function NormalizeFarmMode(mode)
+    mode = tostring(mode or "Tween")
+    if mode == "tp" or mode == "Tp" or mode == "tp1" then
+        return "Teleport"
+    end
+    if mode ~= "Teleport" and mode ~= "Tween" then
+        return "Tween"
+    end
+    return mode
+end
+
 -- ====================== STATE VARIABLES ======================
 local AutoFarmEnabled        = Config:Get("AutoFarmEnabled", false)
 local FarmPosition           = Config:Get("FarmPosition", "Above")
-local FarmMode               = Config:Get("FarmMode", "Tween")
+local FarmMode               = NormalizeFarmMode(Config:Get("FarmMode", "Tween"))
 local MiscOptions            = Config:Get("MiscOptions", {})
 local SyncFarmOnly           = Config:Get("SyncFarmOnly", true)
 local AutoAttackEnabled      = false
@@ -327,6 +333,10 @@ local AutoSkillEnabled       = false
 local AutoSkipHeliEnabled    = false
 local BoostFPS_Active_dummy  = false -- managed by BoostFPS system
 local AutoStartEnabled       = Config:Get("AutoStartEnabled", table.find(MiscOptions, "Auto Start") ~= nil)
+local AutoVoteinGameEnabled = Config:Get("AutoVoteinGameEnabled", false)
+local AutoVoteValue         = Config:Get("AutoVoteValue", "Christmas")
+local AutoVoteLoopRunning   = false
+local AutoVoteLastFireAt    = 0
 local AutoFillUpEnabled      = false
 local SelectedSkills         = Config:Get("SelectedSkills", { "All" })
 local SafeModeEnabled        = false
@@ -359,16 +369,52 @@ local function ApplyCameraMode()
         local cam = workspace.CurrentCamera
         local char = LocalPlayer.Character or Character
         if not cam or not char then return end
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
         local target = nil
+
         if CameraMode == "Classic" then
-            target = char:FindFirstChild("Head")
+            target = char:FindFirstChild("Head") or humanoid
         else
-            target = char:FindFirstChild("HumanoidRootPart")
+            -- Manual/Manuel uses Humanoid instead of HRP to prevent camera shake while farming.
+            target = humanoid or char:FindFirstChild("HumanoidRootPart")
         end
+
+        if humanoid and not AutoFarmEnabled then
+            humanoid.AutoRotate = true
+        end
+
         if target then
             cam.CameraSubject = target
             cam.CameraType = Enum.CameraType.Custom
         end
+    end)
+end
+
+local LastFarmCameraStabilize = 0
+
+local function StabilizeFarmCamera()
+    local now = tick()
+    if now - LastFarmCameraStabilize < 0.35 then return end
+    LastFarmCameraStabilize = now
+
+    pcall(function()
+        if not AutoFarmEnabled then return end
+        local cam = workspace.CurrentCamera
+        local char = LocalPlayer.Character or Character
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+        if cam and humanoid then
+            cam.CameraSubject = humanoid
+            cam.CameraType = Enum.CameraType.Custom
+        end
+    end)
+end
+
+local function RestoreFarmCameraAndMovement()
+    pcall(function()
+        local char = LocalPlayer.Character or Character
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+        if humanoid then humanoid.AutoRotate = true end
+        ApplyCameraMode()
     end)
 end
 
@@ -385,6 +431,77 @@ local function GetRemote(name)
         return nil
     end
     return remote
+end
+
+-- ====================== AUTO VOTE CORE / AUTO START SYNC ======================
+local function GetVoteUIFrame()
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return nil end
+
+    local voteGui = playerGui:FindFirstChild("OpenVoteUI")
+    if not voteGui then return nil end
+
+    return voteGui:FindFirstChild("OPEN UI")
+end
+
+local function IsVoteUIOpen()
+    local frame = GetVoteUIFrame()
+    return frame and frame.Visible == true
+end
+
+local function HideVoteUI()
+    local frame = GetVoteUIFrame()
+    if frame then
+        pcall(function() frame.Visible = false end)
+    end
+end
+
+local function FireAutoVote(force)
+    if not force and not IsVoteUIOpen() then return false end
+
+    local now = tick()
+    if now - AutoVoteLastFireAt < 0.25 then return false end
+    AutoVoteLastFireAt = now
+
+    local remote = GetRemote("Vote")
+    if not remote then
+        pcall(function() remote = ReplicatedStorage:WaitForChild("Vote", 3) end)
+    end
+    if not remote then return false end
+
+    local ok, err = pcall(function()
+        remote:FireServer(AutoVoteValue)
+    end)
+
+    if ok then
+        HideVoteUI()
+        print("[DYHUB] Auto Vote fired:", tostring(AutoVoteValue))
+        return true
+    else
+        warn("[DYHUB] Auto Vote failed:", err)
+        return false
+    end
+end
+
+local function StartAutoVoteLoop()
+    if AutoVoteLoopRunning then return end
+    AutoVoteLoopRunning = true
+
+    task.spawn(function()
+        while AutoVoteinGameEnabled do
+            if IsVoteUIOpen() then
+                if AutoStartEnabled and IsMiscFarmAllowed() then
+                    -- Auto Start always calls Auto Vote first when both systems are enabled.
+                    FireGetReady(0)
+                else
+                    FireAutoVote(false)
+                end
+            end
+            task.wait(0.2)
+        end
+
+        AutoVoteLoopRunning = false
+    end)
 end
 
 -- ====================== NEW PRIORITY SYSTEM CONFIG ======================
@@ -795,41 +912,66 @@ local function GetTargetCFrame(mob, position)
         -- ★ บังคับให้อยู่เหนือมอนเสมอ ป้องกันมองฟ้า
         local safeTargetY = math.max(maxY + padding, maxY + 0.5)
         local targetPos   = Vector3.new(center.X, safeTargetY, center.Z)
-        local lookAtPos   = Vector3.new(center.X, maxY, center.Z)
-        local lookCF      = CFrame.new(targetPos, lookAtPos)
-        return lookCF * CFrame.Angles(math.rad(-10), 0, 0)
+        return CFrame.new(targetPos)
 
     elseif position == "Under" then
         -- ★ บังคับให้อยู่ใต้มอนเสมอ
         local safeTargetY = math.min(minY - padding, minY - 0.5)
         local targetPos   = Vector3.new(center.X, safeTargetY, center.Z)
-        local lookAtPos   = Vector3.new(center.X, minY, center.Z)
-        local lookCF      = CFrame.new(targetPos, lookAtPos)
-        return lookCF * CFrame.Angles(math.rad(10), 0, 0)
+        return CFrame.new(targetPos)
     end
+end
+
+local function GetStableFarmCFrame(cf)
+    if not cf then return nil end
+    local yaw = 0
+    pcall(function()
+        if HumanoidRootPart then
+            local _, currentY = HumanoidRootPart.CFrame:ToOrientation()
+            yaw = currentY
+        end
+    end)
+    return CFrame.new(cf.Position) * CFrame.Angles(0, yaw, 0)
+end
+
+local function MoveCharacterToFarmCFrame(cf)
+    if not Character or not HumanoidRootPart or not cf then return end
+
+    local targetCF = GetStableFarmCFrame(cf)
+    pcall(function()
+        local humanoid = Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.Sit = false
+            humanoid.AutoRotate = false
+        end
+
+        Character:PivotTo(targetCF)
+        HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+        HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+        StabilizeFarmCamera()
+    end)
 end
 
 local function TeleportToMob(mob)
     local cf = GetTargetCFrame(mob, FarmPosition)
     if not cf then return end
+
     if FarmMode == "Tween" then
         local tweenInfo = TweenInfo.new(TweenSpeed, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
-        local tween = TweenService:Create(HumanoidRootPart, tweenInfo, { CFrame = cf })
+        local tween = TweenService:Create(HumanoidRootPart, tweenInfo, { CFrame = GetStableFarmCFrame(cf) })
         tween:Play()
         tween.Completed:Wait()
-    elseif FarmMode == "tp" then
-        tp({ Target = cf, Mod = CFrame.new(0, 0, 0) })
-    elseif FarmMode == "Tp" then
-        Tp(cf)
-    elseif FarmMode == "tp1" then
-        tp1(cf)
+        MoveCharacterToFarmCFrame(cf)
+    else
+        -- Teleport mode: instant move with stable camera-safe CFrame.
+        MoveCharacterToFarmCFrame(cf)
     end
 end
 
 local function LockToMob(mob)
     LockActive = true
     local connection
-    connection = RunService.RenderStepped:Connect(function()
+    connection = RunService.Heartbeat:Connect(function()
         if not AutoFarmEnabled or IsMobDead(mob) or not LockActive then
             connection:Disconnect()
             LockActive = false
@@ -838,9 +980,7 @@ local function LockToMob(mob)
         if not Character or not HumanoidRootPart then return end
         local cf = GetTargetCFrame(mob, FarmPosition)
         if cf then
-            Character:PivotTo(cf)
-            HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
-            HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+            MoveCharacterToFarmCFrame(cf)
         end
     end)
 end
@@ -1183,219 +1323,59 @@ local function stopNoBarrier()
 end
 
 -- ============================================================
--- ====================== AUTO VOTE MODE ======================
--- ============================================================
-
-AutoVoteEnabled       = Config:Get("AutoVoteEnabled", false)
-AutoGameValue         = Config:Get("AutoGameValue", "Normal Mode")
-AutoVoteinGameEnabled = Config:Get("AutoVoteinGameEnabled", false)
-AutoVoteValue         = Config:Get("AutoVoteValue", "Normal")
-
-_voteRespawnConn   = nil
-_voteIGRespawnConn = nil
-_syncRespawnConn   = nil
-_voteWatcherRunning = false
-_voteRestoreRunning = false
-_lastVoteRestoreAt  = 0
-_lastVoteFireAt     = 0
-
-function FireVote_Solo()
-    if not AutoGameValue then return end
-    local remote = GetRemote("MainHandler")
-    if not remote then return end
-    pcall(function()
-        remote:FireServer({ [1] = "StartSolo", [2] = AutoGameValue })
-    end)
-    print("[DYHUB] AutoVote Solo fired: " .. tostring(AutoGameValue))
-end
-
+-- ====================== AUTO START MODE ======================
 function FireGetReady(delayBefore)
-    if delayBefore and delayBefore > 0 then task.wait(delayBefore) end
+    if delayBefore == nil then delayBefore = 0 end
+    if delayBefore > 0 then task.wait(delayBefore) end
+
+    if AutoVoteinGameEnabled then
+        FireAutoVote(true)
+        task.wait(0.2)
+    end
+
     local remote = GetRemote("GetReadyRemote")
     if not remote then return false end
+
     local ok, err = pcall(function()
         remote:FireServer("1", true)
-        task.wait(0.5)
+        task.wait(0.2)
         remote:FireServer("1", false)
-        task.wait(0.5)
+        task.wait(0.2)
         remote:FireServer("2", false)
-        task.wait(0.5)
+        task.wait(0.2)
         remote:FireServer("3", false)
     end)
+
     if not ok then warn("[DYHUB] GetReadyRemote failed:", err) end
     return ok
 end
 
-function FireVote_InGame()
-    if not AutoVoteValue then return end
-    local remote = GetRemote("Vote")
-    if not remote then return end
-    pcall(function() remote:FireServer(AutoVoteValue) end)
-end
-
-function GetVoteOpenFrame()
-    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if not playerGui then return nil end
-    local voteGui = playerGui:FindFirstChild("OpenVoteUI")
-    if not voteGui then return nil end
-    return voteGui:FindFirstChild("OPEN UI")
-end
-
-function IsVoteGuiOpen()
-    local frame = GetVoteOpenFrame()
-    return frame ~= nil and frame.Visible == true
-end
-
-function StartVoteWatcher()
-    if _voteWatcherRunning then return end
-    _voteWatcherRunning = true
-    task.spawn(function()
-        while AutoVoteEnabled or AutoVoteinGameEnabled do
-            local frame = GetVoteOpenFrame()
-            if frame and frame.Visible == true then
-                local now = tick()
-                if now - _lastVoteFireAt >= 1 then
-                    _lastVoteFireAt = now
-                    FireVote_InGame()
-                    task.wait(0.15)
-                    pcall(function() frame.Visible = false end)
-                    if AutoStartEnabled then
-                        task.spawn(function() FireGetReady(0) end)
-                    end
-                end
-            end
-            task.wait(0.25)
-        end
-        _voteWatcherRunning = false
-    end)
-end
-
-function DoRestoreVoteSystem(autoMode)
-    local now = tick()
-    if _voteRestoreRunning then return end
-    if autoMode and (now - _lastVoteRestoreAt) < 60 then return end
-    _voteRestoreRunning = true
-    _lastVoteRestoreAt = now
-
-    task.spawn(function()
-        if WindUI and WindUI.Notify then
-            WindUI:Notify({
-                Title = autoMode and "Auto Restore Vote" or "Restore Vote System",
-                Content = autoMode and "Auto Vote was saved, restoring vote UI once..." or "Ready, restoring vote system...",
-                Duration = 3,
-                Icon = "loader-circle"
-            })
-        end
-
-        FireGetReady(0)
-        task.wait(2)
-
-        pcall(function()
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                hrp.CFrame = CFrame.new(-220, 3, -600)
-            end
-        end)
-
-        local waited = 0
-        while waited < 25 and (AutoVoteEnabled or AutoVoteinGameEnabled) do
-            if IsVoteGuiOpen() then break end
-            task.wait(0.5)
-            waited = waited + 0.5
-        end
-
-        if WindUI and WindUI.Notify then
-            WindUI:Notify({
-                Title = autoMode and "Auto Restore Vote" or "Restore Vote System",
-                Content = IsVoteGuiOpen() and "Vote UI detected. Auto Vote watcher is active." or "Restore finished. Vote watcher will continue waiting.",
-                Duration = 4,
-                Icon = "check-circle"
-            })
-        end
-
-        StartVoteWatcher()
-        _voteRestoreRunning = false
-    end)
-end
-
-function SetupSyncVoteAndStart()
-    if _voteRespawnConn then _voteRespawnConn:Disconnect(); _voteRespawnConn = nil end
-    if _syncRespawnConn then _syncRespawnConn:Disconnect(); _syncRespawnConn = nil end
-    FireVote_Solo()
-    task.spawn(function()
-        task.wait(2.5)
-        if AutoVoteEnabled and AutoStartEnabled then FireGetReady(0) end
-    end)
-    _syncRespawnConn = LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(1.5)
-        if AutoVoteEnabled and AutoStartEnabled then
-            FireVote_Solo()
-            task.spawn(function()
-                task.wait(2.5)
-                if AutoVoteEnabled and AutoStartEnabled then FireGetReady(0) end
-            end)
-        end
-    end)
-end
-
-function SetupAutoVote_SoloOnly(enabled)
-    if _voteRespawnConn then _voteRespawnConn:Disconnect(); _voteRespawnConn = nil end
-    if not enabled then return end
-    FireVote_Solo()
-    _voteRespawnConn = LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(1.5)
-        if AutoVoteEnabled and not AutoStartEnabled then FireVote_Solo() end
-    end)
-end
-
 function SetupAutoStartOnly(enabled)
-    if AutoStartConnection then AutoStartConnection:Disconnect(); AutoStartConnection = nil end
+    if AutoStartConnection then
+        AutoStartConnection:Disconnect()
+        AutoStartConnection = nil
+    end
+
     if not enabled then return end
+
     FireGetReady(0)
+
     AutoStartConnection = LocalPlayer.CharacterAdded:Connect(function()
         task.wait(1)
-        if AutoStartEnabled and not AutoVoteEnabled then task.spawn(function() FireGetReady(1) end) end
-    end)
-end
-
-function RefreshVoteAndStartSetup()
-    if _voteRespawnConn   then _voteRespawnConn:Disconnect();   _voteRespawnConn   = nil end
-    if _syncRespawnConn   then _syncRespawnConn:Disconnect();   _syncRespawnConn   = nil end
-    if AutoStartConnection then AutoStartConnection:Disconnect(); AutoStartConnection = nil end
-
-    if AutoVoteEnabled and AutoStartEnabled then
-        SetupSyncVoteAndStart()
-    elseif AutoVoteEnabled and not AutoStartEnabled then
-        SetupAutoVote_SoloOnly(true)
-    elseif not AutoVoteEnabled and AutoStartEnabled then
-        SetupAutoStartOnly(true)
-    end
-
-    if AutoVoteEnabled or AutoVoteinGameEnabled then
-        StartVoteWatcher()
-    end
-end
-
-function SetupAutoVote_InGame(enabled)
-    if _voteIGRespawnConn then _voteIGRespawnConn:Disconnect(); _voteIGRespawnConn = nil end
-    if not enabled then return end
-    StartVoteWatcher()
-    if IsVoteGuiOpen() then FireVote_InGame() end
-    _voteIGRespawnConn = LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(1.5)
-        if AutoVoteinGameEnabled then StartVoteWatcher() end
+        if AutoStartEnabled then
+            task.spawn(function() FireGetReady(1) end)
+        end
     end)
 end
 
 function StartAutoStart()
     AutoStartEnabled = true
-    RefreshVoteAndStartSetup()
+    SetupAutoStartOnly(true)
 end
 
 function StopAutoStart()
     AutoStartEnabled = false
-    RefreshVoteAndStartSetup()
+    SetupAutoStartOnly(false)
 end
 
 -- ====================== TELEPORT TO IDLE ======================
@@ -1537,7 +1517,7 @@ function CollectSingleItem(obj)
     if not itemRoot then return end
     TweenToItem(itemRoot)
     local lockConn
-    lockConn = RunService.RenderStepped:Connect(function()
+    lockConn = RunService.Heartbeat:Connect(function()
         if IsItemGone(obj) or not AutoCollectEnabled then lockConn:Disconnect(); return end
         if not itemRoot or not itemRoot.Parent then lockConn:Disconnect(); return end
         local targetCF = CFrame.new(itemRoot.Position + Vector3.new(0, 3, 0), itemRoot.Position)
@@ -1662,23 +1642,15 @@ function StartFarmLoop()
 
                 -- ============ CASE: GiantST ============
                 if mobType == "GiantST" and extraData then
-                    local cf = GetTargetCFrame(mob, FarmPosition)
-                    if cf then
-                        if FarmMode == "Tween" then
-                            local tween = TweenService:Create(HumanoidRootPart, TweenInfo.new(TweenSpeed, Enum.EasingStyle.Linear), { CFrame = cf })
-                            tween:Play(); tween.Completed:Wait()
-                        else tp1(cf) end
-                    end
+                    TeleportToMob(mob)
                     local giantLockConn
-                    giantLockConn = RunService.RenderStepped:Connect(function()
+                    giantLockConn = RunService.Heartbeat:Connect(function()
                         if IsMobDead(mob) or not mob.Parent or not AutoFarmEnabled then
                             giantLockConn:Disconnect(); return
                         end
                         local lockCF = GetTargetCFrame(mob, FarmPosition)
                         if lockCF and Character and HumanoidRootPart then
-                            Character:PivotTo(lockCF)
-                            HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
-                            HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+                            MoveCharacterToFarmCFrame(lockCF)
                         end
                     end)
                     repeat
@@ -1708,16 +1680,14 @@ function StartFarmLoop()
                         -- Lock + Interrupt loop
                         LockActive = true
                         local lockConn
-                        lockConn = RunService.RenderStepped:Connect(function()
+                        lockConn = RunService.Heartbeat:Connect(function()
                             if not AutoFarmEnabled or IsMobDead(mob) or not LockActive then
                                 lockConn:Disconnect(); LockActive = false; return
                             end
                             if not Character or not HumanoidRootPart then return end
                             local cf = GetTargetCFrame(mob, FarmPosition)
                             if cf then
-                                Character:PivotTo(cf)
-                                HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
-                                HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+                                MoveCharacterToFarmCFrame(cf)
                             end
                         end)
 
@@ -1753,6 +1723,7 @@ function StartFarmLoop()
 
         WaitingRespawn = false
         _currentTargetPriority = 0
+        RestoreFarmCameraAndMovement()
         FarmLoopRunning = false
     end)
 end
@@ -1850,6 +1821,7 @@ AutoFarmToggle = Main:Toggle({
             WindUI:Notify({ Title = "Auto Farm", Content = "Enabled, Auto Farm now!", Duration = 2, Icon = "play" })
         else
             LockActive = false
+            RestoreFarmCameraAndMovement()
             if SyncFarmOnly then
                 AutoAttackEnabled = false; AutoSkillEnabled = false
                 AutoSkipHeliEnabled = false; AutoFillUpEnabled = false
@@ -1878,10 +1850,15 @@ PositionDropdown = Main:Dropdown({
 
 ModeDropdown = Main:Dropdown({
     Title = "Mode Farm",
-    Values = { "Tween" },
+    Values = { "Teleport", "Tween" },
     Multi = false,
     Value = FarmMode,
-    Callback = function(value) FarmMode = value; Config:Set("FarmMode", value); Config:Save() end
+    Callback = function(value)
+        FarmMode = NormalizeFarmMode(value)
+        Config:Set("FarmMode", FarmMode)
+        Config:Save()
+        WindUI:Notify({ Title = "Mode Farm", Content = "Selected: " .. tostring(FarmMode), Duration = 2, Icon = "mouse-pointer-click" })
+    end
 })
 
 MiscDropdown = Main:Dropdown({
@@ -2592,37 +2569,30 @@ Main2:Button({
 })
 
 -- ====================== UI: GAMEMODE TAB ======================
-Main7:Section({ Title = "Vote Information", TextXAlignment = "Center", TextSize = 17 })
-Main7:Divider()
-Main7:Paragraph({
-    Title = "Auto Vote: Game Mode",
-    Desc = "- [ Step 1 ] Click Restore Vote System \n- [ Step 2 ] Stay in the Lobby (inside a game)\n- [ Step 3 ] Set Auto Vote & Wait",
-    Image = "rbxassetid://104487529937663",
-    ImageSize = 30,
-})
-Main7:Divider()
-Main7:Section({ Title = "Vote Mode", Icon = "gamepad-2" })
+local GlobalTables2 = {
+    Votes2 = {
+        "Normal", "VeryHard", "Hard", "Insane", "Nightmare", "BossRush",
+        "DarkDimension", "Hell", "ThunderStorm", "Christmas", "Zombie",
+        "AstroV2", "Astro", "100MVisit"
+    }
+}
 
-Main7:Button({
-    Title = "Restore Vote System",
-    Desc = "⚠️ Press this once before using Auto Vote Mode for the first time.",
-    Callback = function()
-        DoRestoreVoteSystem(false)
-    end
-})
 
-GameModeDropdown2 = Main7:Dropdown({
+local GameModeDropdown2 = Main7:Dropdown({
     Title = "Set Vote Mode",
-    Values = GlobalTables.Votes,
+    Values = GlobalTables2.Votes2,
     Multi = false,
     Value = AutoVoteValue,
     Callback = function(value)
-        AutoVoteValue = value; Config:Set("AutoVoteValue", value); Config:Save()
-        print("[DYHUB] Vote Mode selected: " .. tostring(value))
+        AutoVoteValue = value
+        Config:Set("AutoVoteValue", value)
+        Config:Save()
+
+        print("[DYHUB] Vote Mode selected:", tostring(value))
     end
 })
 
-AutoVoteIGToggle = Main7:Toggle({
+local AutoVoteIGToggle = Main7:Toggle({
     Title = "Auto Vote Mode (In-Game)",
     Desc = "Automatically votes for the selected mode each round.",
     Value = AutoVoteinGameEnabled,
@@ -2630,197 +2600,23 @@ AutoVoteIGToggle = Main7:Toggle({
         AutoVoteinGameEnabled = enabled
         Config:Set("AutoVoteinGameEnabled", enabled)
         Config:Save()
-        SetupAutoVote_InGame(enabled)
+
         if enabled then
-            StartVoteWatcher()
-            if not IsVoteGuiOpen() then DoRestoreVoteSystem(true) end
-        end
-    end
-})
-Main7:Divider()
-Main7:Section({ Title = "Casual Information", TextXAlignment = "Center", TextSize = 17 })
-Main7:Divider()
-Main7:Paragraph({
-    Title = "Casual: Mission Selection",
-    Desc = "- [ Step 1 ] Stay in the Lobby (not inside a game)\n- [ Step 2 ] Press Play and go to the Classic gamemode selection screen\n- [ Step 3 ] Select Casual and finish teleporting\n- [ Step 4 ] Run the script",
-    Image = "rbxassetid://104487529937663",
-    ImageSize = 30,
-})
-Main7:Divider()
-Main7:Section({ Title = "Game Mode", Icon = "gamepad-2" })
-
-GameModeDropdown = Main7:Dropdown({
-    Title = "Set Game Mode",
-    Values = GlobalTables.Mode,
-    Multi = false,
-    Value = AutoGameValue,
-    Callback = function(value)
-        AutoGameValue = value; Config:Set("AutoGameValue", value); Config:Save()
-        print("[DYHUB] Game Mode selected: " .. tostring(value))
-    end
-})
-
--- PLAY SYSTEM (auto-navigate to Classic/Casual on load)
---// PLAY + LOBBY SYSTEM
-DELAY = 1
-
-function click_btn(btn)
-    if btn and (btn:IsA("ImageButton") or btn:IsA("TextButton")) then
-        pcall(function()
-            if firesignal then
-                firesignal(btn.MouseButton1Click)
-                firesignal(btn.Activated)
+            if AutoStartEnabled and IsMiscFarmAllowed() then
+                FireGetReady(0)
             else
-                btn:Activate()
+                FireAutoVote(true)
             end
-        end)
-    end
-end
-
-function notify(title, content, icon)
-    WindUI:Notify({
-        Title = title,
-        Content = content,
-        Duration = 3,
-        Icon = "check"
-    })
-end
-
---// PLAY SYSTEM
-task.spawn(function()
-    local playBtn =
-        workspace:FindFirstChild("ForGui") and
-        workspace.ForGui:FindFirstChild("SurfaceGui") and
-        workspace.ForGui.SurfaceGui:FindFirstChild("Frame") and
-        workspace.ForGui.SurfaceGui.Frame:FindFirstChild("Play")
-
-    if playBtn then
-        notify("Auto Play", "Detected Play button, auto starting...")
-        task.wait(DELAY)
-
-        local playGui = pg:FindFirstChild("Play")
-
-        -- ถ้ายังไม่เปิด GUI Play แปลว่ายังไม่ได้กด
-        if not (playGui and playGui.Enabled) then
-            click_btn(playBtn)
-            notify("Auto Play", "Pressed Play button")
+            StartAutoVoteLoop()
         else
-            notify("Auto Play", "Play GUI already opened")
-        end
-    end
-
-    task.wait(DELAY)
-
-    local playGui = pg:FindFirstChild("Play")
-    if not (playGui and playGui.Enabled) then
-        return
-    end
-
-    local classicBtn = playGui:FindFirstChild("Classic")
-
-    if classicBtn then
-        notify("Auto Play", "Selecting Classic mode...")
-        task.wait(DELAY)
-        click_btn(classicBtn)
-    end
-
-    task.wait(DELAY)
-
-    local modeGui = pg:FindFirstChild("mode select2")
-
-    if modeGui and modeGui.Enabled then
-        local diffBtn =
-            modeGui:FindFirstChild("MainFrame") and
-            modeGui.MainFrame:FindFirstChild("DiffMode")
-
-        if diffBtn then
-            notify("Auto Play", "Selecting difficulty...")
-            task.wait(DELAY)
-            click_btn(diffBtn)
-        end
-    end
-end)
-
---// NEW LOBBY SYSTEM
-task.spawn(function()
-    while true do
-        task.wait(0.5)
-
-        local loadingGui = pg:FindFirstChild("LoadingScreen")
-
-        -- ลบ LoadingScreen ถ้ามี
-        if loadingGui then
-            notify("Lobby System", "Removing LoadingScreen...")
-            pcall(function()
-                loadingGui:Destroy()
-            end)
-        end
-
-        local lobby = pg:FindFirstChild("Lobby")
-
-        -- รอจน Lobby เปิด
-        if lobby and lobby.Enabled then
-            notify("Lobby System", "Lobby detected, preparing auto setup...")
-
-            local btn =
-                lobby:FindFirstChild("MainFrame") and
-                lobby.MainFrame:FindFirstChild("Frame") and
-                lobby.MainFrame.Frame:FindFirstChild("Create") and
-                lobby.MainFrame.Frame.Create:FindFirstChild("TrackQuestButton")
-
-            if btn and btn.Visible then
-                notify("Lobby System", "Pressing TrackQuestButton...")
-                click_btn(btn)
-
-                task.wait(0.5)
-
-                -- ยิง Remote เฉพาะตอนเปิด Toggle
-                if AutoVoteEnabled then
-                    notify("Lobby System", "Creating game mode...")
-
-                    local remote = GetRemote("MainHandler")
-                    if remote then
-                        pcall(function()
-                            remote:FireServer({
-                                [1] = "StartSolo",
-                                [2] = AutoGameValue
-                            })
-                        end)
-                    end
-
-                    notify("Lobby System", "Gamemode created successfully!")
-                else
-                    notify("Lobby System", "Use with Auto Game Mode!")
-                end
-
-                break
-            end
-        end
-    end
-end)
-
---// AUTO GAME MODE TOGGLE
-AutoVoteToggle = Main7:Toggle({
-    Title = "Auto Game Mode (Lobby)",
-    Desc = "Automatically creates the selected game mode when in the lobby.",
-    Value = AutoVoteEnabled,
-
-    Callback = function(enabled)
-        AutoVoteEnabled = enabled
-
-        Config:Set("AutoVoteEnabled", enabled)
-        Config:Save()
-
-        RefreshVoteAndStartSetup()
-        if enabled then
-            notify("Auto Game Mode", "Enabled")
-            StartVoteWatcher()
-            if not IsVoteGuiOpen() then DoRestoreVoteSystem(true) end
-        else
-            notify("Auto Game Mode", "Disabled", "x")
+            print("[DYHUB] Auto Vote Mode disabled")
         end
     end
 })
+
+if AutoVoteinGameEnabled then
+    StartAutoVoteLoop()
+end
 
 -- ====================== UI: SHOP SYSTEMS ======================
 Main5:Section({ Title = "Auto Gacha", Icon = "sparkles" })
@@ -3273,19 +3069,8 @@ function ApplySavedConfigOnStartup()
         StartAutoCollectLoop()
     end
 
-    if AutoVoteEnabled or AutoStartEnabled then
-        RefreshVoteAndStartSetup()
-    end
-
-    if AutoVoteinGameEnabled then
-        SetupAutoVote_InGame(true)
-    end
-
-    if AutoVoteEnabled or AutoVoteinGameEnabled then
-        StartVoteWatcher()
-        if not IsVoteGuiOpen() then
-            DoRestoreVoteSystem(true)
-        end
+    if AutoStartEnabled then
+        SetupAutoStartOnly(true)
     end
 end
 
@@ -3293,4 +3078,3 @@ ApplySavedConfigOnStartup()
 
 print("[DYHUB] Version " .. version .. " " .. ver .. " loaded successfully!")
 print("[DYHUB] Config system active | Auto saving every " .. tostring(AutoSaveDelay) .. " seconds")
-
