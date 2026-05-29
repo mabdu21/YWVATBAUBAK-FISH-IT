@@ -2654,27 +2654,27 @@ Main7:Button({
         WindUI:Notify({
             Title = "Restore Loading...",
             Content = "Ready, Restore Vote System...",
-            Duration = 2,
+            Duration = 6,
             Icon = "loader-circle"
         })
         task.wait(6)
         pcall(function()
             local char = LocalPlayer.Character
             if char and char:FindFirstChild("HumanoidRootPart") then
-                char.HumanoidRootPart.CFrame = CFrame.new(-220, -30, -600)
+                char.HumanoidRootPart.CFrame = CFrame.new(-220, -10, -600)
             end
         end)
         WindUI:Notify({
             Title = "Restore Loading...",
             Content = "Restore Vote System, please wait...",
-            Duration = 5,
+            Duration = 10,
             Icon = "loader-circle"
         })
         task.wait(10)
         WindUI:Notify({
             Title = "Restore Complete",
             Content = "Vote System restored! You can now use Auto Vote Mode.",
-            Duration = 5,
+            Duration = 10,
             Icon = "check"
         })
     end
