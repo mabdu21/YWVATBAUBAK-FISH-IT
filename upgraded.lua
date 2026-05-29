@@ -2,7 +2,7 @@
 -- Patched: added Teleport farm mode, vote/start sync, and camera stabilization
 -- =========================
 local version = "Rework"
-local ver = "v023.52"
+local ver = "v023.53"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -909,29 +909,27 @@ local function GetTargetCFrame(mob, position)
     local center, minY, maxY = GetMobVisualBounds(mob)
 
     if position == "Above" then
-        -- ★ บังคับให้อยู่เหนือมอนเสมอ ป้องกันมองฟ้า
+        -- ★ อยู่เหนือมอน + ก้มมองหัว/ตัวมอน เพื่อให้ตีโดนเหมือนระบบเดิม
         local safeTargetY = math.max(maxY + padding, maxY + 0.5)
         local targetPos   = Vector3.new(center.X, safeTargetY, center.Z)
-        return CFrame.new(targetPos)
+        local lookAtPos   = Vector3.new(center.X, maxY, center.Z)
+        local lookCF      = CFrame.new(targetPos, lookAtPos)
+        return lookCF * CFrame.Angles(math.rad(-10), 0, 0)
 
     elseif position == "Under" then
-        -- ★ บังคับให้อยู่ใต้มอนเสมอ
+        -- ★ อยู่ใต้มอน + เงยมองเท้า/ตัวมอน เพื่อให้ตีโดนเหมือนระบบเดิม
         local safeTargetY = math.min(minY - padding, minY - 0.5)
         local targetPos   = Vector3.new(center.X, safeTargetY, center.Z)
-        return CFrame.new(targetPos)
+        local lookAtPos   = Vector3.new(center.X, minY, center.Z)
+        local lookCF      = CFrame.new(targetPos, lookAtPos)
+        return lookCF * CFrame.Angles(math.rad(10), 0, 0)
     end
 end
 
 local function GetStableFarmCFrame(cf)
-    if not cf then return nil end
-    local yaw = 0
-    pcall(function()
-        if HumanoidRootPart then
-            local _, currentY = HumanoidRootPart.CFrame:ToOrientation()
-            yaw = currentY
-        end
-    end)
-    return CFrame.new(cf.Position) * CFrame.Angles(0, yaw, 0)
+    -- Keep the target aim angle from GetTargetCFrame.
+    -- This is required so Above looks down at the mob and Under looks up at the mob.
+    return cf
 end
 
 local function MoveCharacterToFarmCFrame(cf)
@@ -3076,5 +3074,5 @@ end
 
 ApplySavedConfigOnStartup()
 
-print("[DYHUB] Version " .. version .. " " .. ver .. " loaded successfully!")
+print("[DYHUB] Version " .. version .. " | " .. ver .. " loaded successfully!")
 print("[DYHUB] Config system active | Auto saving every " .. tostring(AutoSaveDelay) .. " seconds")
