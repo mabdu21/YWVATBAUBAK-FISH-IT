@@ -1,7 +1,7 @@
 -- v123 | [Local Register Fix]
 -- =========================
 version = "Rework"
-ver = "v023.62"
+ver = "v023.64"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -57,7 +57,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config_02362.json"
+    self.ConfigPath = ConfigFolder .. "/config_02364.json"
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
     self:Load()
     return self
@@ -187,14 +187,13 @@ Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/30/2026 | CL: " .. ver,
-    Desc = [[- [ New ] Farm Astro Tokens
-- [ Added ] Fly System
-- [ Added ] Shop Hourly 
-- [ Added ] Camera Mode 
-- [ Added ] Movement Stat Lock protects 
-- [ Added ] Upgrade Titan, Speaker, UTCM, TV 
-- [ Added ] Infinite Jump, Full Bright, No Fog 
-- [ Improved ] Shop systems keep synced before Skip Helicopter]],
+    Desc = [[- [ Paid Version ] Mode Farm for different farming modes / BETA
+- [ Added ] Debug code to check execution time when the script has errors
+- [ Fixed ] God Mode, Safe Mode, Delete Map, Auto Skip, Auto Fill Up, Auto Start obey Sync Farm Only
+- [ Fixed ] Sync Farm Only now fully stops Misc Farm systems when Auto Farm is OFF
+- [ Improved ] Misc Farm gate re-applies safely when toggling Auto Farm / Sync Farm Only
+- [ Improved ] Auto Collect stop auto farmings / Sync with Auto Farm
+- [ Improved ] Shop all systems keep synced before Auto Start]],
 })
 Info:Divider()
 Info:Section({ Title = "Discord Information", TextXAlignment = "Center", TextSize = 17 })
@@ -317,7 +316,7 @@ GlobalTables = {
 skillList          = { "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B", "U" }
 skillDropdownValues = { "All", "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B", "U" }
 
--- ====================== FARM MODE HELPERS ======================
+-- ====================== FARM  HELPERS ======================
 function NormalizeFarmMode(mode)
     mode = tostring(mode or "Tween")
     if mode == "tp" or mode == "Tp" or mode == "tp1" then
@@ -432,6 +431,38 @@ end
 function IsMiscFarmAllowed()
     if FarmAstroTokenEnabled then return false end
     return AutoFarmEnabled or not SyncFarmOnly
+end
+
+function StopMiscFarmRuntime(reason)
+    -- Runtime-only stop. It does not remove saved MiscOptions, so systems can resume when Auto Farm is enabled again.
+    AutoAttackEnabled = false
+    AutoSkillEnabled = false
+    AutoSkipHeliEnabled = false
+    AutoFillUpEnabled = false
+    SafeModeEnabled = false
+    GodModeEnabled = false
+    FillUpRunning = false
+
+    if AutoStartEnabled then
+        StopAutoStart()
+    end
+
+    pcall(function() TriggerAutoSkipHeli(false) end)
+
+    if BoostFPS_Active then
+        RestoreBoostFPS()
+    end
+
+    CombatDebug("MiscGate", "Misc Farm runtime stopped: " .. tostring(reason or "sync gate"), 3)
+end
+
+function ApplyMiscFarmGate(reason)
+    if SyncFarmOnly and not AutoFarmEnabled then
+        StopMiscFarmRuntime(reason or "Auto Farm is off")
+        return false
+    end
+    HandleMiscOptions(MiscOptions)
+    return true
 end
 
 function ApplyCameraMode()
@@ -1612,7 +1643,7 @@ end
 task.spawn(function()
     while true do
         task.wait(0.1)
-        if GodModeEnabled then
+        if GodModeEnabled and IsMiscFarmAllowed() then
             pcall(function()
                 local char = LocalPlayer.Character
                 if not char then return end
@@ -2513,7 +2544,7 @@ function HandleMiscOptions(selectedOptions)
     -- ถ้า AutoFarm ปิดและ Sync Farm Only ปิด: ระบบใน MiscFarm ยังทำงาน
     -- ถ้า AutoFarm ปิดและ Sync Farm Only เปิด: ระบบหยุดทำงาน
 
-    local canRun = AutoFarmEnabled or not SyncFarmOnly
+    local canRun = IsMiscFarmAllowed()
 
     local hasAutoAttack = table.find(selectedOptions, "Auto Attack") ~= nil
     if hasAutoAttack and canRun then
@@ -2542,14 +2573,14 @@ function HandleMiscOptions(selectedOptions)
     end
 
     local hasBoostFPS = table.find(selectedOptions, "Delete Map")
-    if hasBoostFPS and not BoostFPS_Active then
-        SaveAndBoostFPS()
-    elseif not hasBoostFPS and BoostFPS_Active then
+    if hasBoostFPS and canRun then
+        if not BoostFPS_Active then SaveAndBoostFPS() end
+    elseif BoostFPS_Active then
         RestoreBoostFPS()
     end
 
-    SafeModeEnabled = table.find(selectedOptions, "Safe Mode") ~= nil
-    GodModeEnabled  = table.find(selectedOptions, "God Mode") ~= nil
+    SafeModeEnabled = table.find(selectedOptions, "Safe Mode") ~= nil and canRun
+    GodModeEnabled  = table.find(selectedOptions, "God Mode") ~= nil and canRun
 
     local hasAutoStart = table.find(selectedOptions, "Auto Start")
     if hasAutoStart and canRun then
@@ -2620,11 +2651,7 @@ AutoFarmToggle = Main:Toggle({
             LockActive = false
             RestoreFarmCameraAndMovement()
             if SyncFarmOnly then
-                AutoAttackEnabled = false; AutoSkillEnabled = false
-                AutoSkipHeliEnabled = false; AutoFillUpEnabled = false
-                FillUpRunning = false
-                if AutoStartEnabled then StopAutoStart() end
-                TriggerAutoSkipHeli(false)
+                StopMiscFarmRuntime("Auto Farm turned off while Sync Farm Only is ON")
                 WindUI:Notify({ Title = "Auto Farm", Content = "Turn off Auto Farm: Misc Farm system stops working (Sync Farm Only)", Duration = 3, Icon = "square" })
             else
                 HandleMiscOptions(MiscOptions)
@@ -2638,7 +2665,7 @@ AutoFarmToggle = Main:Toggle({
 if IsPaidUserVersion() then
     FarmTargetModeDropdown = Main:Dropdown({
         Title = "Mode Farm",
-        Desc = "Normal Mode farms normally. Astro Mode only targets mobs with Astro in the name.",
+        Desc = "Different farming modes.",
         Values = { "Normal Mode", "Astro Mode" },
         Multi = false,
         Value = FarmTargetMode,
@@ -2696,21 +2723,12 @@ MiscDropdown = Main:Dropdown({
     Callback = function(values)
         MiscOptions = values
         -- ถ้า Misc Farm ไม่เปิด AutoFarm และ SyncFarmOnly เปิด → notify เตือน
-        if not AutoFarmEnabled and SyncFarmOnly then
-            local hasFeatures = #values > 0
-            local onlyGodOrBoost = true
-            for _, v in ipairs(values) do
-                if v ~= "God Mode" and v ~= "Delete Map" then
-                    onlyGodOrBoost = false; break
-                end
-            end
-            if hasFeatures and not onlyGodOrBoost then
-                WindUI:Notify({
-                    Title = "Misc Farm",
-                    Content = "You must turn on Auto Farm first (Sync Farm Only is on)",
-                    Duration = 3, Icon = "triangle-alert"
-                })
-            end
+        if not AutoFarmEnabled and SyncFarmOnly and #values > 0 then
+            WindUI:Notify({
+                Title = "Misc Farm",
+                Content = "You must turn on Auto Farm first (Sync Farm Only is on)",
+                Duration = 3, Icon = "triangle-alert"
+            })
         end
         HandleMiscOptions(values)
     end
@@ -2730,9 +2748,8 @@ Main:Toggle({
             WindUI:Notify({ Title = "Sync Farm Only", Content = "OFF: Misc Farm system works without needing Auto Farm.", Duration = 3, Icon = "unlink" })
         end
 
-        -- Re-apply on both ON/OFF. This prevents AutoAttack/AutoSkill flags from staying true
-        -- while their loops already stopped, then failing to restart when Auto Farm is enabled again.
-        HandleMiscOptions(MiscOptions)
+        -- Re-apply on both ON/OFF. When ON and Auto Farm is OFF, every Misc Farm runtime is stopped.
+        ApplyMiscFarmGate("Sync Farm Only changed")
     end
 })
 
@@ -4149,7 +4166,7 @@ _G.__DYHUB_ShopSystems = function()
     local function ShouldShopSyncWithHeli()
         -- Sync only when Auto Skip Helicopter is active.
         -- This prevents skipping before shop/upgrade remotes finish.
-        return AutoSkipHeliEnabled and (AutoFarmEnabled or not SyncFarmOnly or AutoSkipHeliEnabled)
+        return AutoSkipHeliEnabled and IsMiscFarmAllowed()
     end
 
     local function StartAutoGachaCharacter()
@@ -4670,7 +4687,7 @@ AutoCollectToggle = Main6:Toggle({
     end
 })
 
-Main6:Section({ Title = "Setting Collect", Icon = "settings" })
+Main6:Section({ Title = "Collect Settings", Icon = "settings" })
 
 CollectItemDropdown = Main6:Dropdown({
     Title = "Item Collect",
@@ -4964,8 +4981,10 @@ function ApplySavedConfigOnStartup()
         StartAutoCollectLoop()
     end
 
-    if AutoStartEnabled then
+    if AutoStartEnabled and IsMiscFarmAllowed() then
         SetupAutoStartOnly(true)
+    elseif AutoStartEnabled then
+        StopAutoStart()
     end
 end
 
