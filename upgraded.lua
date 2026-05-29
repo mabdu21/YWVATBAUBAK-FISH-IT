@@ -1,8 +1,7 @@
 -- v085
--- Patched: added Teleport farm mode, vote/start sync, and camera stabilization
 -- =========================
 local version = "Rework"
-local ver = "v023.54"
+local ver = "v023.58"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -58,7 +57,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config_2.json"
+    self.ConfigPath = ConfigFolder .. "/config_02358.json"
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
     self:Load()
     return self
@@ -187,8 +186,8 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 05/09/2026",
-    Desc = "- [ New ] Mode Farm: Teleport / Tween \n- [ Fixed ] Auto Vote syncs before Auto Start \n- [ Fixed ] Auto Farm camera shake \n- [ Added ] God Mode \n- [ Improved ] Delete Map",
+    Title = "Update: 05/29/2026 | CL: " .. ver,
+    Desc = "- [ New ] Player Fly \n- [ Added ] Camera Mode \n- [ Added ] Infinite Jump, Full Bright, No Fog \n- [ Added ] Movement Stat Lock protects WalkSpeed and JumpPower \n- [ Improved ] Shop systems keep synced before Auto Skip Helicopter",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
@@ -286,10 +285,13 @@ Info:Paragraph({
 })
 
 -- ====================== SERVICES ======================
-local TweenService       = game:GetService("TweenService")
-local ReplicatedStorage  = game:GetService("ReplicatedStorage")
+local TweenService        = game:GetService("TweenService")
+local ReplicatedStorage   = game:GetService("ReplicatedStorage")
+local ReplicatedFirst     = game:GetService("ReplicatedFirst")
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local RunService         = game:GetService("RunService")
+local RunService          = game:GetService("RunService")
+local UserInputService    = game:GetService("UserInputService")
+local Lighting            = game:GetService("Lighting")
 
 -- ====================== PLAYER ======================
 local LocalPlayer    = Players.LocalPlayer
@@ -1891,6 +1893,7 @@ Main:Section({ Title = "Farm Settings", Icon = "settings" })
 
 PositionDropdown = Main:Dropdown({
     Title = "Position Farm",
+    Desc = "Selects where your character stays around the target.",
     Values = { "Above", "Under" },
     Multi = false,
     Value = FarmPosition,
@@ -1899,6 +1902,7 @@ PositionDropdown = Main:Dropdown({
 
 ModeDropdown = Main:Dropdown({
     Title = "Mode Farm",
+    Desc = "Selects how your character moves to each target.",
     Values = { "Teleport", "Tween" },
     Multi = false,
     Value = FarmMode,
@@ -1912,6 +1916,7 @@ ModeDropdown = Main:Dropdown({
 
 MiscDropdown = Main:Dropdown({
     Title = "Misc Farm",
+    Desc = "Selects extra systems to run with Auto Farm.",
     Values = { "Auto Attack", "Auto Skill", "Auto Start", "Auto Skip Helicopter", "Auto Fill Up", "Safe Mode", "God Mode", "Delete Map" },
     Multi = true,
     Value = MiscOptions,
@@ -2481,13 +2486,288 @@ Main2:Section({ Title = "Local Player", Icon = "user" })
 WSValue = Config:Get("WSValue", 16)
 JPValue = Config:Get("JPValue", 50)
 NoClip  = Config:Get("NoClip", false)
+LockMovementStats = Config:Get("LockMovementStats", true)
+FlyEnabled = Config:Get("FlyEnabled", false)
+FlySpeed = Config:Get("FlySpeed", 1)
+InfiniteJumpEnabled = Config:Get("InfiniteJumpEnabled", false)
+FullBrightEnabled = Config:Get("FullBrightEnabled", false)
+NoFogEnabled = Config:Get("NoFogEnabled", false)
 
-function updatePlayerStats()
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        LocalPlayer.Character.Humanoid.WalkSpeed = WSValue
-        LocalPlayer.Character.Humanoid.JumpPower = JPValue
+local LastMovementStatApply = 0
+local MovementStatInterval  = 0.25
+local FlyBodyVelocity = nil
+local FlyBodyGyro = nil
+local FlyRenderConnection = nil
+local LastVisualApply = 0
+local FullBrightOriginal = nil
+local NoFogOriginal = nil
+
+local function GetLocalHumanoid()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChildOfClass("Humanoid")
+end
+
+local function GetLocalRootPart()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
+end
+
+function updatePlayerStats(force)
+    local humanoid = GetLocalHumanoid()
+    if not humanoid then return end
+
+    pcall(function()
+        if humanoid.UseJumpPower ~= nil then
+            humanoid.UseJumpPower = true
+        end
+    end)
+
+    if force or humanoid.WalkSpeed ~= WSValue then
+        humanoid.WalkSpeed = WSValue
+    end
+
+    if force or humanoid.JumpPower ~= JPValue then
+        humanoid.JumpPower = JPValue
     end
 end
+
+local function ProtectMovementStats()
+    if not LockMovementStats then return end
+
+    local now = tick()
+    if now - LastMovementStatApply < MovementStatInterval then return end
+    LastMovementStatApply = now
+
+    local humanoid = GetLocalHumanoid()
+    if not humanoid then return end
+
+    pcall(function()
+        if humanoid.UseJumpPower ~= nil then
+            humanoid.UseJumpPower = true
+        end
+    end)
+
+    -- Anti-reduce mode: restore only when the game lowers the saved values.
+    if humanoid.WalkSpeed < WSValue then
+        humanoid.WalkSpeed = WSValue
+    end
+
+    if humanoid.JumpPower < JPValue then
+        humanoid.JumpPower = JPValue
+    end
+end
+
+local function CleanupFlyForces()
+    if FlyBodyVelocity then
+        pcall(function() FlyBodyVelocity:Destroy() end)
+        FlyBodyVelocity = nil
+    end
+    if FlyBodyGyro then
+        pcall(function() FlyBodyGyro:Destroy() end)
+        FlyBodyGyro = nil
+    end
+end
+
+local function StartFly()
+    local humanoid = GetLocalHumanoid()
+    local root = GetLocalRootPart()
+    if not humanoid or not root then return end
+
+    CleanupFlyForces()
+
+    FlyBodyVelocity = Instance.new("BodyVelocity")
+    FlyBodyVelocity.Name = "DYHUB_FlyVelocity"
+    FlyBodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    FlyBodyVelocity.Velocity = Vector3.zero
+    FlyBodyVelocity.Parent = root
+
+    FlyBodyGyro = Instance.new("BodyGyro")
+    FlyBodyGyro.Name = "DYHUB_FlyGyro"
+    FlyBodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+    FlyBodyGyro.P = 10000
+    FlyBodyGyro.CFrame = root.CFrame
+    FlyBodyGyro.Parent = root
+
+    humanoid.PlatformStand = true
+end
+
+local function StopFly()
+    CleanupFlyForces()
+    local humanoid = GetLocalHumanoid()
+    if humanoid then
+        humanoid.PlatformStand = false
+        pcall(function()
+            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end)
+    end
+end
+
+local function GetFlyVerticalInput()
+    local vertical = 0
+    pcall(function()
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) or UserInputService:IsKeyDown(Enum.KeyCode.E) then
+            vertical = vertical + 1
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.Q) then
+            vertical = vertical - 1
+        end
+    end)
+    return vertical
+end
+
+local function UpdateFly()
+    if not FlyEnabled then return end
+
+    local humanoid = GetLocalHumanoid()
+    local root = GetLocalRootPart()
+    local cam = workspace.CurrentCamera
+    if not humanoid or not root or not cam then return end
+
+    if not FlyBodyVelocity or FlyBodyVelocity.Parent ~= root or not FlyBodyGyro or FlyBodyGyro.Parent ~= root then
+        StartFly()
+        return
+    end
+
+    humanoid.PlatformStand = true
+
+    local move = humanoid.MoveDirection
+    local vertical = GetFlyVerticalInput()
+    local velocity = move + Vector3.new(0, vertical, 0)
+
+    if velocity.Magnitude > 0 then
+        velocity = velocity.Unit
+    end
+
+    FlyBodyVelocity.Velocity = velocity * ((tonumber(FlySpeed) or 1) * 20)
+    FlyBodyGyro.CFrame = cam.CFrame
+end
+
+local function EnsureFlyRenderLoop()
+    if FlyRenderConnection then return end
+    FlyRenderConnection = RunService.RenderStepped:Connect(UpdateFly)
+end
+
+local function CaptureFullBrightOriginal()
+    if FullBrightOriginal then return end
+    FullBrightOriginal = {
+        Brightness = Lighting.Brightness,
+        ClockTime = Lighting.ClockTime,
+        GlobalShadows = Lighting.GlobalShadows,
+        Ambient = Lighting.Ambient,
+        OutdoorAmbient = Lighting.OutdoorAmbient,
+        ExposureCompensation = Lighting.ExposureCompensation,
+    }
+end
+
+local function ApplyFullBright()
+    CaptureFullBrightOriginal()
+    pcall(function()
+        Lighting.Brightness = 2
+        Lighting.ClockTime = 14
+        Lighting.GlobalShadows = false
+        Lighting.Ambient = Color3.new(1, 1, 1)
+        Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+        Lighting.ExposureCompensation = 0
+    end)
+end
+
+local function RestoreFullBright()
+    if not FullBrightOriginal then return end
+    pcall(function()
+        Lighting.Brightness = FullBrightOriginal.Brightness
+        Lighting.ClockTime = FullBrightOriginal.ClockTime
+        Lighting.GlobalShadows = FullBrightOriginal.GlobalShadows
+        Lighting.Ambient = FullBrightOriginal.Ambient
+        Lighting.OutdoorAmbient = FullBrightOriginal.OutdoorAmbient
+        Lighting.ExposureCompensation = FullBrightOriginal.ExposureCompensation
+    end)
+    FullBrightOriginal = nil
+end
+
+local function CaptureNoFogOriginal()
+    if NoFogOriginal then return end
+    NoFogOriginal = {
+        FogStart = Lighting.FogStart,
+        FogEnd = Lighting.FogEnd,
+        FogColor = Lighting.FogColor,
+        Atmospheres = {},
+    }
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        if obj:IsA("Atmosphere") then
+            table.insert(NoFogOriginal.Atmospheres, {
+                Instance = obj,
+                Density = obj.Density,
+                Haze = obj.Haze,
+                Glare = obj.Glare,
+                Offset = obj.Offset,
+            })
+        end
+    end
+end
+
+local function ApplyNoFog()
+    CaptureNoFogOriginal()
+    pcall(function()
+        Lighting.FogStart = 0
+        Lighting.FogEnd = 100000
+    end)
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        if obj:IsA("Atmosphere") then
+            pcall(function()
+                obj.Density = 0
+                obj.Haze = 0
+                obj.Glare = 0
+                obj.Offset = 0
+            end)
+        end
+    end
+end
+
+local function RestoreNoFog()
+    if not NoFogOriginal then return end
+    pcall(function()
+        Lighting.FogStart = NoFogOriginal.FogStart
+        Lighting.FogEnd = NoFogOriginal.FogEnd
+        Lighting.FogColor = NoFogOriginal.FogColor
+    end)
+    for _, data in ipairs(NoFogOriginal.Atmospheres or {}) do
+        local obj = data.Instance
+        if obj and obj.Parent then
+            pcall(function()
+                obj.Density = data.Density
+                obj.Haze = data.Haze
+                obj.Glare = data.Glare
+                obj.Offset = data.Offset
+            end)
+        end
+    end
+    NoFogOriginal = nil
+end
+
+RunService.Heartbeat:Connect(function()
+    ProtectMovementStats()
+
+    local now = tick()
+    if now - LastVisualApply >= 1 then
+        LastVisualApply = now
+        if FullBrightEnabled then ApplyFullBright() end
+        if NoFogEnabled then ApplyNoFog() end
+    end
+end)
+
+EnsureFlyRenderLoop()
+
+UserInputService.JumpRequest:Connect(function()
+    if not InfiniteJumpEnabled then return end
+    local humanoid = GetLocalHumanoid()
+    if humanoid then
+        pcall(function()
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end)
+    end
+end)
 
 RunService.Stepped:Connect(function()
     if NoClip and LocalPlayer.Character then
@@ -2499,27 +2779,116 @@ end)
 
 LocalPlayer.CharacterAdded:Connect(function(char)
     task.wait(1)
-    updatePlayerStats()
+    updatePlayerStats(true)
+    if FlyEnabled then StartFly() end
 end)
 
 Main2:Slider({
     Title = "Set Walkspeed",
+    Desc = "Sets your saved movement speed value.",
     Value = { Min = 1, Max = 200, Default = WSValue },
     Step = 1,
-    Callback = function(value) WSValue = value; Config:Set("WSValue", value); Config:Save(); updatePlayerStats() end
+    Callback = function(value)
+        WSValue = value
+        Config:Set("WSValue", value)
+        Config:Save()
+        updatePlayerStats(true)
+    end
 })
 
 Main2:Slider({
     Title = "Set Jumppower",
+    Desc = "Sets your saved jump power value.",
     Value = { Min = 1, Max = 500, Default = JPValue },
     Step = 1,
-    Callback = function(value) JPValue = value; Config:Set("JPValue", value); Config:Save(); updatePlayerStats() end
+    Callback = function(value)
+        JPValue = value
+        Config:Set("JPValue", value)
+        Config:Save()
+        updatePlayerStats(true)
+    end
+})
+
+Main2:Toggle({
+    Title = "Lock Movement Stats",
+    Desc = "Restores WalkSpeed and JumpPower when the game lowers them.",
+    Value = LockMovementStats,
+    Callback = function(state)
+        LockMovementStats = state
+        Config:Set("LockMovementStats", state)
+        Config:Save()
+        if state then updatePlayerStats(true) end
+    end
 })
 
 nocliptoggle = Main2:Toggle({
-    Title = "No Clip", Value = NoClip,
+    Title = "No Clip",
+    Value = NoClip,
     Desc = "Allows your character to pass through walls and parts.",
     Callback = function(state) NoClip = state; Config:Set("NoClip", state); Config:Save() end
+})
+
+Main2:Section({ Title = "Fly Movement", Icon = "plane" })
+
+Main2:Slider({
+    Title = "Fly Speed",
+    Desc = "Adjusts flight speed while Fly is enabled.",
+    Value = { Min = 1, Max = 20, Default = FlySpeed },
+    Step = 1,
+    Callback = function(value)
+        FlySpeed = value
+        Config:Set("FlySpeed", value)
+        Config:Save()
+    end
+})
+
+Main2:Toggle({
+    Title = "Fly",
+    Desc = "Enables flight movement. Use Space/E to rise and Ctrl/Q to descend.",
+    Value = FlyEnabled,
+    Callback = function(state)
+        FlyEnabled = state
+        Config:Set("FlyEnabled", state)
+        Config:Save()
+        if state then StartFly() else StopFly() end
+    end
+})
+
+Main2:Section({ Title = "Visual & Utility", Icon = "sun" })
+
+Main2:Toggle({
+    Title = "Infinite Jump",
+    Desc = "Allows repeated jumping while airborne.",
+    Value = InfiniteJumpEnabled,
+    Callback = function(state)
+        InfiniteJumpEnabled = state
+        Config:Set("InfiniteJumpEnabled", state)
+        Config:Save()
+    end
+})
+
+Main2:Toggle({
+    Title = "Full Bright",
+    Desc = "Improves map brightness and restores old lighting when disabled.",
+    Value = FullBrightEnabled,
+    Callback = function(state)
+        FullBrightEnabled = state
+        Config:Set("FullBrightEnabled", state)
+        Config:Save()
+        if state then ApplyFullBright() else RestoreFullBright() end
+    end
+})
+
+Main2:Toggle({
+    Title = "No Fog",
+    Desc = "Removes distance fog and restores old fog settings when disabled.",
+    Value = NoFogEnabled,
+    Callback = function(state)
+        NoFogEnabled = state
+        Config:Set("NoFogEnabled", state)
+        Config:Save()
+        if state then ApplyNoFog() else RestoreNoFog() end
+    end
 })
 
 Main2:Section({ Title = "Redeem Codes", Icon = "bird" })
@@ -2527,13 +2896,15 @@ Main2:Section({ Title = "Redeem Codes", Icon = "bird" })
 SelectedCodes = Config:Get("SelectedCodes", {})
 
 CodeDropdown = Main2:Dropdown({
-    Title = "Select Redeem Codes", Multi = true,
+    Title = "Select Redeem Codes",
+    Desc = "Selects which codes will be redeemed.",
+    Multi = true,
     Values = GlobalTables.redeemCodes, Value = SelectedCodes,
     Callback = function(value) SelectedCodes = value or {}; Config:Set("SelectedCodes", value); Config:Save() end,
 })
 
 Main2:Button({
-    Title = "Redeem Codes (Selected)",
+    Title = "Redeem Codes",
     Desc = "Redeems only the codes you have selected in the dropdown.",
     Callback = function()
         for _, code in ipairs(SelectedCodes or {}) do
@@ -2543,7 +2914,7 @@ Main2:Button({
 })
 
 Main2:Button({
-    Title = "Redeem Code (All)",
+    Title = "Redeem Code All",
     Desc = "Redeems all available codes at once.",
     Callback = function()
         for _, code in ipairs(GlobalTables.redeemCodes or {}) do
@@ -2553,7 +2924,7 @@ Main2:Button({
 })
 
 -- ====================== UI: UNLOCK GAMEPASS ======================
-Main2:Section({ Title = "Unlock Gamepass for real!", Icon = "badge-dollar-sign" })
+Main2:Section({ Title = "Unlock Gamepass", Icon = "badge-dollar-sign" })
 
 SelectedGamepass = Config:Get("SelectedGamepass", {})
 GlobalTables.Gamepassts = SelectedGamepass
@@ -2572,8 +2943,8 @@ GamepassDropdown = Main2:Dropdown({
 })
 
 Main2:Button({
-    Title = "Unlock Gamepass (Selected)",
-    Desc = "Unlocks the selected gamepasses locally for your character.",
+    Title = "Unlock Gamepass",
+    Desc = "Unlocks the selected gamepasses locally for free.",
     Callback = function()
         local gachaData = LocalPlayer:FindFirstChild("GachaData")
         if not gachaData then
@@ -2626,6 +2997,60 @@ local GlobalTables2 = {
     }
 }
 
+Main7:Section({ Title = "Vote Information", TextXAlignment = "Center", TextSize = 17 })
+Main7:Divider()
+Main7:Paragraph({
+    Title = "Auto Vote: Game Mode",
+    Desc = "- [ Step 1 ] Click Restore Vote System \n- [ Step 2 ] Stay in the Lobby (inside a game)\n- [ Step 3 ] Set Auto Vote & Wait",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+})
+Main7:Divider()
+Main7:Section({ Title = "Vote Mode", Icon = "gamepad-2" })
+
+Main7:Button({
+    Title = "Restore Vote System",
+    Desc = "⚠️ Press this once before using Auto Vote Mode for the first time.",
+    Callback = function()
+        pcall(function()
+            ReplicatedStorage.GetReadyRemote:FireServer("1", true)
+            task.wait(0.5)
+            ReplicatedStorage.GetReadyRemote:FireServer("1", false)
+            task.wait(0.5)
+            ReplicatedStorage.GetReadyRemote:FireServer("2", false)
+            task.wait(0.5)
+            ReplicatedStorage.GetReadyRemote:FireServer("3", false)
+            task.wait(0.5)
+            ReplicatedStorage.GetReadyRemote:FireServer("1", true)
+        end)
+        WindUI:Notify({
+            Title = "Restore Loading...",
+            Content = "Ready, Restore Vote System...",
+            Duration = 6,
+            Icon = "loader-circle"
+        })
+        task.wait(6)
+        pcall(function()
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                char.HumanoidRootPart.CFrame = CFrame.new(-220, -10, -600)
+            end
+        end)
+        WindUI:Notify({
+            Title = "Restore Loading...",
+            Content = "Restore Vote System, please wait...",
+            Duration = 10,
+            Icon = "loader-circle"
+        })
+        task.wait(10)
+        WindUI:Notify({
+            Title = "Restore Complete",
+            Content = "Vote System restored! You can now use Auto Vote Mode.",
+            Duration = 5,
+            Icon = "check"
+        })
+    end
+})
 
 local GameModeDropdown2 = Main7:Dropdown({
     Title = "Set Vote Mode",
@@ -2667,6 +3092,183 @@ if AutoVoteinGameEnabled then
     StartAutoVoteLoop()
 end
 
+Main7:Divider()
+Main7:Section({ Title = "Casual Information", TextXAlignment = "Center", TextSize = 17 })
+Main7:Divider()
+Main7:Paragraph({
+    Title = "Casual: Mission Selection",
+    Desc = "- [ Step 1 ] Stay in the Lobby (not inside a game)\n- [ Step 2 ] Press Play and go to the Classic gamemode selection screen\n- [ Step 3 ] Select Casual and finish teleporting\n- [ Step 4 ] Run the script",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+})
+Main7:Divider()
+Main7:Section({ Title = "Game Mode", Icon = "gamepad-2" })
+
+GameModeDropdown = Main7:Dropdown({
+    Title = "Set Game Mode",
+    Values = GlobalTables.Mode,
+    Multi = false,
+    Value = AutoGameValue,
+    Callback = function(value)
+        AutoGameValue = value; Config:Set("AutoGameValue", value); Config:Save()
+        print("[DYHUB] Game Mode selected: " .. tostring(value))
+    end
+})
+
+-- PLAY SYSTEM (auto-navigate to Classic/Casual on load)
+--// PLAY + LOBBY SYSTEM
+local DELAY = 1
+
+local function click_btn(btn)
+    if btn and (btn:IsA("ImageButton") or btn:IsA("TextButton")) then
+        pcall(function()
+            if firesignal then
+                firesignal(btn.MouseButton1Click)
+                firesignal(btn.Activated)
+            else
+                btn:Activate()
+            end
+        end)
+    end
+end
+
+local function notify(title, content, icon)
+    WindUI:Notify({
+        Title = title,
+        Content = content,
+        Duration = 3,
+        Icon = "check"
+    })
+end
+
+--// PLAY SYSTEM
+task.spawn(function()
+    local playBtn =
+        workspace:FindFirstChild("ForGui") and
+        workspace.ForGui:FindFirstChild("SurfaceGui") and
+        workspace.ForGui.SurfaceGui:FindFirstChild("Frame") and
+        workspace.ForGui.SurfaceGui.Frame:FindFirstChild("Play")
+
+    if playBtn then
+        notify("Auto Play", "Detected Play button, auto starting...")
+        task.wait(DELAY)
+
+        local playGui = pg:FindFirstChild("Play")
+
+        -- ถ้ายังไม่เปิด GUI Play แปลว่ายังไม่ได้กด
+        if not (playGui and playGui.Enabled) then
+            click_btn(playBtn)
+            notify("Auto Play", "Pressed Play button")
+        else
+            notify("Auto Play", "Play GUI already opened")
+        end
+    end
+
+    task.wait(DELAY)
+
+    local playGui = pg:FindFirstChild("Play")
+    if not (playGui and playGui.Enabled) then
+        return
+    end
+
+    local classicBtn = playGui:FindFirstChild("Classic")
+
+    if classicBtn then
+        notify("Auto Play", "Selecting Classic mode...")
+        task.wait(DELAY)
+        click_btn(classicBtn)
+    end
+
+    task.wait(DELAY)
+
+    local modeGui = pg:FindFirstChild("mode select2")
+
+    if modeGui and modeGui.Enabled then
+        local diffBtn =
+            modeGui:FindFirstChild("MainFrame") and
+            modeGui.MainFrame:FindFirstChild("DiffMode")
+
+        if diffBtn then
+            notify("Auto Play", "Selecting difficulty...")
+            task.wait(DELAY)
+            click_btn(diffBtn)
+        end
+    end
+end)
+
+--// NEW LOBBY SYSTEM
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+
+        local loadingGui = pg:FindFirstChild("LoadingScreen")
+
+        -- ลบ LoadingScreen ถ้ามี
+        if loadingGui then
+            notify("Lobby System", "Removing LoadingScreen...")
+            pcall(function()
+                loadingGui:Destroy()
+            end)
+        end
+
+        local lobby = pg:FindFirstChild("Lobby")
+
+        -- รอจน Lobby เปิด
+        if lobby and lobby.Enabled then
+            notify("Lobby System", "Lobby detected, preparing auto setup...")
+
+            local btn =
+                lobby:FindFirstChild("MainFrame") and
+                lobby.MainFrame:FindFirstChild("Frame") and
+                lobby.MainFrame.Frame:FindFirstChild("Create") and
+                lobby.MainFrame.Frame.Create:FindFirstChild("TrackQuestButton")
+
+            if btn and btn.Visible then
+                notify("Lobby System", "Pressing TrackQuestButton...")
+                click_btn(btn)
+
+                task.wait(0.5)
+
+                -- ยิง Remote เฉพาะตอนเปิด Toggle
+                if AutoVoteEnabled then
+                    notify("Lobby System", "Creating game mode...")
+
+                    ReplicatedStorage.MainHandler:FireServer({
+                        [1] = "StartSolo",
+                        [2] = AutoGameValue
+                    })
+
+                    notify("Lobby System", "Gamemode created successfully!")
+                else
+                    notify("Lobby System", "Use with Auto Game Mode!")
+                end
+
+                break
+            end
+        end
+    end
+end)
+
+--// AUTO GAME MODE TOGGLE
+AutoVoteToggle = Main7:Toggle({
+    Title = "Auto Game Mode (Lobby)",
+    Desc = "Automatically creates the selected game mode when in the lobby.",
+    Value = AutoVoteEnabled,
+
+    Callback = function(enabled)
+        AutoVoteEnabled = enabled
+
+        Config:Set("AutoVoteEnabled", enabled)
+        Config:Save()
+
+        if enabled then
+            notify("Auto Game Mode", "Enabled")
+        else
+            notify("Auto Game Mode", "Disabled", "x")
+        end
+    end
+})
+
 -- ====================== UI: SHOP SYSTEMS ======================
 Main5:Section({ Title = "Auto Gacha", Icon = "sparkles" })
 
@@ -2684,16 +3286,48 @@ do
     local selectedUseItem           = Config:Get("SelectedUseItem", "Presents")
     local useItemRunning            = false
 
-    local function FireShopRemote(remoteName, arg)
-        local remote = GetRemote(remoteName)
-        if not remote then return end
-        pcall(function()
-            if arg ~= nil then
-                remote:FireServer(arg)
-            else
-                remote:FireServer()
+    local function EnsureList(value, fallback)
+        if type(value) == "table" then
+            return value
+        end
+        if value ~= nil then
+            return { value }
+        end
+        return fallback or {}
+    end
+
+    local function WaitWhileEnabled(seconds, enabledFn)
+        local elapsed = 0
+        while elapsed < seconds do
+            if enabledFn and not enabledFn() then
+                return false
             end
+            task.wait(0.25)
+            elapsed = elapsed + 0.25
+        end
+        return true
+    end
+
+    local function FireShopRemote(remoteName, ...)
+        local remote = GetRemote(remoteName)
+        if not remote then return false end
+
+        local args = { ... }
+        local ok, err = pcall(function()
+            remote:FireServer(unpack(args))
         end)
+
+        if not ok then
+            warn("[DYHUB] Shop remote failed:", tostring(remoteName), err)
+        end
+
+        return ok
+    end
+
+    local function ShouldShopSyncWithHeli()
+        -- Sync only when Auto Skip Helicopter is active.
+        -- This prevents skipping before shop/upgrade remotes finish.
+        return AutoSkipHeliEnabled and (AutoFarmEnabled or not SyncFarmOnly or AutoSkipHeliEnabled)
     end
 
     local function StartAutoGachaCharacter()
@@ -2735,7 +3369,8 @@ do
     end
 
     Main5:Dropdown({
-        Title = "Gacha Character Args",
+        Title = "Gacha Character",
+        Desc = "Selects the spin type used for character gacha.",
         Values = gachaArgs,
         Multi = false,
         Value = selectedGachaCharacterArg,
@@ -2749,7 +3384,7 @@ do
     Main5:Toggle({
         Title = "Auto Gacha Character",
         Value = autoGachaCharacterEnabled,
-        Desc = "Automatically spins character gacha using the selected args.",
+        Desc = "Automatically spins character gacha using the selected option.",
         Callback = function(enabled)
             autoGachaCharacterEnabled = enabled
             Config:Set("AutoGachaCharacterEnabled", enabled)
@@ -2759,7 +3394,8 @@ do
     })
 
     Main5:Dropdown({
-        Title = "Gacha Skin Args",
+        Title = "Gacha Skin",
+        Desc = "Selects the spin type used for skin gacha.",
         Values = gachaArgs,
         Multi = false,
         Value = selectedGachaSkinArg,
@@ -2773,7 +3409,7 @@ do
     Main5:Toggle({
         Title = "Auto Gacha Skin",
         Value = autoGachaSkinEnabled,
-        Desc = "Automatically spins skin gacha using the selected args.",
+        Desc = "Automatically spins skin gacha using the selected option.",
         Callback = function(enabled)
             autoGachaSkinEnabled = enabled
             Config:Set("AutoGachaSkinEnabled", enabled)
@@ -2786,6 +3422,7 @@ do
 
     Main5:Dropdown({
         Title = "Use Item",
+        Desc = "Selects the item that Auto Use Item will activate.",
         Values = { "Presents" },
         Multi = false,
         Value = selectedUseItem,
@@ -2799,7 +3436,7 @@ do
     Main5:Toggle({
         Title = "Auto Use Item",
         Value = autoUseItemEnabled,
-        Desc = "Automatically uses the selected item safely with delay.",
+        Desc = "Automatically uses the selected item with a safe delay.",
         Callback = function(enabled)
             autoUseItemEnabled = enabled
             Config:Set("AutoUseItemEnabled", enabled)
@@ -2808,29 +3445,106 @@ do
         end
     })
 
+    -- ====================== SYNC SHOP BUY / UPGRADE SYSTEM ======================
+    Main5:Section({ Title = "Upgrade Shop", Icon = "arrow-up-circle" })
+
+    local titanSpeakerUpgradeValues = { "Jetpack", "OverCharge", "SoundBooster", "Core", "Upgrade" }
+    local utcmUpgradeValues         = { "Shield", "Blaster", "Lens", "Heat", "Armor" }
+    local tvUpgradeValues           = { "Absorb", "ShareOverCharge", "Shield", "AstroArm" }
+
+    local selectedTitanSpeakerUpgrades = EnsureList(Config:Get("SelectedTitanSpeakerUpgrades", { "Jetpack" }), { "Jetpack" })
+    local selectedUTCMUpgrades         = EnsureList(Config:Get("SelectedUTCMUpgrades", { "Shield" }), { "Shield" })
+    local selectedTVUpgrades           = EnsureList(Config:Get("SelectedTVUpgrades", { "Absorb" }), { "Absorb" })
+
+    local upgradeTitanSpeakerEnabled = Config:Get("UpgradeTitanSpeakerEnabled", false)
+    local upgradeUTCMEnabled         = Config:Get("UpgradeUTCMEnabled", false)
+    local upgradeTVEnabled           = Config:Get("UpgradeTVEnabled", false)
+
+    local StartAutoSyncedShopLoop = function() end
+
+    Main5:Dropdown({
+        Title = "Select Titan Speaker Upgrade",
+        Desc = "Selects which Titan Speaker upgrades will be requested.",
+        Values = titanSpeakerUpgradeValues,
+        Multi = true,
+        Value = selectedTitanSpeakerUpgrades,
+        Callback = function(values)
+            selectedTitanSpeakerUpgrades = values or {}
+            Config:Set("SelectedTitanSpeakerUpgrades", selectedTitanSpeakerUpgrades)
+            Config:Save()
+        end
+    })
+
+    Main5:Toggle({
+        Title = "Upgrade Titan Speaker",
+        Desc = "Automatically requests the selected Titan Speaker upgrades.",
+        Value = upgradeTitanSpeakerEnabled,
+        Callback = function(enabled)
+            upgradeTitanSpeakerEnabled = enabled
+            Config:Set("UpgradeTitanSpeakerEnabled", enabled)
+            Config:Save()
+            if enabled then StartAutoSyncedShopLoop() end
+        end
+    })
+
+    Main5:Dropdown({
+        Title = "Select UTCM Upgrade",
+        Desc = "Selects which UTCM upgrades will be requested.",
+        Values = utcmUpgradeValues,
+        Multi = true,
+        Value = selectedUTCMUpgrades,
+        Callback = function(values)
+            selectedUTCMUpgrades = values or {}
+            Config:Set("SelectedUTCMUpgrades", selectedUTCMUpgrades)
+            Config:Save()
+        end
+    })
+
+    Main5:Toggle({
+        Title = "Upgrade UTCM",
+        Desc = "Automatically requests the selected UTCM upgrades.",
+        Value = upgradeUTCMEnabled,
+        Callback = function(enabled)
+            upgradeUTCMEnabled = enabled
+            Config:Set("UpgradeUTCMEnabled", enabled)
+            Config:Save()
+            if enabled then StartAutoSyncedShopLoop() end
+        end
+    })
+
+    Main5:Dropdown({
+        Title = "Select TV Upgrade",
+        Desc = "Selects which TV upgrades will be requested.",
+        Values = tvUpgradeValues,
+        Multi = true,
+        Value = selectedTVUpgrades,
+        Callback = function(values)
+            selectedTVUpgrades = values or {}
+            Config:Set("SelectedTVUpgrades", selectedTVUpgrades)
+            Config:Save()
+        end
+    })
+
+    Main5:Toggle({
+        Title = "Upgrade TV",
+        Desc = "Automatically requests the selected TV upgrades.",
+        Value = upgradeTVEnabled,
+        Callback = function(enabled)
+            upgradeTVEnabled = enabled
+            Config:Set("UpgradeTVEnabled", enabled)
+            Config:Save()
+            if enabled then StartAutoSyncedShopLoop() end
+        end
+    })
+
     Main5:Section({ Title = "Shop Weapon", Icon = "helicopter" })
 
     local autoBuyWeaponValue   = Config:Get("AutoBuyWeaponValue", "Stungun")
     local autoBuyWeaponEnabled = Config:Get("AutoBuyWeaponEnabled", false)
-    local autoBuyWeaponRunning = false
-
-    local function StartAutoBuyWeapon()
-        if autoBuyWeaponRunning then return end
-        autoBuyWeaponRunning = true
-        task.spawn(function()
-            while autoBuyWeaponEnabled do
-                if autoBuyWeaponValue then
-                    local remote = GetRemote("ShopSystem")
-                    if remote then pcall(function() remote:FireServer("Buy", autoBuyWeaponValue) end) end
-                end
-                task.wait(10)
-            end
-            autoBuyWeaponRunning = false
-        end)
-    end
 
     WeaponDropdown = Main5:Dropdown({
-        Title = "Select Buy (Weapon)",
+        Title = "Select Weapon",
+        Desc = "Selects the weapon that will be bought automatically.",
         Values = GlobalTables.Weapon,
         Multi = false,
         Value = autoBuyWeaponValue,
@@ -2842,21 +3556,24 @@ do
     })
 
     AutoBuyWeaponToggle = Main5:Toggle({
-        Title = "Auto Buy (Weapon)",
+        Title = "Buy Weapon",
+        Desc = "Automatically buys the selected weapon during shop cycles.",
         Value = autoBuyWeaponEnabled,
         Callback = function(enabled)
             autoBuyWeaponEnabled = enabled
             Config:Set("AutoBuyWeaponEnabled", enabled)
             Config:Save()
-            if enabled then StartAutoBuyWeapon() end
+            if enabled then StartAutoSyncedShopLoop() end
         end
     })
 
     Main5:Button({
         Title = "Buy Weapon (Once)",
+        Desc = "Buys the selected weapon one time.",
         Callback = function()
-            local remote = GetRemote("ShopSystem")
-            if remote and autoBuyWeaponValue then pcall(function() remote:FireServer("Buy", autoBuyWeaponValue) end) end
+            if autoBuyWeaponValue then
+                FireShopRemote("ShopSystem", "Buy", autoBuyWeaponValue)
+            end
         end
     })
 
@@ -2864,23 +3581,10 @@ do
 
     local autoBuyMiscValue   = Config:Get("AutoBuyMiscValue", "HeadPhone")
     local autoBuyMiscEnabled = Config:Get("AutoBuyMiscEnabled", false)
-    local autoBuyMiscRunning = false
-
-    local function StartAutoBuyMisc()
-        if autoBuyMiscRunning then return end
-        autoBuyMiscRunning = true
-        task.spawn(function()
-            while autoBuyMiscEnabled do
-                local remote = GetRemote("ShopSystem")
-                if remote and autoBuyMiscValue then pcall(function() remote:FireServer("Buy", autoBuyMiscValue) end) end
-                task.wait(10)
-            end
-            autoBuyMiscRunning = false
-        end)
-    end
 
     MiscShopDropdown = Main5:Dropdown({
-        Title = "Select Buy (Misc)",
+        Title = "Select Misc",
+        Desc = "Selects the misc item that will be bought automatically.",
         Values = GlobalTables.MiscShop,
         Multi = false,
         Value = autoBuyMiscValue,
@@ -2892,29 +3596,233 @@ do
     })
 
     AutoBuyMiscToggle = Main5:Toggle({
-        Title = "Auto Buy (Misc)",
+        Title = "Buy Misc",
         Value = autoBuyMiscEnabled,
+        Desc = "Automatically buys the selected misc item during shop cycles.",
         Callback = function(enabled)
             autoBuyMiscEnabled = enabled
             Config:Set("AutoBuyMiscEnabled", enabled)
             Config:Save()
-            if enabled then StartAutoBuyMisc() end
+            if enabled then StartAutoSyncedShopLoop() end
         end
     })
 
     Main5:Button({
         Title = "Buy Misc (Once)",
+        Desc = "Buys the selected misc item one time.",
         Callback = function()
-            local remote = GetRemote("ShopSystem")
-            if remote and autoBuyMiscValue then pcall(function() remote:FireServer("Buy", autoBuyMiscValue) end) end
+            if autoBuyMiscValue then
+                FireShopRemote("ShopSystem", "Buy", autoBuyMiscValue)
+            end
+        end
+    })
+
+    local autoSyncedShopRunning = false
+
+    local function IsAnySyncedShopEnabled()
+        return autoBuyWeaponEnabled
+            or autoBuyMiscEnabled
+            or upgradeTitanSpeakerEnabled
+            or upgradeUTCMEnabled
+            or upgradeTVEnabled
+    end
+
+    local function FireSyncedShopBatch()
+        if autoBuyWeaponEnabled and autoBuyWeaponValue then
+            FireShopRemote("ShopSystem", "Buy", autoBuyWeaponValue)
+            task.wait(0.15)
+        end
+
+        if autoBuyMiscEnabled and autoBuyMiscValue then
+            FireShopRemote("ShopSystem", "Buy", autoBuyMiscValue)
+            task.wait(0.15)
+        end
+
+        if upgradeTitanSpeakerEnabled then
+            for _, upgradeName in ipairs(selectedTitanSpeakerUpgrades or {}) do
+                FireShopRemote("ChangeUpgradedTitanSpeaker", upgradeName)
+                task.wait(0.15)
+            end
+        end
+
+        if upgradeUTCMEnabled then
+            for _, upgradeName in ipairs(selectedUTCMUpgrades or {}) do
+                FireShopRemote("ForUpgradeUTCM", upgradeName)
+                task.wait(0.15)
+            end
+        end
+
+        if upgradeTVEnabled then
+            for _, upgradeName in ipairs(selectedTVUpgrades or {}) do
+                FireShopRemote("ForUpgradeTV", upgradeName)
+                task.wait(0.15)
+            end
+        end
+    end
+
+    StartAutoSyncedShopLoop = function()
+        if autoSyncedShopRunning then return end
+        autoSyncedShopRunning = true
+
+        task.spawn(function()
+            local firstCycle = true
+
+            while IsAnySyncedShopEnabled() do
+                if not firstCycle then
+                    if not WaitWhileEnabled(30, IsAnySyncedShopEnabled) then break end
+                end
+                firstCycle = false
+
+                local shouldSyncHeli = ShouldShopSyncWithHeli()
+                if shouldSyncHeli then
+                    TriggerAutoSkipHeli(false)
+                    task.wait(0.25)
+                end
+
+                FireSyncedShopBatch()
+
+                if shouldSyncHeli then
+                    task.wait(0.25)
+                    TriggerAutoSkipHeli(true)
+                end
+
+                if not WaitWhileEnabled(10, IsAnySyncedShopEnabled) then break end
+            end
+
+            autoSyncedShopRunning = false
+        end)
+    end
+
+    -- ====================== SHOP HOURLY SYSTEM ======================
+    Main5:Section({ Title = "Shop Hourly", Icon = "clock" })
+
+    local function GetShopHourlyItems()
+        local results = {}
+        local seen = {}
+        local gears = ReplicatedFirst:FindFirstChild("Gears")
+
+        if not gears then
+            pcall(function()
+                gears = ReplicatedFirst:WaitForChild("Gears", 3)
+            end)
+        end
+
+        if gears then
+            for _, category in ipairs(gears:GetChildren()) do
+                local children = category:GetChildren()
+                if #children > 0 then
+                    for _, item in ipairs(children) do
+                        local itemName = tostring(category.Name) .. ":" .. tostring(item.Name)
+                        if not seen[itemName] then
+                            seen[itemName] = true
+                            table.insert(results, itemName)
+                        end
+                    end
+                else
+                    local itemName = tostring(category.Name)
+                    if not seen[itemName] then
+                        seen[itemName] = true
+                        table.insert(results, itemName)
+                    end
+                end
+            end
+        end
+
+        table.sort(results)
+
+        if #results == 0 then
+            results = { "MasterCard:SpecialTitanIII" }
+        end
+
+        return results
+    end
+
+    local shopHourlyValues          = GetShopHourlyItems()
+    local selectedShopHourlyItems   = EnsureList(Config:Get("SelectedShopHourlyItems", { shopHourlyValues[1] }), { shopHourlyValues[1] })
+    local shopHourlyItemAmount      = Config:Get("ShopHourlyItemAmount", 1)
+    local buyItemHourlyEnabled      = Config:Get("BuyItemHourlyEnabled", false)
+    local buyItemHourlyRunning      = false
+
+    local function IsBuyItemHourlyEnabled()
+        return buyItemHourlyEnabled
+    end
+
+    local function FireShopHourlyBatch()
+        local amount = tonumber(shopHourlyItemAmount) or 1
+        amount = math.max(1, math.floor(amount))
+
+        for _, itemName in ipairs(selectedShopHourlyItems or {}) do
+            if itemName and itemName ~= "" then
+                FireShopRemote("BuyItemFromShopHourly", itemName, amount)
+                task.wait(0.15)
+            end
+        end
+    end
+
+    local function StartBuyItemHourlyLoop()
+        if buyItemHourlyRunning then return end
+        buyItemHourlyRunning = true
+
+        task.spawn(function()
+            local firstCycle = true
+
+            while buyItemHourlyEnabled do
+                if not firstCycle then
+                    if not WaitWhileEnabled(30, IsBuyItemHourlyEnabled) then break end
+                end
+                firstCycle = false
+
+                FireShopHourlyBatch()
+
+                if not WaitWhileEnabled(10, IsBuyItemHourlyEnabled) then break end
+            end
+
+            buyItemHourlyRunning = false
+        end)
+    end
+
+    Main5:Dropdown({
+        Title = "Select Shop Hourly",
+        Desc = "Selects hourly shop items from ReplicatedFirst.Gears.",
+        Values = shopHourlyValues,
+        Multi = true,
+        Value = selectedShopHourlyItems,
+        Callback = function(values)
+            selectedShopHourlyItems = values or {}
+            Config:Set("SelectedShopHourlyItems", selectedShopHourlyItems)
+            Config:Save()
+        end
+    })
+
+    Main5:Slider({
+        Title = "Item Amount",
+        Desc = "Sets how many of each selected hourly item to buy.",
+        Value = { Min = 1, Max = 100, Default = shopHourlyItemAmount },
+        Step = 1,
+        Callback = function(value)
+            shopHourlyItemAmount = value
+            Config:Set("ShopHourlyItemAmount", value)
+            Config:Save()
+        end
+    })
+
+    Main5:Toggle({
+        Title = "Buy Item",
+        Desc = "Automatically buys selected hourly shop items on a timed loop.",
+        Value = buyItemHourlyEnabled,
+        Callback = function(enabled)
+            buyItemHourlyEnabled = enabled
+            Config:Set("BuyItemHourlyEnabled", enabled)
+            Config:Save()
+            if enabled then StartBuyItemHourlyLoop() end
         end
     })
 
     if autoGachaCharacterEnabled then StartAutoGachaCharacter() end
     if autoGachaSkinEnabled then StartAutoGachaSkin() end
     if autoUseItemEnabled then StartAutoUseItem() end
-    if autoBuyWeaponEnabled then StartAutoBuyWeapon() end
-    if autoBuyMiscEnabled then StartAutoBuyMisc() end
+    if IsAnySyncedShopEnabled() then StartAutoSyncedShopLoop() end
+    if buyItemHourlyEnabled then StartBuyItemHourlyLoop() end
 end
 
 -- ====================== UI: COLLECT TAB ======================
@@ -2934,12 +3842,14 @@ Main6:Section({ Title = "Setting Collect", Icon = "settings" })
 
 CollectItemDropdown = Main6:Dropdown({
     Title = "Item Collect",
+    Desc = "Selects which collectible items Auto Collect will target.",
     Values = CollectItems, Multi = true, Value = SelectedCollectItems,
     Callback = function(values) SelectedCollectItems = values or {}; Config:Set("SelectedCollectItems", values); Config:Save() end
 })
 
 CollectModeDropdown = Main6:Dropdown({
     Title = "Mode Collect",
+    Desc = "Selects when Auto Collect should collect items.",
     Values = { "Clean", "IDGF" }, Multi = false, Value = CollectMode,
     Callback = function(value) CollectMode = value; Config:Set("CollectMode", value); Config:Save() end
 })
@@ -2979,7 +3889,9 @@ Main3:Toggle({
 })
 
 Main3:Input({
-    Title = "Delay Save Config", Default = tostring(AutoSaveDelay), Placeholder = "Default: 15",
+    Title = "Delay Save Config",
+    Desc = "Sets the auto-save interval in seconds.",
+    Default = tostring(AutoSaveDelay), Placeholder = "Default: 15",
     Callback = function(text)
         local num = tonumber(text)
         if num and num >= 1 then AutoSaveDelay = num; Config:Set("AutoSaveDelay", num); Config:Save(); RestartAutoSave()
@@ -3030,7 +3942,8 @@ Main3:Button({
 Main3:Section({ Title = "Miscellaneous", Icon = "settings" })
 
 CameraDropdown = Main3:Dropdown({
-    Title = "Camera",
+    Title = "Camera Mode",
+	 Desc = "Set Camera to classified",
     Values = { "Classic", "Manuel" },
     Multi = false,
     Value = CameraMode,
@@ -3099,6 +4012,9 @@ function ApplySavedConfigOnStartup()
     task.wait(1)
     updatePlayerStats()
     ApplyCameraMode()
+    if FullBrightEnabled then ApplyFullBright() end
+    if NoFogEnabled then ApplyNoFog() end
+    if FlyEnabled then StartFly() end
 
     if AutoFarmEnabled then
         StartFarmLoop()
@@ -3125,5 +4041,5 @@ end
 
 ApplySavedConfigOnStartup()
 
-print("[DYHUB] Version " .. version .. " " .. ver .. " loaded successfully!")
+print("[DYHUB] Version: " .. version .. " | Changelog: " .. ver .. " loaded successfully!")
 print("[DYHUB] Config system active | Auto saving every " .. tostring(AutoSaveDelay) .. " seconds")
