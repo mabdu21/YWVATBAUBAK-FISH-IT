@@ -1,7 +1,7 @@
--- v099 | [Local Register Fix]
+-- v123 | [Local Register Fix]
 -- =========================
 version = "Rework"
-ver = "v023.61"
+ver = "v023.62"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -57,7 +57,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config_02361.json"
+    self.ConfigPath = ConfigFolder .. "/config_02362.json"
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
     self:Load()
     return self
@@ -188,13 +188,13 @@ Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/30/2026 | CL: " .. ver,
     Desc = [[- [ New ] Farm Astro Tokens
-    - [ Added ] Fly System
-	- [ Added ] Shop Hourly 
-	- [ Added ] Camera Mode 
-	- [ Added ] Movement Stat Lock protects 
-	- [ Added ] Upgrade Titan, Speaker, UTCM, TV 
-	- [ Added ] Infinite Jump, Full Bright, No Fog 
-    - [ Improved ] Shop systems keep synced before Skip Helicopter]],
+- [ Added ] Fly System
+- [ Added ] Shop Hourly 
+- [ Added ] Camera Mode 
+- [ Added ] Movement Stat Lock protects 
+- [ Added ] Upgrade Titan, Speaker, UTCM, TV 
+- [ Added ] Infinite Jump, Full Bright, No Fog 
+- [ Improved ] Shop systems keep synced before Skip Helicopter]],
 })
 Info:Divider()
 Info:Section({ Title = "Discord Information", TextXAlignment = "Center", TextSize = 17 })
@@ -329,10 +329,32 @@ function NormalizeFarmMode(mode)
     return mode
 end
 
+function NormalizeFarmTargetMode(mode)
+    mode = tostring(mode or "Normal Mode")
+    if mode ~= "Normal Mode" and mode ~= "Astro Mode" then
+        return "Normal Mode"
+    end
+    return mode
+end
+
+function NormalizeCollectMovement(mode)
+    mode = tostring(mode or "Tween")
+    if mode ~= "Teleport" and mode ~= "Tween" then
+        return "Tween"
+    end
+    return mode
+end
+
+function IsPaidUserVersion()
+    return userversion == PremiumVersion or userversion == ExtraVersion
+end
+
 -- ====================== STATE VARIABLES ======================
 AutoFarmEnabled        = Config:Get("AutoFarmEnabled", false)
 FarmPosition           = Config:Get("FarmPosition", "Above")
 FarmMode               = NormalizeFarmMode(Config:Get("FarmMode", "Tween"))
+FarmTargetMode         = NormalizeFarmTargetMode(Config:Get("FarmTargetMode", "Normal Mode"))
+if not IsPaidUserVersion() then FarmTargetMode = "Normal Mode" end
 MiscOptions            = Config:Get("MiscOptions", {})
 SyncFarmOnly           = Config:Get("SyncFarmOnly", true)
 FarmAstroTokenEnabled  = Config:Get("FarmAstroTokenEnabled", false)
@@ -378,6 +400,8 @@ CameraMode             = Config:Get("CameraMode", "Manuel")
 FarmLoopRunning        = false
 AutoAttackLoopRunning  = false
 AutoSkillLoopRunning   = false
+FarmForceRetarget      = false
+FarmCollecting         = false
 CombatDebugEnabled     = Config:Get("CombatDebugEnabled", false)
 CombatDebugCooldowns   = {}
 
@@ -815,12 +839,38 @@ end
 SetupMobCacheWorkspaceHooks()
 
 -- ====================== MOB SELECTION ======================
+function IsAstroMob(mob)
+    return mob and mob.Name and mob.Name:lower():find("astro", 1, true) ~= nil
+end
+
+function IsFarmMobAllowedByMode(mob)
+    if FarmTargetMode == "Astro Mode" then
+        return IsAstroMob(mob)
+    end
+    return true
+end
+
+function GetFarmCandidateMobs(forceRefresh)
+    local source = GetCachedLivingMobs(forceRefresh == true)
+    if FarmTargetMode ~= "Astro Mode" then
+        return source
+    end
+
+    local filtered = {}
+    for _, mob in ipairs(source) do
+        if IsFarmMobAllowedByMode(mob) then
+            table.insert(filtered, mob)
+        end
+    end
+    return filtered
+end
+
 function GetNearestMob()
     if RefreshCombatCharacter then RefreshCombatCharacter() end
     if not HumanoidRootPart then return nil end
 
     local nearestMob, nearestDist = nil, math.huge
-    for _, mob in ipairs(GetCachedLivingMobs(false)) do
+    for _, mob in ipairs(GetFarmCandidateMobs(false)) do
         local mobRoot = mob:FindFirstChild("HumanoidRootPart")
         if mobRoot then
             local d = (HumanoidRootPart.Position - mobRoot.Position).Magnitude
@@ -839,7 +889,7 @@ function GetHighestMob()
     local highestMob, highestY = nil, -math.huge
     local myY = HumanoidRootPart and HumanoidRootPart.Position.Y or 0
 
-    for _, mob in ipairs(GetCachedLivingMobs(false)) do
+    for _, mob in ipairs(GetFarmCandidateMobs(false)) do
         local mobRoot = mob:FindFirstChild("HumanoidRootPart")
         if mobRoot then
             local mobY = mobRoot.Position.Y
@@ -854,13 +904,13 @@ function GetHighestMob()
 end
 
 -- ============================================================
--- ====================== NEW PRIORITY SYSTEM =================
--- ลำดับ: GiantST (4) → Helicopter (3) → HighHP >threshold (2) → Nearest (1)
--- ถ้า HighHP MaxHP ต่ำกว่า HighHPThreshold → ข้ามไปใช้ Nearest แทน
+-- ====================== PRIORITY SYSTEM =====================
+-- Normal Mode: GiantST(4) → Heli(3) → HighHP(2) → Nearest(1)
+-- Astro Mode: only mobs with "Astro" in the name are allowed.
 -- ============================================================
 
 function GetHelicopter()
-    for _, mob in ipairs(GetCachedLivingMobs(false)) do
+    for _, mob in ipairs(GetFarmCandidateMobs(false)) do
         if mob.Name:lower():find("helicopter") then
             return mob
         end
@@ -869,7 +919,8 @@ function GetHelicopter()
 end
 
 function GetGiantSTToilet()
-    for _, mob in ipairs(GetCachedLivingMobs(false)) do
+    if FarmTargetMode == "Astro Mode" then return nil, nil end
+    for _, mob in ipairs(GetFarmCandidateMobs(false)) do
         if mob.Name == "Giant ST toilet" then
             local lever = mob:FindFirstChild("lever")
             if lever then
@@ -881,53 +932,68 @@ function GetGiantSTToilet()
     return nil, nil
 end
 
--- หา mob ที่มี MaxHP สูงสุด และ MaxHP ต้องเกิน HighHPThreshold
 function GetHighHPMob()
     local bestMob, bestHP = nil, HighHPThreshold
-
-    for _, mob in ipairs(GetCachedLivingMobs(false)) do
+    for _, mob in ipairs(GetFarmCandidateMobs(false)) do
         local hp = GetMobMaxHP(mob)
         if hp > bestHP then
             bestHP = hp
             bestMob = mob
         end
     end
-
     return bestMob
 end
 
--- ─── GetPriorityMob: คืน mob, mobType, extraData, priorityLevel ───
--- priorityLevel: 4=GiantST, 3=Heli, 2=HighHP, 1=Nearest
 function GetPriorityMob()
-    -- ลำดับ 1: GiantST
-    local giant, prompt = GetGiantSTToilet()
+    if RefreshCombatCharacter then RefreshCombatCharacter() end
+    if not HumanoidRootPart then return nil, nil, nil, 0 end
+
+    local giant, prompt = nil, nil
+    local heli, highMob, nearMob = nil, nil, nil
+    local bestHP, nearDist = HighHPThreshold, math.huge
+    local candidates = GetFarmCandidateMobs(false)
+
+    for _, mob in ipairs(candidates) do
+        if not giant and FarmTargetMode ~= "Astro Mode" and mob.Name == "Giant ST toilet" then
+            local lever = mob:FindFirstChild("lever")
+            if lever then
+                local pr = lever:FindFirstChildOfClass("ProximityPrompt")
+                if pr then giant = mob; prompt = pr end
+            end
+        end
+
+        if not heli and mob.Name:lower():find("helicopter") then
+            heli = mob
+        end
+
+        local hp = GetMobMaxHP(mob)
+        if hp > bestHP then
+            bestHP = hp
+            highMob = mob
+        end
+
+        local mobRoot = mob:FindFirstChild("HumanoidRootPart")
+        if mobRoot and HumanoidRootPart then
+            local d = (HumanoidRootPart.Position - mobRoot.Position).Magnitude
+            if d < nearDist then
+                nearDist = d
+                nearMob = mob
+            end
+        end
+    end
+
     if giant and prompt then return giant, "GiantST", prompt, 4 end
-    -- ลำดับ 2: Helicopter
-    local heli = GetHelicopter()
     if heli then return heli, "Helicopter", nil, 3 end
-    -- ลำดับ 3: HighHP mob (MaxHP > threshold)
-    local highHPMob = GetHighHPMob()
-    if highHPMob then return highHPMob, "HighHP", nil, 2 end
-    -- ลำดับ 4: Nearest mob ปกติ
-    local nearMob = GetNearestMob()
+    if highMob then return highMob, "HighHP", nil, 2 end
     if nearMob then return nearMob, "NearestMob", nil, 1 end
+
     return nil, nil, nil, 0
 end
 
--- ─── Interrupt Check: เช็คว่ามี priority mob ระดับสูงกว่า current หรือไม่ ───
 function CheckInterrupt(currentPriority)
-    -- GiantST ปรากฏ → interrupt เสมอ (ถ้า current ไม่ใช่ GiantST)
-    if currentPriority < 4 then
-        local g, pr = GetGiantSTToilet()
-        if g and pr then return true, 4 end
-    end
-    -- Helicopter ปรากฏ → interrupt ถ้า current ต่ำกว่า 3
-    if currentPriority < 3 then
-        if GetHelicopter() then return true, 3 end
-    end
-    -- HighHP mob ปรากฏ → interrupt ถ้า current ต่ำกว่า 2
-    if currentPriority < 2 then
-        if GetHighHPMob() then return true, 2 end
+    local mob, _, _, newPriority = GetPriorityMob()
+    if mob and newPriority > (currentPriority or 0) then
+        return true, newPriority
     end
     return false, currentPriority
 end
@@ -936,7 +1002,21 @@ end
 -- ====================== MOB VISUAL BOUNDS ===================
 -- ============================================================
 
-function GetMobVisualBounds(mob)
+MobBoundsCache = {}
+MobBoundsCacheAt = {}
+MobBoundsCacheTTL = 0.25
+
+function ClearMobBoundsCache(mob)
+    if mob then
+        MobBoundsCache[mob] = nil
+        MobBoundsCacheAt[mob] = nil
+    else
+        MobBoundsCache = {}
+        MobBoundsCacheAt = {}
+    end
+end
+
+function ComputeMobVisualBounds(mob)
     local minY, maxY = math.huge, -math.huge
     local centerX, centerZ, count = 0, 0, 0
 
@@ -964,6 +1044,21 @@ function GetMobVisualBounds(mob)
     local cz = centerZ / count
     local cy = (minY + maxY) * 0.5
     return Vector3.new(cx, cy, cz), minY, maxY
+end
+
+function GetMobVisualBounds(mob)
+    if not mob then return Vector3.new(0, 0, 0), 0, 4 end
+
+    local now = tick()
+    local cached = MobBoundsCache[mob]
+    if cached and MobBoundsCacheAt[mob] and now - MobBoundsCacheAt[mob] <= MobBoundsCacheTTL then
+        return cached[1], cached[2], cached[3]
+    end
+
+    local center, minY, maxY = ComputeMobVisualBounds(mob)
+    MobBoundsCache[mob] = { center, minY, maxY }
+    MobBoundsCacheAt[mob] = now
+    return center, minY, maxY
 end
 
 -- ============================================================
@@ -1205,16 +1300,17 @@ function SafeGetPriorityMob()
             return mob, mobType, extraData, priority
         end
 
-        -- One extra forced refresh prevents the common bug where Living loaded late.
-        InvalidateMobCache("priority returned nil")
-        local ok2, mob2, mobType2, extraData2, priority2 = pcall(function()
-            RebuildMobCache()
-            return GetPriorityMob()
-        end)
+        if tick() - MobCacheLastRebuild > 0.6 then
+            InvalidateMobCache("priority returned nil")
+            local ok2, mob2, mobType2, extraData2, priority2 = pcall(function()
+                RebuildMobCache()
+                return GetPriorityMob()
+            end)
 
-        if ok2 and mob2 then
-            CombatDebug("PriorityRecovered", "Priority mob recovered after cache rebuild: " .. tostring(mob2.Name), 3)
-            return mob2, mobType2, extraData2, priority2
+            if ok2 and mob2 then
+                CombatDebug("PriorityRecovered", "Priority mob recovered after cache rebuild: " .. tostring(mob2.Name), 3)
+                return mob2, mobType2, extraData2, priority2
+            end
         end
 
         CombatDebug("PriorityNoMob", "No valid mob found yet.", 4)
@@ -1233,27 +1329,26 @@ function StartAutoAttack()
 
     task.spawn(function()
         while AutoAttackEnabled do
-            if IsMiscFarmAllowed() then
+            if FarmCollecting then
+                task.wait(0.2)
+            elseif IsMiscFarmAllowed() then
                 local mob = SafeGetPriorityMob()
                 if mob then
-                    -- If Auto Farm previously waited for respawn/no mobs, unlock combat when a mob exists again.
                     WaitingRespawn = false
-
                     local remote = GetRemote("LMB")
                     if remote then
-                        pcall(function()
-                            remote:FireServer()
-                        end)
+                        pcall(function() remote:FireServer() end)
                     else
                         CombatDebug("AutoAttackRemote", "LMB remote is missing.", 5, true)
                     end
                 else
                     CombatDebug("AutoAttackNoMob", "Auto Attack is waiting for a valid mob.", 5)
                 end
+                task.wait(0.12)
             else
                 CombatDebug("AutoAttackPaused", "Auto Attack paused by Sync Farm Only / Farm Astro Token.", 5)
+                task.wait(0.25)
             end
-            task.wait(0.08)
         end
 
         AutoAttackLoopRunning = false
@@ -1266,10 +1361,11 @@ function StartAutoSkill()
 
     task.spawn(function()
         while AutoSkillEnabled do
-            if IsMiscFarmAllowed() then
+            if FarmCollecting then
+                task.wait(0.2)
+            elseif IsMiscFarmAllowed() then
                 local mob = SafeGetPriorityMob()
                 if mob then
-                    -- If Auto Farm previously waited for respawn/no mobs, unlock skills when a mob exists again.
                     WaitingRespawn = false
 
                     local keysToPress = {}
@@ -1280,7 +1376,7 @@ function StartAutoSkill()
                     end
 
                     for _, key in ipairs(keysToPress) do
-                        if not AutoSkillEnabled or not IsMiscFarmAllowed() then break end
+                        if not AutoSkillEnabled or not IsMiscFarmAllowed() or FarmCollecting then break end
 
                         local keyCode = Enum.KeyCode[key]
                         if keyCode then
@@ -1296,11 +1392,13 @@ function StartAutoSkill()
                     end
                 else
                     CombatDebug("AutoSkillNoMob", "Auto Skill is waiting for a valid mob.", 5)
+                    task.wait(0.25)
                 end
             else
                 CombatDebug("AutoSkillPaused", "Auto Skill paused by Sync Farm Only / Farm Astro Token.", 5)
+                task.wait(0.25)
             end
-            task.wait(LoopDelay)
+            task.wait(0.05)
         end
 
         AutoSkillLoopRunning = false
@@ -1753,9 +1851,13 @@ CollectGroupMap = {
 AutoCollectEnabled   = Config:Get("AutoCollectEnabled", false)
 SelectedCollectItems = Config:Get("SelectedCollectItems", {})
 CollectMode          = Config:Get("CollectMode", "Clean")
+CollectMovementMode  = NormalizeCollectMovement(Config:Get("CollectMovementMode", "Tween"))
 
 KnownCollectItems = {}
 CollectRunning    = false
+CollectCandidateCache = {}
+CollectCacheDirty = true
+CollectLastFullScan = 0
 
 -- ============================================================
 -- ====================== FARM ASTRO TOKEN ====================
@@ -1983,7 +2085,7 @@ end
 
 
 function MatchesPattern(objectName, pattern)
-    local objL, patL = objectName:lower(), pattern:lower()
+    local objL, patL = tostring(objectName or ""):lower(), tostring(pattern or ""):lower()
     if objL == patL then return true end
     if #objL > #patL and objL:sub(1, #patL) == patL then
         local nc = objL:sub(#patL + 1, #patL + 1)
@@ -2004,13 +2106,41 @@ function IsCollectTarget(objectName)
     return false
 end
 
+function IsCollectObject(obj)
+    return obj and obj.Parent and (obj:IsA("Model") or obj:IsA("MeshPart") or obj:IsA("Part") or obj:IsA("BasePart"))
+end
+
+function AddCollectCandidate(obj)
+    if IsCollectObject(obj) and IsCollectTarget(obj.Name) then
+        CollectCandidateCache[obj] = true
+        return true
+    end
+    return false
+end
+
+function RebuildCollectCache()
+    CollectCandidateCache = {}
+    if #SelectedCollectItems > 0 then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            AddCollectCandidate(obj)
+        end
+    end
+    CollectCacheDirty = false
+    CollectLastFullScan = tick()
+end
+
 function FindNewCollectItems()
+    if CollectCacheDirty or tick() - CollectLastFullScan > 5 then
+        RebuildCollectCache()
+    end
+
     local found = {}
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj and obj.Parent and IsCollectTarget(obj.Name) then
-            if obj:IsA("Model") or obj:IsA("MeshPart") or obj:IsA("Part") or obj:IsA("BasePart") then
-                if not KnownCollectItems[obj] then table.insert(found, obj) end
-            end
+    for obj, _ in pairs(CollectCandidateCache) do
+        if not obj or not obj.Parent or not IsCollectTarget(obj.Name) then
+            CollectCandidateCache[obj] = nil
+            KnownCollectItems[obj] = nil
+        elseif not KnownCollectItems[obj] and IsCollectObject(obj) then
+            table.insert(found, obj)
         end
     end
     return found
@@ -2022,22 +2152,58 @@ function GetItemRootPart(obj)
     return nil
 end
 
-function TweenToItem(itemRoot)
-    if not itemRoot or not HumanoidRootPart then return end
-    local targetPos = itemRoot.Position + Vector3.new(0, 3, 0)
-    local targetCF  = CFrame.new(targetPos, itemRoot.Position)
-    local tween = TweenService:Create(HumanoidRootPart, TweenInfo.new(TweenSpeed, Enum.EasingStyle.Linear), { CFrame = targetCF })
-    tween:Play()
-    tween.Completed:Wait()
+function GetItemTargetCFrame(itemRoot)
+    if not itemRoot then return nil end
+    return CFrame.new(itemRoot.Position + Vector3.new(0, 3, 0), itemRoot.Position)
+end
+
+function MoveToItem(itemRoot)
+    RefreshCombatCharacter()
+    if not itemRoot or not Character or not HumanoidRootPart then return false end
+
+    local targetCF = GetItemTargetCFrame(itemRoot)
+    if not targetCF then return false end
+
+    if CollectMovementMode == "Teleport" then
+        pcall(function()
+            Character:PivotTo(targetCF)
+            HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+            HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+        end)
+        return true
+    end
+
+    local ok = pcall(function()
+        local tween = TweenService:Create(HumanoidRootPart, TweenInfo.new(TweenSpeed, Enum.EasingStyle.Linear), { CFrame = targetCF })
+        tween:Play()
+        local started = tick()
+        repeat
+            task.wait(0.05)
+            if not AutoCollectEnabled or IsItemGone(itemRoot) then
+                pcall(function() tween:Cancel() end)
+                break
+            end
+        until tween.PlaybackState ~= Enum.PlaybackState.Playing or tick() - started > math.max(TweenSpeed + 1, 3)
+        pcall(function()
+            Character:PivotTo(targetCF)
+            HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+            HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+        end)
+    end)
+
+    return ok
 end
 
 function ActivateItemPrompts(obj)
     pcall(function()
         for _, child in ipairs(obj:GetDescendants()) do
             if child:IsA("ProximityPrompt") then
-                child.HoldDuration = 0; child.MaxActivationDistance = 50
+                child.HoldDuration = 0
+                child.MaxActivationDistance = 50
                 if fireproximityprompt then fireproximityprompt(child) end
-                child:InputHoldBegin(); task.wait(0.05); child:InputHoldEnd()
+                child:InputHoldBegin()
+                task.wait(0.04)
+                child:InputHoldEnd()
             end
         end
     end)
@@ -2045,38 +2211,61 @@ end
 
 function IsItemGone(obj) return not obj or not obj.Parent end
 
+function BeginCollectPause()
+    FarmCollecting = true
+    FarmForceRetarget = true
+    LockActive = false
+    if FarmAstroTokenEnabled then SetFarmAstroCollectPause(true) end
+    task.wait(0.08)
+end
+
+function EndCollectPause()
+    if FarmAstroTokenEnabled then SetFarmAstroCollectPause(false) end
+    FarmCollecting = false
+    FarmForceRetarget = true
+    if AutoFarmEnabled then
+        WaitingRespawn = false
+        StartFarmLoop()
+    end
+    HandleMiscOptions(MiscOptions)
+    task.delay(0.6, function()
+        FarmForceRetarget = false
+    end)
+end
+
 function CollectSingleItem(obj)
     if IsItemGone(obj) then return end
     local itemRoot = GetItemRootPart(obj)
     if not itemRoot then return end
-    TweenToItem(itemRoot)
-    local lockConn
-    lockConn = RunService.Heartbeat:Connect(function()
-        if IsItemGone(obj) or not AutoCollectEnabled then lockConn:Disconnect(); return end
-        if not itemRoot or not itemRoot.Parent then lockConn:Disconnect(); return end
-        local targetCF = CFrame.new(itemRoot.Position + Vector3.new(0, 3, 0), itemRoot.Position)
-        if Character and HumanoidRootPart then
-            Character:PivotTo(targetCF)
-            HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
-            HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
-        end
-    end)
+
+    MoveToItem(itemRoot)
+
     local timeout = 0
-    repeat
-        ActivateItemPrompts(obj); task.wait(0.1); timeout = timeout + 0.1
-        if timeout > 10 then break end
-    until IsItemGone(obj) or not AutoCollectEnabled
-    lockConn:Disconnect()
+    while AutoCollectEnabled and not IsItemGone(obj) and timeout < 8 do
+        itemRoot = GetItemRootPart(obj)
+        if not itemRoot then break end
+
+        if timeout == 0 or timeout % 0.3 < 0.16 then
+            local targetCF = GetItemTargetCFrame(itemRoot)
+            pcall(function()
+                if targetCF and Character and HumanoidRootPart then
+                    Character:PivotTo(targetCF)
+                    HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+                    HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+                end
+            end)
+        end
+
+        ActivateItemPrompts(obj)
+        task.wait(0.15)
+        timeout = timeout + 0.15
+    end
+
     KnownCollectItems[obj] = true
 end
 
 function AllMobsDead()
-    local livingFolder = workspace:FindFirstChild("Living")
-    if not livingFolder then return true end
-    for _, mob in ipairs(livingFolder:GetChildren()) do
-        if IsValidMob(mob) then return false end
-    end
-    return true
+    return #GetFarmCandidateMobs(false) == 0
 end
 
 function StartAutoCollectLoop()
@@ -2089,40 +2278,44 @@ function StartAutoCollectLoop()
                 task.wait(1)
                 continue
             end
+
             if #SelectedCollectItems > 0 then
                 local itemsToCollect = FindNewCollectItems()
                 if #itemsToCollect > 0 then
                     if CollectMode == "IDGF" then
-                        LockActive = false; task.wait(0.1)
-                        if FarmAstroTokenEnabled then SetFarmAstroCollectPause(true) end
+                        BeginCollectPause()
                         for _, obj in ipairs(itemsToCollect) do
                             if not AutoCollectEnabled then break end
                             if not IsItemGone(obj) then CollectSingleItem(obj) else KnownCollectItems[obj] = true end
                         end
-                        if FarmAstroTokenEnabled then SetFarmAstroCollectPause(false) end
-                        if AutoFarmEnabled then TeleportToIdle(); WaitingRespawn = false end
+                        EndCollectPause()
 
                     elseif CollectMode == "Clean" then
                         local waitedClean = 0
                         while not AllMobsDead() and AutoCollectEnabled do
-                            task.wait(0.5); waitedClean = waitedClean + 0.5
+                            task.wait(0.5)
+                            waitedClean = waitedClean + 0.5
                             if waitedClean >= 120 then break end
                         end
                         if not AutoCollectEnabled then break end
+
                         if AutoSkipHeliEnabled then TriggerAutoSkipHeli(false) end
-                        LockActive = false; task.wait(0.1)
+                        BeginCollectPause()
                         for _, obj in ipairs(FindNewCollectItems()) do
                             if not AutoCollectEnabled then break end
                             if not IsItemGone(obj) then CollectSingleItem(obj) else KnownCollectItems[obj] = true end
                         end
+                        EndCollectPause()
                         if AutoSkipHeliEnabled then TriggerAutoSkipHeli(true) end
+
                         if not IsPlayerHPFull() and AutoFillUpEnabled then
                             local fw = 0
                             while not IsPlayerHPFull() and AutoFillUpEnabled and AutoCollectEnabled do
-                                task.wait(0.5); fw = fw + 0.5; if fw >= 60 then break end
+                                task.wait(0.5)
+                                fw = fw + 0.5
+                                if fw >= 60 then break end
                             end
                         end
-                        if AutoFarmEnabled then TeleportToIdle(); WaitingRespawn = false end
                     end
                 else
                     for obj, _ in pairs(KnownCollectItems) do
@@ -2130,17 +2323,18 @@ function StartAutoCollectLoop()
                     end
                 end
             end
-            task.wait(0.5)
+            task.wait(0.65)
         end
+        FarmCollecting = false
         CollectRunning = false
     end)
 end
 
 workspace.DescendantAdded:Connect(function(obj)
     if not AutoCollectEnabled or #SelectedCollectItems == 0 then return end
-    if not IsCollectTarget(obj.Name) then return end
-    if not (obj:IsA("Model") or obj:IsA("MeshPart") or obj:IsA("Part") or obj:IsA("BasePart")) then return end
-    print("[DYHUB] Collect: New item: " .. obj.Name)
+    if AddCollectCandidate(obj) then
+        CombatDebug("CollectItem", "New item cached: " .. tostring(obj.Name), 3)
+    end
 end)
 
 -- ============================================================
@@ -2151,130 +2345,159 @@ end)
 function StartFarmLoop()
     if FarmLoopRunning then return end
     FarmLoopRunning = true
+
     task.spawn(function()
-        -- Sub-loop: keep Idle stable without repeated PivotTo/Tween spam.
-        -- Old system tweened/PivotTo'd every 0.1s while WaitingRespawn, which caused camera shake.
-        task.spawn(function()
-            while AutoFarmEnabled do
-                if WaitingRespawn and not LockActive then
-                    pcall(function()
-                        if Character and HumanoidRootPart then
-                            if IsNearIdlePosition() then
-                                IdlePositionReached = true
-                                HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
-                                HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
-                            else
-                                TeleportToIdle(false)
+        local ok, err = pcall(function()
+            task.spawn(function()
+                while AutoFarmEnabled and FarmLoopRunning do
+                    if WaitingRespawn and not LockActive and not FarmCollecting then
+                        pcall(function()
+                            RefreshCombatCharacter()
+                            if Character and HumanoidRootPart then
+                                if IsNearIdlePosition() then
+                                    IdlePositionReached = true
+                                    HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+                                    HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+                                else
+                                    TeleportToIdle(false)
+                                end
                             end
-                        end
-                    end)
-                else
-                    IdlePositionReached = false
-                end
-                task.wait(0.5)
-            end
-        end)
-
-        while AutoFarmEnabled do
-            -- Refresh character reference
-            if not Character or not Character.Parent then
-                Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-                HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
-                Client = LocalPlayer
-            end
-
-            local mob, mobType, extraData, priority = GetPriorityMob()
-
-            if mob then
-                WaitingRespawn = false
-                IdlePositionReached = false
-                _currentTargetPriority = priority
-
-                -- ============ CASE: GiantST ============
-                if mobType == "GiantST" and extraData then
-                    TeleportToMob(mob)
-                    local giantLockConn
-                    giantLockConn = RunService.Heartbeat:Connect(function()
-                        if IsMobDead(mob) or not mob.Parent or not AutoFarmEnabled then
-                            giantLockConn:Disconnect(); return
-                        end
-                        local lockCF = GetTargetCFrame(mob, FarmPosition)
-                        if lockCF and Character and HumanoidRootPart then
-                            MoveCharacterToFarmCFrame(lockCF)
-                        end
-                    end)
-                    repeat
-                        task.wait(0.2)
-                        ActivateProximityPrompt(extraData)
-                        ActivateAllFlushPrompts()
-                    until IsMobDead(mob) or not mob.Parent or not AutoFarmEnabled
-                    giantLockConn:Disconnect()
-
-                -- ============ CASE: Helicopter / HighHP / Nearest ============
-                else
-                    if SafeModeEnabled and GetPlayerHealthPercent() < SafeValue then
-                        local mobRoot = mob:FindFirstChild("HumanoidRootPart")
-                        if mobRoot then
-                            local safePos = mobRoot.Position + Vector3.new(0, 111, 0)
-                            pcall(function()
-                                Character:PivotTo(CFrame.new(safePos))
-                                HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
-                                HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
-                            end)
-                        end
-                        task.wait(0.5)
+                        end)
                     else
-                        StartDamageChecker(mob)
+                        IdlePositionReached = false
+                    end
+                    task.wait(0.7)
+                end
+            end)
+
+            while AutoFarmEnabled do
+                RefreshCombatCharacter()
+
+                if not Character or not HumanoidRootPart then
+                    task.wait(0.5)
+                    continue
+                end
+
+                if FarmCollecting then
+                    task.wait(0.2)
+                    continue
+                end
+
+                local mob, mobType, extraData, priority = SafeGetPriorityMob()
+
+                if mob then
+                    WaitingRespawn = false
+                    IdlePositionReached = false
+                    _currentTargetPriority = priority
+
+                    if mobType == "GiantST" and extraData then
                         TeleportToMob(mob)
 
-                        -- Lock + Interrupt loop
-                        LockActive = true
-                        local lockConn
-                        lockConn = RunService.Heartbeat:Connect(function()
-                            if not AutoFarmEnabled or IsMobDead(mob) or not LockActive then
-                                lockConn:Disconnect(); LockActive = false; return
+                        local giantLockConn
+                        giantLockConn = RunService.Heartbeat:Connect(function()
+                            if IsMobDead(mob) or not mob.Parent or not AutoFarmEnabled or FarmCollecting or FarmForceRetarget then
+                                if giantLockConn then giantLockConn:Disconnect() end
+                                return
                             end
-                            if not Character or not HumanoidRootPart then return end
-                            local cf = GetTargetCFrame(mob, FarmPosition)
-                            if cf then
-                                MoveCharacterToFarmCFrame(cf)
+                            local lockCF = GetTargetCFrame(mob, FarmPosition)
+                            if lockCF and Character and HumanoidRootPart then
+                                MoveCharacterToFarmCFrame(lockCF)
                             end
                         end)
 
-                        -- รอจนกว่ามอบตาย, AutoFarm ปิด, หรือถูก interrupt
                         repeat
-                            task.wait(0.1)
-                            -- เช็ค interrupt: มี priority mob ระดับสูงกว่าปรากฏหรือไม่
-                            local shouldInterrupt, newPriority = CheckInterrupt(priority)
-                            if shouldInterrupt then
-                                --print("[DYHUB] INTERRUPT! Priority " .. priority .. " → " .. newPriority .. " | current mob: " .. mob.Name)
-                                _interruptSignal = true
-                                break
-                            end
-                        until IsMobDead(mob) or not AutoFarmEnabled
+                            task.wait(0.2)
+                            if FarmCollecting or FarmForceRetarget then break end
+                            ActivateProximityPrompt(extraData)
+                            ActivateAllFlushPrompts()
+                        until IsMobDead(mob) or not mob.Parent or not AutoFarmEnabled
 
-                        lockConn:Disconnect()
-                        LockActive = false
-                        _interruptSignal = false
-                        ResetMobOverride(mob)
+                        if giantLockConn then pcall(function() giantLockConn:Disconnect() end) end
+
+                    else
+                        if SafeModeEnabled and GetPlayerHealthPercent() < SafeValue then
+                            local mobRoot = mob:FindFirstChild("HumanoidRootPart")
+                            if mobRoot then
+                                local safePos = mobRoot.Position + Vector3.new(0, 111, 0)
+                                pcall(function()
+                                    Character:PivotTo(CFrame.new(safePos))
+                                    HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+                                    HumanoidRootPart.AssemblyAngularVelocity = Vector3.zero
+                                end)
+                            end
+                            task.wait(0.5)
+                        else
+                            StartDamageChecker(mob)
+                            TeleportToMob(mob)
+
+                            LockActive = true
+                            local lockConn
+                            lockConn = RunService.Heartbeat:Connect(function()
+                                if not AutoFarmEnabled or IsMobDead(mob) or not LockActive or FarmCollecting or FarmForceRetarget then
+                                    if lockConn then lockConn:Disconnect() end
+                                    LockActive = false
+                                    return
+                                end
+                                if not Character or not HumanoidRootPart then return end
+                                local cf = GetTargetCFrame(mob, FarmPosition)
+                                if cf then
+                                    MoveCharacterToFarmCFrame(cf)
+                                end
+                            end)
+
+                            repeat
+                                task.wait(0.15)
+                                if FarmCollecting or FarmForceRetarget then break end
+
+                                local shouldInterrupt, newPriority = CheckInterrupt(priority)
+                                if shouldInterrupt then
+                                    _interruptSignal = true
+                                    break
+                                end
+                            until IsMobDead(mob) or not AutoFarmEnabled
+
+                            if lockConn then pcall(function() lockConn:Disconnect() end) end
+                            LockActive = false
+                            _interruptSignal = false
+                            FarmForceRetarget = false
+                            ResetMobOverride(mob)
+                            ClearMobBoundsCache(mob)
+                        end
                     end
+
+                else
+                    _currentTargetPriority = 0
+                    if FarmTargetMode == "Astro Mode" then
+                        CombatDebug("AstroMode", "No Astro mobs found. Returning to idle.", 5)
+                    end
+                    TeleportToIdle()
+                    repeat
+                        task.wait(0.5)
+                    until FarmCollecting or SafeGetPriorityMob() ~= nil or not AutoFarmEnabled
+                    WaitingRespawn = false
                 end
 
-            else
-                -- ไม่มี mob → ไป Idle รอ
-                _currentTargetPriority = 0
-                TeleportToIdle()
-                repeat task.wait(0.5) until GetPriorityMob() ~= nil or not AutoFarmEnabled
-                WaitingRespawn = false
+                task.wait(0.12)
             end
+        end)
 
-            task.wait(0.1)
+        if not ok then
+            warn("[DYHUB] Farm loop error:", tostring(err))
+            CombatDebug("FarmLoopError", tostring(err), 3, true)
         end
 
         WaitingRespawn = false
+        FarmCollecting = false
+        FarmForceRetarget = false
         _currentTargetPriority = 0
         RestoreFarmCameraAndMovement()
         FarmLoopRunning = false
+
+        if AutoFarmEnabled then
+            task.delay(0.5, function()
+                if AutoFarmEnabled then StartFarmLoop() end
+            end)
+        end
     end)
 end
 
@@ -2359,8 +2582,15 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     IdlePositionReached = false
     LastIdleTeleportAt  = 0
     InvalidateMobCache("character respawn")
+    ClearMobBoundsCache()
+    FarmForceRetarget = true
+    FarmCollecting = false
     task.delay(0.25, function()
         RestartCombatLoopsIfNeeded("character respawn")
+        if AutoFarmEnabled then StartFarmLoop() end
+    end)
+    task.delay(0.8, function()
+        FarmForceRetarget = false
     end)
     task.wait(1)
     ApplyCameraMode()
@@ -2405,6 +2635,33 @@ AutoFarmToggle = Main:Toggle({
     end
 })
 
+if IsPaidUserVersion() then
+    FarmTargetModeDropdown = Main:Dropdown({
+        Title = "Mode Farm",
+        Desc = "Normal Mode farms normally. Astro Mode only targets mobs with Astro in the name.",
+        Values = { "Normal Mode", "Astro Mode" },
+        Multi = false,
+        Value = FarmTargetMode,
+        Callback = function(value)
+            FarmTargetMode = NormalizeFarmTargetMode(value)
+            Config:Set("FarmTargetMode", FarmTargetMode)
+            Config:Save()
+            InvalidateMobCache("farm target mode changed")
+            FarmForceRetarget = true
+            if AutoFarmEnabled then StartFarmLoop() end
+            task.delay(0.4, function() FarmForceRetarget = false end)
+            WindUI:Notify({ Title = "Mode Farm", Content = "Selected: " .. tostring(FarmTargetMode), Duration = 2, Icon = "target" })
+        end
+    })
+else
+    FarmTargetMode = "Normal Mode"
+    Main:Paragraph({
+        Title = "[ Paid Only ] Mode Farm",
+        Desc  = "This feature is for Paid members only",
+        Image = "rbxassetid://104487529937663", ImageSize = 30,
+    })
+end
+
 Main:Section({ Title = "Farm Settings", Icon = "settings" })
 
 PositionDropdown = Main:Dropdown({
@@ -2417,7 +2674,7 @@ PositionDropdown = Main:Dropdown({
 })
 
 ModeDropdown = Main:Dropdown({
-    Title = "Mode Farm",
+    Title = "Movement Farm",
     Desc = "Selects how your character moves to each target.",
     Values = { "Teleport", "Tween" },
     Multi = false,
@@ -4402,9 +4659,14 @@ AutoCollectToggle = Main6:Toggle({
         AutoCollectEnabled = state; Config:Set("AutoCollectEnabled", state); Config:Save()
         if state then
             KnownCollectItems = {}
+            CollectCandidateCache = {}
+            CollectCacheDirty = true
             CheckFarmAstroCollectMode()
             StartAutoCollectLoop()
-        else CollectRunning = false end
+        else
+            CollectRunning = false
+            FarmCollecting = false
+        end
     end
 })
 
@@ -4414,7 +4676,14 @@ CollectItemDropdown = Main6:Dropdown({
     Title = "Item Collect",
     Desc = "Selects which collectible items Auto Collect will target.",
     Values = CollectItems, Multi = true, Value = SelectedCollectItems,
-    Callback = function(values) SelectedCollectItems = values or {}; Config:Set("SelectedCollectItems", values); Config:Save() end
+    Callback = function(values)
+        SelectedCollectItems = values or {}
+        CollectCandidateCache = {}
+        CollectCacheDirty = true
+        KnownCollectItems = {}
+        Config:Set("SelectedCollectItems", SelectedCollectItems)
+        Config:Save()
+    end
 })
 
 CollectModeDropdown = Main6:Dropdown({
@@ -4426,6 +4695,20 @@ CollectModeDropdown = Main6:Dropdown({
         Config:Set("CollectMode", value)
         Config:Save()
         CheckFarmAstroCollectMode()
+    end
+})
+
+CollectMovementDropdown = Main6:Dropdown({
+    Title = "Movement Collect",
+    Desc = "Selects how your character moves to collectible items.",
+    Values = { "Teleport", "Tween" },
+    Multi = false,
+    Value = CollectMovementMode,
+    Callback = function(value)
+        CollectMovementMode = NormalizeCollectMovement(value)
+        Config:Set("CollectMovementMode", CollectMovementMode)
+        Config:Save()
+        WindUI:Notify({ Title = "Movement Collect", Content = "Selected: " .. tostring(CollectMovementMode), Duration = 2, Icon = "move" })
     end
 })
 
@@ -4676,6 +4959,8 @@ function ApplySavedConfigOnStartup()
 
     if AutoCollectEnabled then
         KnownCollectItems = {}
+        CollectCandidateCache = {}
+        CollectCacheDirty = true
         StartAutoCollectLoop()
     end
 
