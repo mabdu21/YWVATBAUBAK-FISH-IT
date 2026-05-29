@@ -1,4 +1,4 @@
--- v085 | fix limit local
+-- v099 | fix limit local
 -- =========================
 local version = "Rework"
 local ver = "v023.58"
@@ -3272,9 +3272,9 @@ AutoVoteToggle = Main7:Toggle({
 -- ====================== UI: SHOP SYSTEMS ======================
 Main5:Section({ Title = "Auto Gacha", Icon = "sparkles" })
 
--- Run the whole Shop UI/state setup inside its own function scope.
+-- Run the whole Shop UI/state setup inside its own block scope.
 -- This avoids Luau's 200-local-register limit in the main chunk.
-(function()
+do
     local gachaArgs = { "1Spin", "10Spins", "100Spins", "1SpinLucky", "10SpinLucky" }
 
     local autoGachaCharacterEnabled = Config:Get("AutoGachaCharacterEnabled", false)
@@ -3825,7 +3825,7 @@ Main5:Section({ Title = "Auto Gacha", Icon = "sparkles" })
     if autoUseItemEnabled then StartAutoUseItem() end
     if IsAnySyncedShopEnabled() then StartAutoSyncedShopLoop() end
     if buyItemHourlyEnabled then StartBuyItemHourlyLoop() end
-end)()
+end
 
 -- ====================== UI: COLLECT TAB ======================
 Main6:Section({ Title = "Collect Item", Icon = "package" })
