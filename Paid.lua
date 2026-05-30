@@ -1,4 +1,4 @@
--- v156 | [Local Register Fix]
+-- v160 | [Local Register Fix]
 -- =========================
 version = "Rework"
 ver = "v023.67"
@@ -1664,21 +1664,51 @@ end
 task.spawn(function()
     while true do
         task.wait(0.1)
+
         if GodModeEnabled and IsMiscFarmAllowed() then
             pcall(function()
                 local char = LocalPlayer.Character
                 if not char then return end
+
                 local humanoid = char:FindFirstChild("Humanoid")
                 if not humanoid then return end
                 if humanoid.MaxHealth <= 0 then return end
+
                 local hpPercent = (humanoid.Health / humanoid.MaxHealth) * 100
+
                 if hpPercent < GodModeValue then
-                    -- destroy head ทันที (respawn)
+                    local destroyed = false
+
+                    local function IsDead()
+                        return not char.Parent
+                            or not humanoid.Parent
+                            or humanoid.Health <= 0
+                            or humanoid:GetState() == Enum.HumanoidStateType.Dead
+                    end
+
+                    -- ชั้นที่ 1: ลบ Head ก่อน
                     local head = char:FindFirstChild("Head")
                     if head then
                         head:Destroy()
-                    else
-                        -- fallback: set health 0
+                        destroyed = true
+                    end
+
+                    -- เช็คว่าลบ Head แล้วตายไหม
+                    task.wait(0.05)
+
+                    if IsDead() then
+                        return -- ถ้าตายแล้ว ไม่ต้องลบ Torso
+                    end
+
+                    -- ชั้นที่ 2: ถ้ายังไม่ตาย ค่อยลบ Torso
+                    local torso = char:FindFirstChild("Torso")
+                    if torso then
+                        torso:Destroy()
+                        destroyed = true
+                    end
+
+                    -- fallback ถ้าไม่มีทั้ง Head และ Torso
+                    if not destroyed and not IsDead() then
                         humanoid.Health = 0
                     end
                 end
