@@ -1,4 +1,4 @@
--- v122 | [Local Register Fix]
+-- v121 | [Local Register Fix]
 -- =========================
 version = "Rework"
 ver = "v023.65"
@@ -1900,7 +1900,7 @@ FARM_ASTRO_TOP_A       = CFrame.new(-640, 167, 440)
 FARM_ASTRO_TOP_B       = CFrame.new(440, 167, 440)
 FARM_ASTRO_LOW_A       = CFrame.new(-640, -15, -520)
 FARM_ASTRO_LOW_B       = CFrame.new(440, -15, -520)
-FARM_ASTRO_TWEEN_TIME  = 1.3
+FARM_ASTRO_TWEEN_TIME  = 1
 
 function NotifyFarmAstroAutoFarm()
     local now = tick()
