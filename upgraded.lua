@@ -1,7 +1,7 @@
 -- Powered by nig | v523
 -- =========================
 local version = "Rework"
-local ver     = "v015.07"
+local ver     = "v015.08"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -302,7 +302,7 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 05/28/2026 | CL: " .. ver,
+    Title = "Update: 05/30/2026 | CL: " .. ver,
     Desc  = [[• [ Reword ] Speed Walk description changed to a cleaner CFrame movement description
 • [ Reword ] Auto Parry description and mode info simplified for easier understanding
 • [ Reword ] Latest Update text updated to match the new v015.05 generator optimization changes
@@ -371,11 +371,10 @@ end
 
 -- =====================================================================================
 -- =====================================================================================
---  AUTO PARRY SYSTEM v8  —  [Premium Only]
---  [Fixed] more stable hook / rehook after killer, weapon, character, or round changes
---  [Fixed] no early parry from distance-only fallback
---  [Added] attack-track scan + WallHitboxCollider fallback
---  [Optimized] uses one _AP runtime table to reduce local register usage
+--  AUTO PARRY SYSTEM v9  —  [Premium Only]
+--  Logic: killer / non-local character attack animation starts -> parry instantly.
+--  No distance-only parry. Rehooks after new round / new map / new killer / respawn.
+--  Kept compact in one runtime table to avoid local register limit 200.
 -- =====================================================================================
 do
 local _AP = _G.DYHUB_AP or {}
@@ -391,11 +390,11 @@ _AP.Workspace = Workspace
 _AP.LP = LocalPlayer
 _AP.PG = PlayerGui
 _AP.IconId = "92951359322494"
-_AP.GrayRGB = 77
-_AP.ParryCD = 0.055
-_AP.HitWindow = 0.34
-_AP.BtnTTL = 0.35
-_AP.HookTTL = 1.35
+_AP.ParryCD = 0.095
+_AP.BtnTTL = 0.20
+_AP.ScanEvery = 0.035
+_AP.RehookEvery = 0.55
+_AP.HookTTL = 1.50
 _AP.HookNearDist = settings.HookNearDist or 6
 _AP.HPCarried = 60
 _AP.HPDowned = 20
@@ -403,51 +402,41 @@ _AP.IsMobile = _AP.UIS.TouchEnabled and not _AP.UIS.KeyboardEnabled
 _AP.cons = {}
 _AP.charCons = {}
 _AP.playerCons = {}
-_AP.humBound = {}
-_AP.lastAttack = {}
+_AP.bound = setmetatable({}, { __mode = "k" })
+_AP.seenTracks = setmetatable({}, { __mode = "k" })
+_AP.lastAttack = setmetatable({}, { __mode = "k" })
 _AP.btn = nil
 _AP.btnAt = 0
 _AP.hooks = {}
 _AP.hooksAt = 0
-_AP.fallbackTick = 0
+_AP.scanTick = 0
 _AP.rehookTick = 0
 _AP.lastParry = 0
 _AP._firing = false
-_AP.seenTracks = setmetatable({}, { __mode = "k" })
 
 _G.AutoParry = settings.AutoParry
-_G.AutoParryMode = settings.AutoParryMode
-_G.AutoParryRange = settings.AutoParryRange
+_G.AutoParryMode = settings.AutoParryMode or "Fast"
+_G.AutoParryRange = settings.AutoParryRange or 20
 
-_AP.Anims = {
-    ["rbxassetid://139369275981139"] = true,
-    ["rbxassetid://110355011987939"] = true,
-    ["rbxassetid://135002183282873"] = true,
-    ["rbxassetid://121216847022485"] = true,
-    ["rbxassetid://105374834496520"] = true,
-    ["rbxassetid://111920872708571"] = true,
-    ["rbxassetid://118907603246885"] = true,
-    ["rbxassetid://78432063483146"]  = true,
-    ["rbxassetid://113255068724446"] = true,
-    ["rbxassetid://74968262036854"]  = true,
-    ["rbxassetid://129784271201071"] = true,
-    ["rbxassetid://132817836308238"] = true,
-    ["rbxassetid://112166042383605"] = true,
-    ["rbxassetid://122812055447896"] = true,
-    ["rbxassetid://117042998468241"] = true,
-    ["rbxassetid://133963973694098"] = true,
+_AP.AnimIds = {
+    ["139369275981139"] = true, ["110355011987939"] = true,
+    ["135002183282873"] = true, ["121216847022485"] = true,
+    ["105374834496520"] = true, ["111920872708571"] = true,
+    ["118907603246885"] = true, ["78432063483146"]  = true,
+    ["113255068724446"] = true, ["74968262036854"]  = true,
+    ["129784271201071"] = true, ["132817836308238"] = true,
+    ["112166042383605"] = true, ["122812055447896"] = true,
+    ["117042998468241"] = true, ["133963973694098"] = true,
 }
 
 function _AP:disconnect(c)
-    pcall(function()
-        if c then c:Disconnect() end
-    end)
+    pcall(function() if c then c:Disconnect() end end)
 end
 
-function _AP:clearList(list)
-    for k, v in pairs(list or {}) do
+function _AP:clearList(t)
+    for k, v in pairs(t or {}) do
         if typeof(v) == "RBXScriptConnection" then self:disconnect(v) end
-        list[k] = nil
+        t[k] = nil
     end
 end
 
@@ -457,8 +446,12 @@ function _AP.Shutdown()
     self:clearList(self.cons)
     for _, t in pairs(self.charCons or {}) do self:clearList(t) end
     for _, t in pairs(self.playerCons or {}) do self:clearList(t) end
-    self.charCons, self.playerCons, self.humBound, self.lastAttack = {}, {}, {}, {}
+    self.charCons = {}
+    self.playerCons = {}
+    self.bound = setmetatable({}, { __mode = "k" })
     self.seenTracks = setmetatable({}, { __mode = "k" })
+    self.lastAttack = setmetatable({}, { __mode = "k" })
+    self.btn = nil
 end
 
 function _AP:addCon(c)
@@ -477,6 +470,15 @@ function _AP:getRoot(char)
     return char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso"))
 end
 
+function _AP:getOwner(char)
+    return char and self.Players:GetPlayerFromCharacter(char) or nil
+end
+
+function _AP:isEnemyChar(char)
+    local owner = self:getOwner(char)
+    return owner and owner ~= self.LP
+end
+
 function _AP:getObjPos(obj)
     if not obj then return nil end
     if obj:IsA("BasePart") then return obj.Position end
@@ -488,6 +490,13 @@ function _AP:getObjPos(obj)
     return p and p.Position or nil
 end
 
+function _AP:distToChar(char)
+    local mr = self:getRoot(self.LP.Character)
+    local kr = self:getRoot(char)
+    if not mr or not kr then return math.huge end
+    return (mr.Position - kr.Position).Magnitude
+end
+
 function _AP:visible(obj)
     local cur = obj
     while cur and cur ~= self.PG do
@@ -497,72 +506,47 @@ function _AP:visible(obj)
     return true
 end
 
+function _AP:clickable(obj)
+    local pg = self.LP:FindFirstChild("PlayerGui")
+    if not obj or not pg then return nil end
+    if obj:IsA("GuiButton") and self:visible(obj) then return obj end
+    for _, d in ipairs(obj:GetDescendants()) do
+        if d:IsA("GuiButton") and self:visible(d) then return d end
+    end
+    local cur, hop = obj.Parent, 0
+    while cur and cur ~= pg and hop < 7 do
+        if cur:IsA("GuiButton") and self:visible(cur) then return cur end
+        cur = cur.Parent
+        hop += 1
+    end
+    return obj:IsA("GuiObject") and self:visible(obj) and obj or nil
+end
+
 function _AP:getBtn()
-    if self.btn and self.btn.Parent and os.clock() - self.btnAt < self.BtnTTL then return self.btn end
-    self.btn, self.btnAt = nil, os.clock()
+    local now = os.clock()
+    if self.btn and self.btn.Parent and now - self.btnAt < self.BtnTTL then return self.btn end
+    self.btn, self.btnAt = nil, now
 
     local pg = self.LP:FindFirstChild("PlayerGui")
     if not pg then return nil end
 
-    local function clickable(obj)
-        if not obj then return nil end
-        if obj:IsA("GuiButton") and self:visible(obj) then return obj end
-        for _, d in ipairs(obj:GetDescendants()) do
-            if d:IsA("GuiButton") and self:visible(d) then return d end
-        end
-        local cur, hop = obj.Parent, 0
-        while cur and cur ~= pg and hop < 5 do
-            if cur:IsA("GuiButton") and self:visible(cur) then return cur end
-            cur = cur.Parent
-            hop += 1
-        end
-        return self:visible(obj) and obj or nil
-    end
-
     local s = pg:FindFirstChild("Survivor-mob")
     local c = s and s:FindFirstChild("Controls")
     local b = c and c:FindFirstChild("Gui-mob")
-    local cb = clickable(b)
-    if cb then
-        self.btn = cb
-        return cb
-    end
+    local cb = self:clickable(b)
+    if cb then self.btn = cb return cb end
 
     for _, d in ipairs(pg:GetDescendants()) do
-        if d:IsA("GuiButton") or d:IsA("ImageLabel") then
+        if d:IsA("GuiButton") or d:IsA("ImageButton") or d:IsA("ImageLabel") then
             local n, img = string.lower(d.Name or ""), ""
             pcall(function() img = tostring(d.Image or "") end)
-            if (n:find("parry") or n:find("block") or n:find("guard") or img:find(self.IconId, 1, true)) and self:visible(d) then
-                cb = clickable(d)
-                if cb then
-                    self.btn = cb
-                    return cb
-                end
+            if n:find("parry", 1, true) or n:find("block", 1, true) or n:find("guard", 1, true) or img:find(self.IconId, 1, true) then
+                cb = self:clickable(d)
+                if cb then self.btn = cb return cb end
             end
         end
     end
     return nil
-end
-
-function _AP:ready()
-    local btn = self:getBtn()
-    if not btn then return not self.IsMobile end
-
-    local icon = btn:FindFirstChild("icon", true) or btn
-    if not (icon:IsA("ImageLabel") or icon:IsA("ImageButton")) then return true end
-
-    local img = tostring(icon.Image or "")
-    if img ~= "" and img:find(self.IconId, 1, true) then
-        local ok, col = pcall(function() return icon.ImageColor3 end)
-        if not ok then return true end
-        local r = math.floor(col.R * 255 + 0.5)
-        local g = math.floor(col.G * 255 + 0.5)
-        local b = math.floor(col.B * 255 + 0.5)
-        if math.abs(r - self.GrayRGB) <= 5 and math.abs(g - self.GrayRGB) <= 5 and math.abs(b - self.GrayRGB) <= 5 then
-            return false
-        end
-    end
-    return true
 end
 
 function _AP:hasStateFlag(obj, words)
@@ -586,7 +570,6 @@ end
 function _AP:getHooks()
     local now = os.clock()
     if now - self.hooksAt < self.HookTTL and #self.hooks > 0 then return self.hooks end
-
     local list = {}
     for _, d in ipairs(self.Workspace:GetDescendants()) do
         if (d.Name == "HookPoint" or d.Name == "Hook") and (d:IsA("BasePart") or d:IsA("Model")) then
@@ -618,55 +601,60 @@ function _AP:canParry()
 end
 
 function _AP:pressGui(btn)
-    if not btn then return false end
-
+    if not btn or not btn.Parent then return false end
     local p, s = btn.AbsolutePosition, btn.AbsoluteSize
     local x, y = p.X + s.X * 0.5, p.Y + s.Y * 0.5
 
     if btn:IsA("GuiButton") then
-        pcall(function()
-            if firesignal and btn.MouseButton1Click then firesignal(btn.MouseButton1Click) end
-            if firesignal and btn.Activated then firesignal(btn.Activated) end
-        end)
+        pcall(function() if firesignal and btn.MouseButton1Click then firesignal(btn.MouseButton1Click) end end)
+        pcall(function() if firesignal and btn.Activated then firesignal(btn.Activated) end end)
         pcall(function() btn:Activate() end)
     end
 
     if self.IsMobile then
-        -- มือถือ: ไม่ใช้ SendMouseButtonEvent เพราะบาง executor ทำให้จอย/เดินค้าง
-        local ok = pcall(function()
+        local didTouch = false
+        pcall(function()
             if self.VIM.SendTouchEvent then
                 self.VIM:SendTouchEvent(0, Enum.UserInputState.Begin, Vector2.new(x, y))
-                task.wait(0.010)
+                task.wait(0.006)
                 self.VIM:SendTouchEvent(0, Enum.UserInputState.End, Vector2.new(x, y))
+                didTouch = true
             end
         end)
-        if not ok then
+        if not didTouch then
             pcall(function()
                 self.VIM:SendTouchEvent(0, Enum.UserInputState.Begin, x, y)
-                task.wait(0.010)
+                task.wait(0.006)
                 self.VIM:SendTouchEvent(0, Enum.UserInputState.End, x, y)
+                didTouch = true
             end)
         end
-        return true
+        if not didTouch then
+            pcall(function()
+                self.VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
+                task.wait(0.006)
+                self.VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
+            end)
+        end
+    else
+        pcall(function()
+            self.VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
+            task.wait(0.006)
+            self.VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
+        end)
     end
-
-    pcall(function()
-        self.VIM:SendMouseButtonEvent(x, y, 0, true, game, 1)
-        task.wait(0.010)
-        self.VIM:SendMouseButtonEvent(x, y, 0, false, game, 1)
-    end)
     return true
 end
 
 function _AP:pressPC()
     pcall(function()
         self.VIM:SendMouseButtonEvent(0, 0, 1, true, game, 1)
-        task.wait(0.010)
+        task.wait(0.006)
         self.VIM:SendMouseButtonEvent(0, 0, 1, false, game, 1)
     end)
     pcall(function()
         self.VIM:SendKeyEvent(true, Enum.KeyCode.F, false, game)
-        task.wait(0.010)
+        task.wait(0.006)
         self.VIM:SendKeyEvent(false, Enum.KeyCode.F, false, game)
     end)
 end
@@ -674,54 +662,50 @@ end
 function _AP:fire()
     if self._firing then return end
     self._firing = true
-
     task.spawn(function()
-        pcall(function()
-            local btn = self:getBtn()
-            if btn then self:pressGui(btn) end
-            if not self.IsMobile then self:pressPC() end
-        end)
-        task.wait(self.IsMobile and 0.045 or 0.025)
+        local btn = self:getBtn()
+        if btn then self:pressGui(btn) end
+        if not self.IsMobile then self:pressPC() end
+        task.wait(self.IsMobile and 0.030 or 0.018)
         self._firing = false
     end)
 end
 
-function _AP:threat(kc)
-    local myRoot = self:getRoot(self.LP.Character)
-    local kRoot = self:getRoot(kc)
-    if not myRoot or not kRoot then return 0, math.huge end
-
-    local range = _G.AutoParryRange or 20
-    local delta = myRoot.Position - kRoot.Position
-    local dist = delta.Magnitude
-    if dist > range + 7 then return 0, dist end
-
-    local vel = kRoot.AssemblyLinearVelocity or Vector3.zero
-    local pred = kRoot.Position + vel * 0.10
-    dist = (myRoot.Position - pred).Magnitude
-    if dist > range + 7 then return 0, dist end
-
-    local dir = delta.Magnitude > 0.05 and delta.Unit or kRoot.CFrame.LookVector
-    local dot = math.clamp((kRoot.CFrame.LookVector:Dot(dir) + 1) * 0.5, 0, 1)
-    local distScore = 1 - math.clamp(dist / math.max(range, 1), 0, 1)
-    local speedScore = math.clamp(vel.Magnitude / 30, 0, 1)
-    local close = dist <= 7 and 0.22 or 0
-    return math.clamp(distScore * 0.52 + dot * 0.30 + speedScore * 0.18 + close, 0, 1), dist
+function _AP:getAnimId(track)
+    local anim = track and track.Animation
+    local id = anim and tostring(anim.AnimationId or "") or ""
+    return id:match("%d+") or id
 end
 
-function _AP:try(kc, minThreat, force)
+function _AP:looksAttackName(track)
+    local anim = track and track.Animation
+    local n = string.lower(tostring((track and track.Name) or "") .. " " .. tostring((anim and anim.Name) or ""))
+    if n == "" then return false end
+    if n:find("idle", 1, true) or n:find("walk", 1, true) or n:find("run", 1, true)
+        or n:find("jump", 1, true) or n:find("fall", 1, true) or n:find("stun", 1, true)
+        or n:find("hurt", 1, true) or n:find("react", 1, true) or n:find("down", 1, true)
+        or n:find("carry", 1, true) or n:find("hook", 1, true) or n:find("dead", 1, true) then
+        return false
+    end
+    return n:find("attack", 1, true) or n:find("slash", 1, true) or n:find("swing", 1, true)
+        or n:find("lunge", 1, true) or n:find("stab", 1, true) or n:find("melee", 1, true)
+        or n:find("m1", 1, true) or n:find("basic", 1, true) or n:find("knife", 1, true)
+        or n:find("hit", 1, true)
+end
+
+function _AP:isAttackTrack(track)
+    if not track then return false end
+    local id = self:getAnimId(track)
+    if id ~= "" and self.AnimIds[id] then return true end
+    return self:looksAttackName(track)
+end
+
+function _AP:parryNow(char, tag)
     if not _G.AutoParry then return false end
     if not self:canParry() then return false end
-    if not self:ready() then return false end
-
-    kc = kc or self:nearestChar()
-    if not kc or not kc.Parent then return false end
-
-    local score, dist = self:threat(kc)
+    if char and not self:isEnemyChar(char) then return false end
     local range = _G.AutoParryRange or 20
-    if dist > range + (force and 7 or 0) then return false end
-    if not force and score < (minThreat or 0.50) then return false end
-
+    if char and self:distToChar(char) > range + 8 then return false end
     local now = os.clock()
     if now - self.lastParry < self.ParryCD then return false end
     self.lastParry = now
@@ -729,82 +713,23 @@ function _AP:try(kc, minThreat, force)
     return true
 end
 
-function _AP:nearestChar(pos)
-    local myRoot = self:getRoot(self.LP.Character)
-    pos = pos or (myRoot and myRoot.Position)
-    if not pos then return nil end
-
-    local best, bestDist = nil, math.huge
-    for _, plr in ipairs(self.Players:GetPlayers()) do
-        if plr ~= self.LP and plr.Character and plr.Character.Parent and isKillerChar(plr.Character) then
-            local r = self:getRoot(plr.Character)
-            if r then
-                local d = (r.Position - pos).Magnitude
-                if d < bestDist then
-                    best, bestDist = plr.Character, d
-                end
-            end
-        end
-    end
-    return best, bestDist
-end
-
-function _AP:looksAttackName(track)
-    local anim = track and track.Animation
-    local n = string.lower(tostring((track and track.Name) or "") .. " " .. tostring((anim and anim.Name) or ""))
-
-    -- กัน false positive: hitreact / stun / hurt ไม่ใช่ animation ตอน killer กำลังตี
-    if n:find("hitreact", 1, true) or n:find("react", 1, true) or n:find("stun", 1, true)
-        or n:find("hurt", 1, true) or n:find("damage", 1, true) or n:find("flinch", 1, true) then
-        return false
-    end
-
-    return n:find("attack", 1, true)
-        or n:find("slash", 1, true)
-        or n:find("swing", 1, true)
-        or n:find("lunge", 1, true)
-        or n:find("stab", 1, true)
-        or n:find("melee", 1, true)
-        or n:find("m1", 1, true)
-        or n:match("%f[%w]hit%f[%W]") ~= nil
-end
-
-function _AP:isAttackTrack(track)
-    if not track then return false end
-    local anim = track.Animation
-    local id = anim and tostring(anim.AnimationId or "") or ""
-    return self.Anims[id] or self:looksAttackName(track)
-end
-
 function _AP:onAnim(char, track)
     if not char or not track then return end
-    if not isKillerChar(char) then return end
+    if not self:isEnemyChar(char) then return end
+    if self.seenTracks[track] then return end
     if not self:isAttackTrack(track) then return end
-
-    local _, dist = self:threat(char)
-    if dist > (_G.AutoParryRange or 20) + 7 then return end
-
+    self.seenTracks[track] = true
     self.lastAttack[char] = os.clock()
-    self:try(char, 0.01, true)
+
+    -- สำคัญ: animation เริ่ม -> parry ทันที ไม่มี threat score / ไม่ใช้ระยะอย่างเดียว
+    self:parryNow(char, "anim")
 
     local mode = _G.AutoParryMode or "Fast"
-    local d1, d2 = 0.020, nil
-    if mode == "Smart" then
-        d1, d2 = 0.030, 0.070
-    elseif mode == "Predict" then
-        d1, d2 = 0.016, 0.045
-    end
-
-    task.delay(d1, function()
-        if self.lastAttack[char] and os.clock() - self.lastAttack[char] <= self.HitWindow then
-            self:try(char, 0.01, true)
-        end
-    end)
-
-    if d2 then
-        task.delay(d2, function()
-            if self.lastAttack[char] and os.clock() - self.lastAttack[char] <= self.HitWindow then
-                self:try(char, 0.01, true)
+    if mode == "Smart" or mode == "Predict" then
+        local d = mode == "Predict" and 0.035 or 0.055
+        task.delay(d, function()
+            if _G.AutoParry and self.lastAttack[char] and os.clock() - self.lastAttack[char] <= 0.25 then
+                self:parryNow(char, "retry")
             end
         end)
     end
@@ -812,27 +737,21 @@ end
 
 function _AP:isHitbox(obj)
     local n = string.lower(obj and obj.Name or "")
-    return n:find("wallhitboxcollider", 1, true)
-        or n:find("attackhitbox", 1, true)
-        or n:find("slashhitbox", 1, true)
-        or n:find("weaponhitbox", 1, true)
-        or n:find("hitboxcollider", 1, true)
+    return n:find("wallhitboxcollider", 1, true) or n:find("attackhitbox", 1, true)
+        or n:find("slashhitbox", 1, true) or n:find("weaponhitbox", 1, true)
 end
 
-function _AP:hitboxFromKiller(obj, kc)
-    if not obj or not kc then return false end
-    local cur = obj
-    while cur and cur ~= self.Workspace do
-        if cur == kc then return true end
-        cur = cur.Parent
+function _AP:nearestEnemy(pos)
+    local best, bestDist = nil, math.huge
+    for _, plr in ipairs(self.Players:GetPlayers()) do
+        local char = plr ~= self.LP and plr.Character or nil
+        local r = self:getRoot(char)
+        if r then
+            local d = (r.Position - pos).Magnitude
+            if d < bestDist then best, bestDist = char, d end
+        end
     end
-
-    local pos = self:getObjPos(obj)
-    local kr = self:getRoot(kc)
-    if pos and kr and (pos - kr.Position).Magnitude <= 14 then
-        return true
-    end
-    return false
+    return best, bestDist
 end
 
 function _AP:onHitbox(obj)
@@ -840,52 +759,46 @@ function _AP:onHitbox(obj)
     task.defer(function()
         if not _G.AutoParry then return end
         local pos = self:getObjPos(obj)
-        local myRoot = self:getRoot(self.LP.Character)
-        if not pos or not myRoot then return end
-        if (myRoot.Position - pos).Magnitude > (_G.AutoParryRange or 20) + 9 then return end
-
-        local kc = self:nearestChar(pos)
-        if kc and self:hitboxFromKiller(obj, kc) then
+        local mr = self:getRoot(self.LP.Character)
+        if not pos or not mr then return end
+        if (mr.Position - pos).Magnitude > (_G.AutoParryRange or 20) + 8 then return end
+        local kc, kd = self:nearestEnemy(pos)
+        if kc and kd <= 18 then
             self.lastAttack[kc] = os.clock()
-            self:try(kc, 0.01, true)
+            self:parryNow(kc, "hitbox")
         end
     end)
 end
 
-function _AP:bindHum(char, hum)
-    if not char or not hum or self.humBound[hum] then return end
-    self.humBound[hum] = true
-    self:addCharCon(char, "Anim_" .. tostring(hum), hum.AnimationPlayed:Connect(function(track)
-        self:onAnim(char, track)
-    end))
+function _AP:bindAnimObject(char, obj)
+    if not char or not obj or self.bound[obj] then return end
+    if not (obj:IsA("Humanoid") or obj:IsA("Animator")) then return end
+    self.bound[obj] = true
+    local ok, con = pcall(function()
+        return obj.AnimationPlayed:Connect(function(track)
+            self:onAnim(char, track)
+        end)
+    end)
+    if ok and con then self:addCharCon(char, "Anim_" .. tostring(obj), con) end
 end
 
 function _AP:hookChar(char)
-    if not char or not char.Parent then return end
-
-    local t = self.charCons[char]
-    if not t then
+    if not char or not char.Parent or not self:isEnemyChar(char) then return end
+    if not self.charCons[char] then
         self.charCons[char] = {}
-        self:addCharCon(char, "Child", char.ChildAdded:Connect(function(obj)
-            if obj:IsA("Humanoid") then self:bindHum(char, obj) end
-        end))
         self:addCharCon(char, "Desc", char.DescendantAdded:Connect(function(obj)
-            if obj:IsA("Humanoid") then
-                self:bindHum(char, obj)
+            if obj:IsA("Humanoid") or obj:IsA("Animator") then
+                self:bindAnimObject(char, obj)
             elseif self:isHitbox(obj) then
                 self:onHitbox(obj)
-            elseif (obj:IsA("Tool") or obj:IsA("Model")) and string.lower(obj.Name or ""):find("weapon", 1, true) then
-                task.defer(function() self:hookChar(char) end)
             end
         end))
         self:addCharCon(char, "Gone", char.AncestryChanged:Connect(function(_, parent)
             if not parent then self:cleanChar(char) end
         end))
     end
-
-    self:bindHum(char, char:FindFirstChildOfClass("Humanoid"))
     for _, d in ipairs(char:GetDescendants()) do
-        if d:IsA("Humanoid") then self:bindHum(char, d) end
+        if d:IsA("Humanoid") or d:IsA("Animator") then self:bindAnimObject(char, d) end
     end
 end
 
@@ -893,14 +806,13 @@ function _AP:cleanChar(char)
     self:clearList(self.charCons[char])
     self.charCons[char] = nil
     self.lastAttack[char] = nil
-    self.seenTracks = setmetatable({}, { __mode = "k" })
 end
 
 function _AP:hookPlayer(plr)
     if not plr or plr == self.LP or self.playerCons[plr] then return end
     self.playerCons[plr] = {}
     self.playerCons[plr].CharAdded = plr.CharacterAdded:Connect(function(char)
-        task.wait(0.05)
+        task.wait(0.03)
         self:hookChar(char)
     end)
     self.playerCons[plr].CharRemoving = plr.CharacterRemoving:Connect(function(char)
@@ -918,41 +830,48 @@ function _AP:scan()
     end
 end
 
+function _AP:scanTracks(char)
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        pcall(function()
+            for _, tr in ipairs(hum:GetPlayingAnimationTracks()) do
+                if tr.IsPlaying and not self.seenTracks[tr] and self:isAttackTrack(tr) then
+                    self:onAnim(char, tr)
+                    return
+                end
+            end
+        end)
+    end
+    for _, an in ipairs(char:GetDescendants()) do
+        if an:IsA("Animator") then
+            pcall(function()
+                for _, tr in ipairs(an:GetPlayingAnimationTracks()) do
+                    if tr.IsPlaying and not self.seenTracks[tr] and self:isAttackTrack(tr) then
+                        self:onAnim(char, tr)
+                        return
+                    end
+                end
+            end)
+        end
+    end
+end
+
 function _AP:heartbeat(dt)
     if not _G.AutoParry then return end
-
-    self.fallbackTick += dt
     self.rehookTick += dt
-
-    if self.rehookTick >= 0.80 then
+    self.scanTick += dt
+    if self.rehookTick >= self.RehookEvery then
         self.rehookTick = 0
         self:scan()
+        self:getBtn()
     end
-
-    if self.fallbackTick < 0.060 then return end
-    self.fallbackTick = 0
-
-    local now = os.clock()
+    if self.scanTick < self.ScanEvery then return end
+    self.scanTick = 0
     for _, plr in ipairs(self.Players:GetPlayers()) do
         local char = plr ~= self.LP and plr.Character or nil
-        if char and char.Parent and isKillerChar(char) then
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then
-                pcall(function()
-                    for _, tr in ipairs(hum:GetPlayingAnimationTracks()) do
-                        if tr.IsPlaying and self:isAttackTrack(tr) and not self.seenTracks[tr] then
-                            self.seenTracks[tr] = true
-                            self:onAnim(char, tr)
-                            break
-                        end
-                    end
-                end)
-            end
-
-            local recent = self.lastAttack[char] and (now - self.lastAttack[char] <= self.HitWindow)
-            if recent then
-                if self:try(char, 0.01, true) then break end
-            end
+        if char and char.Parent then
+            self:hookChar(char)
+            self:scanTracks(char)
         end
     end
 end
@@ -962,7 +881,14 @@ _AP:addCon(_AP.Players.PlayerRemoving:Connect(function(plr)
     if _AP.playerCons[plr] then _AP:clearList(_AP.playerCons[plr]); _AP.playerCons[plr] = nil end
     if plr.Character then _AP:cleanChar(plr.Character) end
 end))
-_AP:addCon(_AP.Workspace.DescendantAdded:Connect(function(obj) _AP:onHitbox(obj) end))
+_AP:addCon(_AP.Workspace.DescendantAdded:Connect(function(obj)
+    if obj:IsA("Humanoid") or obj:IsA("Animator") then
+        local char = obj:FindFirstAncestorOfClass("Model")
+        if char then _AP:hookChar(char) end
+    elseif _AP:isHitbox(obj) then
+        _AP:onHitbox(obj)
+    end
+end))
 _AP:addCon(_AP.RunService.Heartbeat:Connect(function(dt) _AP:heartbeat(dt) end))
 
 task.defer(function() _AP:scan() end)
@@ -973,19 +899,19 @@ SurTab:Section({ Title = "Feature Survivor", Icon = "user" })
 if isPremium then
     SurTab:Paragraph({
         Title = "Information: Parry Mode",
-        Desc  = "• Fast = parry only when attack starts\n• Smart = instant + safer retry\n• Predict = instant + faster retry",
+        Desc  = "• Fast = killer attack animation starts -> parry instantly\n• Smart = instant + one safe retry\n• Predict = instant + faster retry",
         Image = "rbxassetid://104487529937663", ImageSize = 30,
     })
     SurTab:Toggle({
         Title    = "Auto Parry",
-        Desc     = "Parries only after killer attack animation / hitbox appears. No distance-only early parry.",
+        Desc     = "Parries instantly when killer attack animation starts. Rehooks every round/map/killer change.",
         Value    = settings.AutoParry,
         Callback = function(v)
             settings.AutoParry = v
             _G.AutoParry = v
             Config:Set("autoparry", v)
             Config:Save()
-            if v then _AP:scan() end
+            if v then _AP:scan(); _AP:getBtn() end
             WindUI:Notify({ Title="Auto Parry", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "shield" or "shield-off" })
         end
     })
@@ -1004,7 +930,7 @@ if isPremium then
     })
     SurTab:Slider({
         Title    = "Parry Range",
-        Desc     = "Range for parrying (studs)",
+        Desc     = "Range for animation-trigger parry (studs)",
         Value    = { Min=5, Max=40, Default=settings.AutoParryRange },
         Step     = 1,
         Callback = function(v)
@@ -1026,7 +952,7 @@ DYHUB_RUNTIME.ResetHookCache = function()
     if _G.DYHUB_AP then
         _G.DYHUB_AP.hooks = {}
         _G.DYHUB_AP.hooksAt = 0
-        task.defer(function() _G.DYHUB_AP:scan() end)
+        task.defer(function() _G.DYHUB_AP:scan(); _G.DYHUB_AP:getBtn() end)
     end
 end
 end -- AUTO PARRY do-scope
