@@ -1,7 +1,7 @@
 -- v156 | [Local Register Fix]
 -- =========================
 version = "Rework"
-ver = "v023.66"
+ver = "v023.67"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -33,7 +33,9 @@ part.Size = Vector3.new(10, 1, 10)
 part.Position = Vector3.new(-23.3435822, 61, 0.341766357)
 part.Transparency = 1
 part.Anchored = true
-part.CanCollide = true
+part.CanCollide = false
+part.CanTouch = false
+part.CanQuery = false
 part.Material = Enum.Material.Neon
 part.BrickColor = BrickColor.new("Bright blue")
 part.Name = "DYHUB_WAITING_PART"
@@ -57,7 +59,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config_02365.json"
+    self.ConfigPath = ConfigFolder .. "/config_02367.json"
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
     self:Load()
     return self
@@ -188,14 +190,9 @@ Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/30/2026 | CL: " .. ver,
     Desc = [[- [ Paid Version ] Mode Farm for different farming modes / BETA
-- [ Added ] Titan Request / Shop
-- [ Added ] Auto Upgrade Skill Tree / Shop
-- [ Added ] Debug code to check execution time when the script has errors
-- [ Fixed ] God Mode, Safe Mode, Delete Map, Auto Skip, Auto Fill Up, Auto Start obey Sync Farm Only
-- [ Fixed ] Sync Farm Only now fully stops Misc Farm systems when Auto Farm is OFF
-- [ Improved ] Misc Farm gate re-applies safely when toggling Auto Farm / Sync Farm Only
-- [ Improved ] Auto Collect stop auto farmings / Sync with Auto Farm
-- [ Improved ] Shop all systems keep synced before Auto Start]],
+- [ Fixed ] Farm Astro Token / Do not move to the center position
+- [ Improved ] Idle part sync with Auto Farm 
+- [ Improved ] Farm Astro Token has the time scanning system 0 or 1]],
 })
 Info:Divider()
 Info:Section({ Title = "Discord Information", TextXAlignment = "Center", TextSize = 17 })
@@ -367,6 +364,9 @@ FarmAstroTokenNoClipConnection = nil
 FarmAstroTokenPauseCollect = false
 FarmAstroTokenLastCleanNotify = 0
 FarmAstroTokenLastAutoFarmNotify = 0
+FarmAstroTokenTimerHold = false
+FarmAstroTokenTimerIgnoreUntil = 0
+FarmAstroTokenRespawnCounter = 0
 AutoAttackEnabled      = false
 AutoSkillEnabled       = false
 AutoSkipHeliEnabled    = false
@@ -406,6 +406,24 @@ FarmForceRetarget      = false
 FarmCollecting         = false
 CombatDebugEnabled     = Config:Get("CombatDebugEnabled", false)
 CombatDebugCooldowns   = {}
+
+function GetDYHUBWaitingPart()
+    local waitingPart = workspace:FindFirstChild("DYHUB_WAITING_PART")
+    if waitingPart and waitingPart:IsA("BasePart") then return waitingPart end
+    return nil
+end
+
+function UpdateDYHUBWaitingPartCollision()
+    local waitingPart = GetDYHUBWaitingPart()
+    if not waitingPart then return end
+    pcall(function()
+        waitingPart.CanCollide = AutoFarmEnabled == true
+        waitingPart.CanTouch = false
+        waitingPart.CanQuery = false
+    end)
+end
+
+UpdateDYHUBWaitingPartCollision()
 
 function CombatDebug(tag, message, cooldown, showNotify)
     if not CombatDebugEnabled then return end
@@ -1902,7 +1920,9 @@ FARM_ASTRO_TOP_B       = CFrame.new(495, 167, 505)
 
 FARM_ASTRO_LOW_A       = CFrame.new(-680, -15, -555)
 FARM_ASTRO_LOW_B       = CFrame.new(500, -15, -555)
-FARM_ASTRO_TWEEN_TIME  = 1
+FARM_ASTRO_TIMER_SAFE_CF = CFrame.new(-23.3435822, 3, 0.341766357)
+FARM_ASTRO_TIMER_PART_OFFSET = CFrame.new(0, -4, 0)
+FARM_ASTRO_TWEEN_TIME  = 0.3
 
 function NotifyFarmAstroAutoFarm()
     local now = tick()
@@ -1922,7 +1942,7 @@ function NotifyFarmAstroCleanMode()
     FarmAstroTokenLastCleanNotify = now
     WindUI:Notify({
         Title = "Farm Astro Token",
-        Content = "Farm Astro Token will not kill skibidi, so Clean mode cannot collect items. Please select IDGF mode.",
+        Content = "Farm Astro Token will not kill mobs, so Clean mode cannot collect items. Please select IDGF mode.",
         Duration = 5,
         Icon = "triangle-alert"
     })
@@ -1935,6 +1955,32 @@ function CheckFarmAstroCollectMode()
     end
     return true
 end
+
+function GetFarmAstroTimerLabel()
+    local playerGui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return nil end
+    local wavesGui = playerGui:FindFirstChild("WavesGui")
+    if not wavesGui then return nil end
+    local frame = wavesGui:FindFirstChild("Frame")
+    if not frame then return nil end
+    return frame:FindFirstChild("Timer")
+end
+
+function GetFarmAstroTimerValue()
+    local timerLabel = GetFarmAstroTimerLabel()
+    if not timerLabel then return nil end
+    local textValue = tostring(timerLabel.Text or "")
+    local numberText = textValue:match("(%d+)%s*$") or textValue:match("(%d+)")
+    if numberText then return tonumber(numberText) end
+    return nil
+end
+
+function IsFarmAstroTimerEnding()
+    if tick() < FarmAstroTokenTimerIgnoreUntil then return false end
+    local timerValue = GetFarmAstroTimerValue()
+    return timerValue ~= nil and timerValue <= 1
+end
+
 
 function GetFarmAstroCharacter()
     local char = LocalPlayer.Character or Character
@@ -1989,6 +2035,50 @@ function FarmAstroSnapCharacterToPart()
     end)
 end
 
+function CancelFarmAstroTween()
+    if FarmAstroTokenTween then
+        pcall(function() FarmAstroTokenTween:Cancel() end)
+        FarmAstroTokenTween = nil
+    end
+end
+
+function MoveFarmAstroToTimerSafe()
+    FarmAstroTokenTimerHold = true
+    CancelFarmAstroTween()
+    CreateFarmAstroTokenPart()
+
+    pcall(function()
+        if FarmAstroTokenPart and FarmAstroTokenPart.Parent then
+            FarmAstroTokenPart.CFrame = FARM_ASTRO_TIMER_SAFE_CF * FARM_ASTRO_TIMER_PART_OFFSET
+        end
+    end)
+
+    pcall(function()
+        local char, hrp, hum = GetFarmAstroCharacter()
+        if not char or not hrp then return end
+        if hum then
+            hum.Sit = false
+            hum.PlatformStand = false
+            hum.AutoRotate = true
+        end
+        char:PivotTo(FARM_ASTRO_TIMER_SAFE_CF)
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+    end)
+end
+
+function WaitFarmAstroRespawnAfterTimer()
+    local currentRespawn = FarmAstroTokenRespawnCounter
+    MoveFarmAstroToTimerSafe()
+
+    while FarmAstroTokenEnabled and FarmAstroTokenRespawnCounter <= currentRespawn do
+        task.wait(0.2)
+    end
+
+    FarmAstroTokenTimerHold = false
+    FarmAstroTokenTimerIgnoreUntil = tick() + 2
+end
+
 function StartFarmAstroNoClip()
     if FarmAstroTokenNoClipConnection then return end
     FarmAstroTokenNoClipConnection = RunService.Heartbeat:Connect(function()
@@ -2001,7 +2091,11 @@ function StartFarmAstroNoClip()
             end
             if hum then hum.Sit = false; hum.PlatformStand = false end
             if not FarmAstroTokenPauseCollect and FarmAstroTokenPart and FarmAstroTokenPart.Parent and hrp then
-                char:PivotTo(FarmAstroTokenPart.CFrame * CFrame.new(0, 4, 0))
+                if FarmAstroTokenTimerHold then
+                    char:PivotTo(FARM_ASTRO_TIMER_SAFE_CF)
+                else
+                    char:PivotTo(FarmAstroTokenPart.CFrame * CFrame.new(0, 4, 0))
+                end
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.AssemblyAngularVelocity = Vector3.zero
             end
@@ -2018,15 +2112,16 @@ end
 
 function SetFarmAstroCollectPause(state)
     FarmAstroTokenPauseCollect = state == true
-    if FarmAstroTokenTween then
-        pcall(function() FarmAstroTokenTween:Cancel() end)
-        FarmAstroTokenTween = nil
-    end
+    CancelFarmAstroTween()
 end
 
 function TweenFarmAstroTokenTo(cf, duration)
     if not FarmAstroTokenPart or not FarmAstroTokenPart.Parent then return false end
-    if FarmAstroTokenTween then pcall(function() FarmAstroTokenTween:Cancel() end) end
+    if IsFarmAstroTimerEnding() then
+        MoveFarmAstroToTimerSafe()
+        return "timer_end"
+    end
+    CancelFarmAstroTween()
 
     FarmAstroTokenTween = TweenService:Create(
         FarmAstroTokenPart,
@@ -2036,9 +2131,12 @@ function TweenFarmAstroTokenTo(cf, duration)
     FarmAstroTokenTween:Play()
 
     while FarmAstroTokenEnabled do
+        if IsFarmAstroTimerEnding() then
+            MoveFarmAstroToTimerSafe()
+            return "timer_end"
+        end
         if FarmAstroTokenPauseCollect then
-            pcall(function() FarmAstroTokenTween:Cancel() end)
-            FarmAstroTokenTween = nil
+            CancelFarmAstroTween()
             return true
         end
         if not FarmAstroTokenTween or FarmAstroTokenTween.PlaybackState ~= Enum.PlaybackState.Playing then break end
@@ -2046,8 +2144,7 @@ function TweenFarmAstroTokenTo(cf, duration)
     end
 
     if not FarmAstroTokenEnabled then
-        if FarmAstroTokenTween then pcall(function() FarmAstroTokenTween:Cancel() end) end
-        FarmAstroTokenTween = nil
+        CancelFarmAstroTween()
         return false
     end
 
@@ -2071,6 +2168,7 @@ function StartFarmAstroToken()
     LockActive = false
     AutoAttackEnabled = false
     AutoSkillEnabled = false
+    FarmAstroTokenTimerHold = false
     CreateFarmAstroTokenPart()
     StartFarmAstroNoClip()
     CheckFarmAstroCollectMode()
@@ -2083,23 +2181,45 @@ function StartFarmAstroToken()
             end
             if not FarmAstroTokenEnabled then break end
 
+            if IsFarmAstroTimerEnding() then
+                WaitFarmAstroRespawnAfterTimer()
+                continue
+            end
+
             CreateFarmAstroTokenPart()
             FarmAstroTokenPart.CFrame = FARM_ASTRO_TOP_A
             FarmAstroSnapCharacterToPart()
-            if not TweenFarmAstroTokenTo(FARM_ASTRO_TOP_B, FARM_ASTRO_TWEEN_TIME) then break end
+
+            local topResult = TweenFarmAstroTokenTo(FARM_ASTRO_TOP_B, FARM_ASTRO_TWEEN_TIME)
+            if topResult == "timer_end" then
+                WaitFarmAstroRespawnAfterTimer()
+                continue
+            end
+            if not topResult then break end
 
             if FarmAstroTokenPauseCollect then continue end
+            if IsFarmAstroTimerEnding() then
+                WaitFarmAstroRespawnAfterTimer()
+                continue
+            end
+
             FarmAstroTokenPart.CFrame = FARM_ASTRO_LOW_A
             FarmAstroSnapCharacterToPart()
-            if not TweenFarmAstroTokenTo(FARM_ASTRO_LOW_B, FARM_ASTRO_TWEEN_TIME) then break end
+
+            local lowResult = TweenFarmAstroTokenTo(FARM_ASTRO_LOW_B, FARM_ASTRO_TWEEN_TIME)
+            if lowResult == "timer_end" then
+                WaitFarmAstroRespawnAfterTimer()
+                continue
+            end
+            if not lowResult then break end
         end
 
-        if FarmAstroTokenTween then pcall(function() FarmAstroTokenTween:Cancel() end) end
-        FarmAstroTokenTween = nil
+        CancelFarmAstroTween()
         StopFarmAstroNoClip()
         if FarmAstroTokenPart then pcall(function() FarmAstroTokenPart:Destroy() end) end
         FarmAstroTokenPart = nil
         FarmAstroTokenPauseCollect = false
+        FarmAstroTokenTimerHold = false
         FarmAstroTokenRunning = false
         RestoreFarmCameraAndMovement()
         HandleMiscOptions(MiscOptions)
@@ -2108,14 +2228,12 @@ end
 
 function StopFarmAstroToken(saveState)
     FarmAstroTokenEnabled = false
+    FarmAstroTokenTimerHold = false
     if saveState then
         Config:Set("FarmAstroTokenEnabled", false)
         Config:Save()
     end
-    if FarmAstroTokenTween then
-        pcall(function() FarmAstroTokenTween:Cancel() end)
-        FarmAstroTokenTween = nil
-    end
+    CancelFarmAstroTween()
 end
 
 
@@ -2611,6 +2729,11 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     Character        = char
     HumanoidRootPart = char:WaitForChild("HumanoidRootPart")
     Client           = LocalPlayer
+    FarmAstroTokenRespawnCounter = FarmAstroTokenRespawnCounter + 1
+    FarmAstroTokenTimerHold = false
+    FarmAstroTokenTimerIgnoreUntil = tick() + 2
+    if FarmAstroTokenEnabled then CancelFarmAstroTween() end
+    UpdateDYHUBWaitingPartCollision()
     MobHeightOverride   = {}
     MobConfirmedPadding = {}
     MobLastHealth       = {}
@@ -2641,12 +2764,14 @@ AutoFarmToggle = Main:Toggle({
     Callback = function(state)
         if state and FarmAstroTokenEnabled then
             AutoFarmEnabled = false
+            UpdateDYHUBWaitingPartCollision()
             Config:Set("AutoFarmEnabled", false)
             Config:Save()
             NotifyFarmAstroAutoFarm()
             return
         end
         AutoFarmEnabled = state
+        UpdateDYHUBWaitingPartCollision()
         if state then
             StartFarmLoop()
             HandleMiscOptions(MiscOptions)
@@ -2762,7 +2887,7 @@ Main:Section({ Title = "Farm Astro", Icon = "sparkles" })
 
 FarmAstroTokenToggle = Main:Toggle({
     Title = "Farm Astro Token (Holdout)",
-    Desc = "Avoid all mob to prevent yourself from dying",
+    Desc = "Avoid all monsters to prevent yourself from dying, when time runs out go to the center",
     Value = FarmAstroTokenEnabled,
     Callback = function(state)
         if state and AutoFarmEnabled then
@@ -5259,6 +5384,7 @@ function ApplySavedConfigOnStartup()
     task.wait(1)
     updatePlayerStats()
     ApplyCameraMode()
+    UpdateDYHUBWaitingPartCollision()
     if FullBrightEnabled then ApplyFullBright() end
     if NoFogEnabled then ApplyNoFog() end
     if FlyEnabled then StartFly() end
