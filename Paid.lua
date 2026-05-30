@@ -1,7 +1,7 @@
 -- v123 | [Local Register Fix]
 -- =========================
 version = "Rework"
-ver = "v023.64"
+ver = "v023.65"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -57,7 +57,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config_02364.json"
+    self.ConfigPath = ConfigFolder .. "/config_02365.json"
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
     self:Load()
     return self
@@ -188,6 +188,8 @@ Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/30/2026 | CL: " .. ver,
     Desc = [[- [ Paid Version ] Mode Farm for different farming modes / BETA
+- [ Added ] Titan Request / Shop
+- [ Added ] Auto Upgrade Skill Tree / Shop
 - [ Added ] Debug code to check execution time when the script has errors
 - [ Fixed ] God Mode, Safe Mode, Delete Map, Auto Skip, Auto Fill Up, Auto Start obey Sync Farm Only
 - [ Fixed ] Sync Farm Only now fully stops Misc Farm systems when Auto Farm is OFF
