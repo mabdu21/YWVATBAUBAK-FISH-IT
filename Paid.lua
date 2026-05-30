@@ -1,4 +1,4 @@
--- v124 | [Local Register Fix]
+-- v156 | [Local Register Fix]
 -- =========================
 version = "Rework"
 ver = "v023.65"
@@ -309,7 +309,8 @@ HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 GlobalTables = {
     redeemCodes = { "100MVisit2", "100MVisit1", "CamArmada", "CCTVBase", "ADelayedGameIsEventuallyGoodButRushedGameIsForeverBad" },
     Weapon   = { "Stungun", "Flamethrower", "Harpoon Gun", "Shot Gun", "Pulse Rifle", "Shot Harpoon Gun", "EPD", "Small Laser Gun" },
-    MiscShop = { "HeadPhone", "Titan-Request", "SpecialTitan-Request", "Speaker-Request", "Grenade", "Jetpack", "Lens" },
+    MiscShop = { "HeadPhone", "Grenade", "Jetpack", "Lens" },
+    RequestTitanSpeaker = { "Titan-Request", "SpecialTitan-Request", "Speaker-Request" },
     Gamepasst = { "All", "LuckyBoost", "RareLuckyBoost", "LegendaryLuckyBoost" },
     Gamepassts = {},
 }
@@ -1896,10 +1897,11 @@ CollectLastFullScan = 0
 -- ====================== FARM ASTRO TOKEN ====================
 -- ============================================================
 FARM_ASTRO_TOKEN_IMAGE = "rbxassetid://104487529937663"
-FARM_ASTRO_TOP_A       = CFrame.new(-640, 167, 440)
-FARM_ASTRO_TOP_B       = CFrame.new(440, 167, 440)
-FARM_ASTRO_LOW_A       = CFrame.new(-640, -15, -520)
-FARM_ASTRO_LOW_B       = CFrame.new(440, -15, -520)
+FARM_ASTRO_TOP_A       = CFrame.new(-680, 167, 495)
+FARM_ASTRO_TOP_B       = CFrame.new(495, 167, 495)
+
+FARM_ASTRO_LOW_A       = CFrame.new(-680, -15, -550)
+FARM_ASTRO_LOW_B       = CFrame.new(500, -15, -550)
 FARM_ASTRO_TWEEN_TIME  = 1
 
 function NotifyFarmAstroAutoFarm()
@@ -2756,11 +2758,11 @@ Main:Toggle({
 })
 
 
-Main:Section({ Title = "Farm Astro Token", Icon = "sparkles" })
+Main:Section({ Title = "Farm Astro", Icon = "sparkles" })
 
 FarmAstroTokenToggle = Main:Toggle({
-    Title = "Farm Astro Token",
-    Desc = "Avoid all skibidi to prevent yourself from dying",
+    Title = "Farm Astro Token (Holdout)",
+    Desc = "Avoid all mob to prevent yourself from dying",
     Value = FarmAstroTokenEnabled,
     Callback = function(state)
         if state and AutoFarmEnabled then
@@ -4108,6 +4110,214 @@ AutoVoteToggle = Main7:Toggle({
     end
 })
 
+
+-- ====================== REQUEST / SKILL TREE HELPERS ======================
+RequestWaveNotifyAt = 0
+AutoSkillTreeNotifyAt = 0
+
+function SafeWindNotify(title, content, duration, icon)
+    if WindUI and WindUI.Notify then
+        pcall(function()
+            WindUI:Notify({
+                Title = tostring(title or "DYHUB"),
+                Content = tostring(content or ""),
+                Duration = duration or 3,
+                Icon = icon or "info"
+            })
+        end)
+    end
+end
+
+function GetCurrentWaveText()
+    local ok, result = pcall(function()
+        local playerGui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+        if not playerGui then return nil end
+
+        local wavesGui = playerGui:FindFirstChild("WavesGui")
+        if not wavesGui then return nil end
+
+        local frame = wavesGui:FindFirstChild("Frame")
+        if not frame then return nil end
+
+        local label = frame:FindFirstChild("TextLabel")
+        if not label then return nil end
+
+        return tostring(label.Text or "")
+    end)
+
+    if ok then return result end
+    return nil
+end
+
+function GetCurrentWaveNumber()
+    local text = GetCurrentWaveText()
+    if not text then return nil end
+
+    local numberText = tostring(text):match("(%d+)")
+    if not numberText then return nil end
+
+    return tonumber(numberText)
+end
+
+function IsRequestWaveReady()
+    local wave = GetCurrentWaveNumber()
+    return wave ~= nil and wave >= 10
+end
+
+function NotifyRequestWaveNotReady()
+    local now = tick()
+    if now - RequestWaveNotifyAt < 4 then return end
+    RequestWaveNotifyAt = now
+
+    if GetCurrentWaveNumber() == nil then
+        SafeWindNotify("Auto Request", "Cannot request yet. Wave UI is not ready.", 3, "triangle-alert")
+    else
+        SafeWindNotify("Auto Request", "Cannot request yet. Required Wave 10 or higher.", 3, "triangle-alert")
+    end
+end
+
+function GetCurrentCharacterValue()
+    local ok, result = pcall(function()
+        local playerValues = LocalPlayer and LocalPlayer:FindFirstChild("PlayerValues")
+        if not playerValues then return nil end
+
+        local charValue = playerValues:FindFirstChild("Character")
+        if not charValue then return nil end
+
+        return tostring(charValue.Value or "")
+    end)
+
+    if ok then return result end
+    return nil
+end
+
+function GetSkillTreeUIFolder()
+    local characterName = GetCurrentCharacterValue()
+    if not characterName or characterName == "" then return nil, characterName end
+
+    local ok, result = pcall(function()
+        local playerGui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+        if not playerGui then return nil end
+
+        local skillGui = playerGui:FindFirstChild("003-A")
+        if not skillGui then return nil end
+
+        local main = skillGui:FindFirstChild("Main")
+        if not main then return nil end
+
+        local scrolling = main:FindFirstChild("ScrollingFrame")
+        if not scrolling then return nil end
+
+        local direct = scrolling:FindFirstChild("Skills " .. characterName)
+        if direct then return direct end
+
+        local loweredName = characterName:lower()
+        for _, child in ipairs(scrolling:GetChildren()) do
+            local childName = tostring(child.Name or ""):lower()
+            if childName:find("skills", 1, true) and childName:find(loweredName, 1, true) then
+                return child
+            end
+        end
+
+        return nil
+    end)
+
+    if ok then return result, characterName end
+    return nil, characterName
+end
+
+function HasOwnedSkillTree(skillName)
+    local folder = LocalPlayer and LocalPlayer:FindFirstChild("SkillTreesFolder")
+    if not folder then return false end
+
+    if folder:FindFirstChild(skillName) then return true end
+
+    local loweredName = tostring(skillName or ""):lower()
+    for _, child in ipairs(folder:GetChildren()) do
+        if tostring(child.Name or ""):lower() == loweredName then
+            return true
+        end
+    end
+
+    return false
+end
+
+function IsSkillTreeBuyObject(obj)
+    if not obj or not obj.Name then return false end
+
+    local loweredName = tostring(obj.Name):lower()
+    if loweredName == "" then return false end
+    if loweredName:find("layout", 1, true) then return false end
+    if loweredName:find("padding", 1, true) then return false end
+    if loweredName:find("stroke", 1, true) then return false end
+    if loweredName:find("corner", 1, true) then return false end
+
+    if obj:IsA("GuiObject") or obj:IsA("Folder") or obj:IsA("Model") then
+        return true
+    end
+
+    return false
+end
+
+function GetSkillTreesRemote()
+    local remote = GetRemote("skilltrees")
+    if remote then return remote end
+
+    pcall(function()
+        remote = ReplicatedStorage:FindFirstChild("SkillTrees") or ReplicatedStorage:FindFirstChild("SkillTree") or ReplicatedStorage:WaitForChild("skilltrees", 2)
+    end)
+
+    return remote
+end
+
+function NotifyAutoSkillTree(message)
+    local now = tick()
+    if now - AutoSkillTreeNotifyAt < 5 then return end
+    AutoSkillTreeNotifyAt = now
+    SafeWindNotify("Auto Skill Tree", tostring(message or "Skill tree is not ready."), 3, "triangle-alert")
+end
+
+function FireAutoSkillTrees()
+    local remote = GetSkillTreesRemote()
+    if not remote then
+        NotifyAutoSkillTree("Skill tree remote was not found.")
+        return false
+    end
+
+    local folder, characterName = GetSkillTreeUIFolder()
+    if not characterName or characterName == "" then
+        NotifyAutoSkillTree("Cannot read your current character.")
+        return false
+    end
+
+    if not folder then
+        NotifyAutoSkillTree("Skill tree UI for " .. tostring(characterName) .. " was not found.")
+        return false
+    end
+
+    local fired = 0
+    for _, skillObj in ipairs(folder:GetChildren()) do
+        if IsSkillTreeBuyObject(skillObj) and not HasOwnedSkillTree(skillObj.Name) then
+            local remoteArg = tostring(skillObj.Name):lower()
+            local ok, err = pcall(function()
+                remote:FireServer(remoteArg)
+            end)
+
+            if ok then
+                fired = fired + 1
+                print("[DYHUB] Auto Skill Tree fired:", remoteArg)
+            else
+                warn("[DYHUB] Auto Skill Tree failed:", remoteArg, err)
+            end
+
+            task.wait(0.15)
+        end
+    end
+
+    return true
+end
+
+
 -- ====================== UI: SHOP SYSTEMS ======================
 Main5:Section({ Title = "Auto Gacha", Icon = "sparkles" })
 
@@ -4126,6 +4336,10 @@ _G.__DYHUB_ShopSystems = function()
     local autoUseItemEnabled        = Config:Get("AutoUseItemEnabled", false)
     local selectedUseItem           = Config:Get("SelectedUseItem", "Presents")
     local useItemRunning            = false
+
+    local selectedRequestItem       = Config:Get("SelectedRequestItem", "Titan-Request")
+    local autoRequestEnabled        = Config:Get("AutoRequestEnabled", false)
+    local autoSkillTreeEnabled      = Config:Get("AutoSkillTreeEnabled", false)
 
     local function EnsureList(value, fallback)
         if type(value) == "table" then
@@ -4423,6 +4637,18 @@ _G.__DYHUB_ShopSystems = function()
     local autoBuyMiscValue   = Config:Get("AutoBuyMiscValue", "HeadPhone")
     local autoBuyMiscEnabled = Config:Get("AutoBuyMiscEnabled", false)
 
+    if table.find(GlobalTables.RequestTitanSpeaker, autoBuyMiscValue) or not table.find(GlobalTables.MiscShop, autoBuyMiscValue) then
+        autoBuyMiscValue = "HeadPhone"
+        Config:Set("AutoBuyMiscValue", autoBuyMiscValue)
+        Config:Save()
+    end
+
+    if not table.find(GlobalTables.RequestTitanSpeaker, selectedRequestItem) then
+        selectedRequestItem = "Titan-Request"
+        Config:Set("SelectedRequestItem", selectedRequestItem)
+        Config:Save()
+    end
+
     MiscShopDropdown = Main5:Dropdown({
         Title = "Select Misc",
         Desc = "Selects the misc item that will be bought automatically.",
@@ -4458,14 +4684,85 @@ _G.__DYHUB_ShopSystems = function()
         end
     })
 
+    Main5:Section({ Title = "Request Titan / Speaker", Icon = "send" })
+
+    RequestTitanSpeakerDropdown = Main5:Dropdown({
+        Title = "Select Request",
+        Desc = "Selects which Titan/Speaker request will be bought automatically.",
+        Values = GlobalTables.RequestTitanSpeaker,
+        Multi = false,
+        Value = selectedRequestItem,
+        Callback = function(value)
+            selectedRequestItem = value or "Titan-Request"
+            Config:Set("SelectedRequestItem", selectedRequestItem)
+            Config:Save()
+        end
+    })
+
+    AutoRequestToggle = Main5:Toggle({
+        Title = "Auto Request",
+        Desc = "Automatically requests the selected Titan/Speaker when Wave 10+.",
+        Value = autoRequestEnabled,
+        Callback = function(enabled)
+            autoRequestEnabled = enabled
+            Config:Set("AutoRequestEnabled", enabled)
+            Config:Save()
+
+            if enabled then
+                if not IsRequestWaveReady() then
+                    NotifyRequestWaveNotReady()
+                end
+                StartAutoSyncedShopLoop()
+            end
+        end
+    })
+
+    Main5:Section({ Title = "Skill Tree", Icon = "git-branch-plus" })
+
+    AutoSkillTreeToggle = Main5:Toggle({
+        Title = "Auto Skill Tree",
+        Desc = "Automatically unlocks missing skill trees for your current character.",
+        Value = autoSkillTreeEnabled,
+        Callback = function(enabled)
+            autoSkillTreeEnabled = enabled
+            Config:Set("AutoSkillTreeEnabled", enabled)
+            Config:Save()
+
+            if enabled then
+                StartAutoSyncedShopLoop()
+            end
+        end
+    })
+
     local autoSyncedShopRunning = false
 
-    local function IsAnySyncedShopEnabled()
+    local function IsHeavySyncedShopEnabled()
         return autoBuyWeaponEnabled
             or autoBuyMiscEnabled
             or upgradeTitanSpeakerEnabled
             or upgradeUTCMEnabled
             or upgradeTVEnabled
+    end
+
+    local function IsAnySyncedShopEnabled()
+        return IsHeavySyncedShopEnabled()
+            or autoRequestEnabled
+            or autoSkillTreeEnabled
+    end
+
+    local function GetSyncedShopPreDelay()
+        if not IsHeavySyncedShopEnabled() and (autoRequestEnabled or autoSkillTreeEnabled) then
+            return 0
+        end
+        return 30
+    end
+
+    local function GetSyncedShopPostDelay()
+        if not IsHeavySyncedShopEnabled() then
+            if autoRequestEnabled then return 2 end
+            if autoSkillTreeEnabled then return 5 end
+        end
+        return 10
     end
 
     local function FireSyncedShopBatch()
@@ -4476,6 +4773,20 @@ _G.__DYHUB_ShopSystems = function()
 
         if autoBuyMiscEnabled and autoBuyMiscValue then
             FireShopRemote("ShopSystem", "Buy", autoBuyMiscValue)
+            task.wait(0.15)
+        end
+
+        if autoRequestEnabled and selectedRequestItem then
+            if IsRequestWaveReady() then
+                FireShopRemote("ShopSystem", "Buy", selectedRequestItem)
+            else
+                NotifyRequestWaveNotReady()
+            end
+            task.wait(0.15)
+        end
+
+        if autoSkillTreeEnabled then
+            FireAutoSkillTrees()
             task.wait(0.15)
         end
 
@@ -4510,7 +4821,7 @@ _G.__DYHUB_ShopSystems = function()
 
             while IsAnySyncedShopEnabled() do
                 if not firstCycle then
-                    if not WaitWhileEnabled(30, IsAnySyncedShopEnabled) then break end
+                    if not WaitWhileEnabled(GetSyncedShopPreDelay(), IsAnySyncedShopEnabled) then break end
                 end
                 firstCycle = false
 
@@ -4527,7 +4838,7 @@ _G.__DYHUB_ShopSystems = function()
                     TriggerAutoSkipHeli(true)
                 end
 
-                if not WaitWhileEnabled(10, IsAnySyncedShopEnabled) then break end
+                if not WaitWhileEnabled(GetSyncedShopPostDelay(), IsAnySyncedShopEnabled) then break end
             end
 
             autoSyncedShopRunning = false
