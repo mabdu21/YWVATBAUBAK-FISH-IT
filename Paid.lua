@@ -1,4 +1,4 @@
--- v121 | [Local Register Fix]
+-- v124 | [Local Register Fix]
 -- =========================
 version = "Rework"
 ver = "v023.65"
@@ -431,8 +431,8 @@ function CombatDebug(tag, message, cooldown, showNotify)
 end
 
 function IsMiscFarmAllowed()
-    if FarmAstroTokenEnabled then return false end
-    return AutoFarmEnabled or not SyncFarmOnly
+	if FarmAstroTokenEnabled and SyncFarmOnly then return false end
+	return AutoFarmEnabled or not SyncFarmOnly
 end
 
 function StopMiscFarmRuntime(reason)
