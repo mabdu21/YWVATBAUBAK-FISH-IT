@@ -1,7 +1,7 @@
 -- v123 | [Local Register Fix]
 -- =========================
 version = "Rework"
-ver = "v023.65"
+ver = "v023.66"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -57,7 +57,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config_02365.json"
+    self.ConfigPath = ConfigFolder .. "/config_02366.json"
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
     self:Load()
     return self
