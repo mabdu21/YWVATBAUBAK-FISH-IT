@@ -1,7 +1,7 @@
 -- v156 | [Local Register Fix]
 -- =========================
 version = "Rework"
-ver = "v023.65"
+ver = "v023.66"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -1897,11 +1897,11 @@ CollectLastFullScan = 0
 -- ====================== FARM ASTRO TOKEN ====================
 -- ============================================================
 FARM_ASTRO_TOKEN_IMAGE = "rbxassetid://104487529937663"
-FARM_ASTRO_TOP_A       = CFrame.new(-680, 167, 495)
-FARM_ASTRO_TOP_B       = CFrame.new(495, 167, 495)
+FARM_ASTRO_TOP_A       = CFrame.new(-680, 167, 505)
+FARM_ASTRO_TOP_B       = CFrame.new(495, 167, 505)
 
-FARM_ASTRO_LOW_A       = CFrame.new(-680, -15, -550)
-FARM_ASTRO_LOW_B       = CFrame.new(500, -15, -550)
+FARM_ASTRO_LOW_A       = CFrame.new(-680, -15, -555)
+FARM_ASTRO_LOW_B       = CFrame.new(500, -15, -555)
 FARM_ASTRO_TWEEN_TIME  = 1
 
 function NotifyFarmAstroAutoFarm()
