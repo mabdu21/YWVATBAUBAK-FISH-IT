@@ -59,7 +59,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config_stbb2.json"
+    self.ConfigPath = ConfigFolder .. "/stbb_config.json"
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
     self:Load()
     return self
@@ -190,7 +190,7 @@ Info:Divider()
 Info:Paragraph({
     Title = "Update: 06/01/2026 | CL: " .. ver,
     Desc = [[- [ Paid Version ] Mode Farm for different farming modes / Dark Dimension, Astro Holdout
-- [ Fixed ] Jeffrey escape is now Barrier-safe and will not choose points outside workspace.Map.Barrier
+- [ Fixed ] Jeffrey escape is now Barrier-safe and will not choose points outside Barrier
 - [ Fixed ] Escape path is raycast-checked so Tween/Teleport will not cross Barrier parts
 - [ Improved ] Escape target selection clamps +X/-X/+Z/+diagonal moves inside the arena
 - [ Improved ] After Orb/escape, farm never returns to mobs standing inside Jeffrey danger range
