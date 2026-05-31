@@ -1,7 +1,7 @@
 -- Powered by nig | v523
 -- =========================
 local version = "Rework"
-local ver     = "v015.10"
+local ver     = "v015.11"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -267,8 +267,9 @@ Info:Divider()
 Info:Paragraph({
     Title = "Update: 05/31/2026 | CL: " .. ver,
     Desc  = [[• [ Premium Only ] God Mode It will make you immortal. / But there have been Issue.
-• [ Reworked ] No fall / Blocking the operation of a fall system.
 • [ Fixed ] Auto parry system isn't working. / mobile
+• [ Added ] Aimbot for twist of fate / BETA
+• [ Reworked ] No fall / Blocking the operation of a fall system.
 • [ Improved ] Upgraded of some features reduce lag/cache.]],
 })
 Info:Divider()
