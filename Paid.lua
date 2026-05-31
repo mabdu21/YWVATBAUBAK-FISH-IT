@@ -1,7 +1,7 @@
 -- v160 | [Local Register Fix]
 -- =========================
 version = "Rework"
-ver = "v023.67"
+ver = "v023.71"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -24,8 +24,8 @@ end
 
 waitLoadingGone()
 
-WindUI:Notify({ Title = "Initialization", Content = "Load complete, Starting in 3s.", Duration = 3, Icon = "shield-check" })
-task.wait(3)
+WindUI:Notify({ Title = "Initialization", Content = "Load complete, Starting in 2 seconds.", Duration = 2, Icon = "shield-check" })
+task.wait(2)
 
 -- ====================== FPS UNLOCK ======================
 part = Instance.new("Part")
@@ -59,7 +59,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config_02367.json"
+    self.ConfigPath = ConfigFolder .. "/1_config_stbb.json"
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
     self:Load()
     return self
@@ -188,11 +188,13 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 05/30/2026 | CL: " .. ver,
+    Title = "Update: 05/31/2026 | CL: " .. ver,
     Desc = [[- [ Paid Version ] Mode Farm for different farming modes / BETA
-- [ Fixed ] Farm Astro Token / Do not move to the center position
-- [ Improved ] Idle part sync with Auto Farm 
-- [ Improved ] Farm Astro Token has the time scanning system 0 or 1]],
+- [ Fixed ] Farm Astro Token Revive waits for before God Mode one-shot
+- [ Fixed ] God Mode HP (%) is blocked while Farm Astro Token is active with Sync Farm Only OFF
+- [ Fixed ] Farm Astro Token / God Mode bug issue
+- [ Improved ] Farm Astro Token has the time scanning system 5 - 10
+- [ Improved ] Added descriptions for details]],
 })
 Info:Divider()
 Info:Section({ Title = "Discord Information", TextXAlignment = "Center", TextSize = 17 })
@@ -367,6 +369,15 @@ FarmAstroTokenLastAutoFarmNotify = 0
 FarmAstroTokenTimerHold = false
 FarmAstroTokenTimerIgnoreUntil = 0
 FarmAstroTokenRespawnCounter = 0
+FarmAstroGodModePaused = false
+FarmAstroReviveGodTriggered = false
+FarmAstroFinalLockActive = false
+FarmAstroTimerDropping = false
+FarmAstroBottomGodTriggered = false
+FarmAstroWaveTimerArmed = false
+FarmAstroLastWaveTimer = nil
+FarmAstroReviveTimerArmed = false
+FarmAstroLastReviveTimer = nil
 AutoAttackEnabled      = false
 AutoSkillEnabled       = false
 AutoSkipHeliEnabled    = false
@@ -1660,57 +1671,83 @@ function GetPlayerHealthPercent()
     return (humanoid.Health / humanoid.MaxHealth) * 100
 end
 
+-- ====================== GOD MODE CORE ======================
+function IsCharacterDeadForGodMode(char, humanoid)
+    return not char
+        or not char.Parent
+        or not humanoid
+        or not humanoid.Parent
+        or humanoid.Health <= 0
+        or humanoid:GetState() == Enum.HumanoidStateType.Dead
+end
+
+function ForceGodModeOnce(reason)
+    local ok, result = pcall(function()
+        local char = LocalPlayer.Character
+        if not char then return false end
+
+        local humanoid = char:FindFirstChildOfClass("Humanoid") or char:FindFirstChild("Humanoid")
+        if not humanoid then return false end
+        if IsCharacterDeadForGodMode(char, humanoid) then return false end
+
+        local destroyed = false
+
+        local head = char:FindFirstChild("Head")
+        if head then
+            head:Destroy()
+            destroyed = true
+        end
+
+        task.wait(0.05)
+
+        if IsCharacterDeadForGodMode(char, humanoid) then
+            CombatDebug("GodMode", "Triggered once: " .. tostring(reason or "manual"), 2)
+            return true
+        end
+
+        local torso = char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+        if torso then
+            torso:Destroy()
+            destroyed = true
+        end
+
+        if not destroyed and not IsCharacterDeadForGodMode(char, humanoid) then
+            humanoid.Health = 0
+        end
+
+        CombatDebug("GodMode", "Triggered once: " .. tostring(reason or "manual"), 2)
+        return true
+    end)
+
+    return ok and result == true
+end
+
+function ShouldBlockFarmAstroGodModePercent()
+    -- Farm Astro Token uses ReviveUI TIMER : 5 as the only God Mode trigger.
+    -- This blocks the normal HP percent loop so it cannot fire instantly when downed at 1 HP.
+    return FarmAstroTokenEnabled == true
+        and SyncFarmOnly == false
+        and table.find(MiscOptions or {}, "God Mode") ~= nil
+end
+
 -- ====================== GOD MODE LOOP ======================
 task.spawn(function()
     while true do
         task.wait(0.1)
 
-        if GodModeEnabled and IsMiscFarmAllowed() then
+        if GodModeEnabled and not FarmAstroGodModePaused and IsMiscFarmAllowed() and not ShouldBlockFarmAstroGodModePercent() then
             pcall(function()
                 local char = LocalPlayer.Character
                 if not char then return end
 
-                local humanoid = char:FindFirstChild("Humanoid")
+                local humanoid = char:FindFirstChildOfClass("Humanoid") or char:FindFirstChild("Humanoid")
                 if not humanoid then return end
                 if humanoid.MaxHealth <= 0 then return end
 
                 local hpPercent = (humanoid.Health / humanoid.MaxHealth) * 100
 
                 if hpPercent < GodModeValue then
-                    local destroyed = false
-
-                    local function IsDead()
-                        return not char.Parent
-                            or not humanoid.Parent
-                            or humanoid.Health <= 0
-                            or humanoid:GetState() == Enum.HumanoidStateType.Dead
-                    end
-
-                    -- ชั้นที่ 1: ลบ Head ก่อน
-                    local head = char:FindFirstChild("Head")
-                    if head then
-                        head:Destroy()
-                        destroyed = true
-                    end
-
-                    -- เช็คว่าลบ Head แล้วตายไหม
-                    task.wait(0.05)
-
-                    if IsDead() then
-                        return -- ถ้าตายแล้ว ไม่ต้องลบ Torso
-                    end
-
-                    -- ชั้นที่ 2: ถ้ายังไม่ตาย ค่อยลบ Torso
-                    local torso = char:FindFirstChild("Torso")
-                    if torso then
-                        torso:Destroy()
-                        destroyed = true
-                    end
-
-                    -- fallback ถ้าไม่มีทั้ง Head และ Torso
-                    if not destroyed and not IsDead() then
-                        humanoid.Health = 0
-                    end
+                    ForceGodModeOnce("HP below GodModeValue")
                 end
             end)
         end
@@ -1950,9 +1987,12 @@ FARM_ASTRO_TOP_B       = CFrame.new(495, 167, 505)
 
 FARM_ASTRO_LOW_A       = CFrame.new(-680, -15, -555)
 FARM_ASTRO_LOW_B       = CFrame.new(500, -15, -555)
-FARM_ASTRO_TIMER_SAFE_CF = CFrame.new(-23.3435822, 3, 0.341766357)
+FARM_ASTRO_TIMER_TOP_CF = CFrame.new(-23.3435822, 67, 0.341766357)
+FARM_ASTRO_TIMER_BOTTOM_CF = CFrame.new(-23.3435822, 2, 0.341766357)
+FARM_ASTRO_TIMER_SAFE_CF = FARM_ASTRO_TIMER_BOTTOM_CF
 FARM_ASTRO_TIMER_PART_OFFSET = CFrame.new(0, -4, 0)
 FARM_ASTRO_TWEEN_TIME  = 0.3
+FARM_ASTRO_TIMER_DROP_TIME = 0.35
 
 function NotifyFarmAstroAutoFarm()
     local now = tick()
@@ -2005,20 +2045,182 @@ function GetFarmAstroTimerValue()
     return nil
 end
 
+function UpdateFarmAstroWaveTimerArmed(timerValue)
+    FarmAstroLastWaveTimer = timerValue
+    if timerValue ~= nil and timerValue > 10 then
+        FarmAstroWaveTimerArmed = true
+    end
+end
+
 function IsFarmAstroTimerEnding()
     if tick() < FarmAstroTokenTimerIgnoreUntil then return false end
     local timerValue = GetFarmAstroTimerValue()
-    return timerValue ~= nil and timerValue <= 1
+    UpdateFarmAstroWaveTimerArmed(timerValue)
+    return timerValue ~= nil and timerValue <= 1 and FarmAstroWaveTimerArmed == true
+end
+
+function IsFarmAstroGodModeSelected()
+    return table.find(MiscOptions or {}, "God Mode") ~= nil
+end
+
+function PauseFarmAstroGodModeForTimer()
+    if not FarmAstroTokenEnabled then return false end
+    if SyncFarmOnly then return false end
+    if not IsFarmAstroGodModeSelected() then return false end
+    if FarmAstroGodModePaused then return true end
+    if tick() < FarmAstroTokenTimerIgnoreUntil then return false end
+
+    local timerValue = GetFarmAstroTimerValue()
+    UpdateFarmAstroWaveTimerArmed(timerValue)
+    if timerValue ~= nil and timerValue <= 10 and FarmAstroWaveTimerArmed == true then
+        FarmAstroGodModePaused = true
+        GodModeTriggered = false
+        CombatDebug("FarmAstroGodSync", "God Mode percentage paused at wave timer " .. tostring(timerValue), 2, false)
+        return true
+    end
+
+    return false
+end
+
+function ResumeFarmAstroGodModeAfterRespawn(reason)
+    local wasPaused = FarmAstroGodModePaused
+    FarmAstroGodModePaused = false
+    FarmAstroReviveGodTriggered = false
+    FarmAstroReviveTimerArmed = false
+    FarmAstroLastReviveTimer = nil
+    FarmAstroFinalLockActive = false
+    FarmAstroTimerDropping = false
+    FarmAstroBottomGodTriggered = false
+    FarmAstroReviveTimerArmed = false
+    FarmAstroLastReviveTimer = nil
+    FarmAstroWaveTimerArmed = false
+    FarmAstroLastWaveTimer = nil
+
+    if wasPaused and IsFarmAstroGodModeSelected() then
+        CombatDebug("FarmAstroGodSync", "God Mode resume after " .. tostring(reason or "respawn"), 2, false)
+        task.defer(function()
+            HandleMiscOptions(MiscOptions)
+        end)
+    end
+end
+
+function IsFarmAstroReviveState()
+    local char, hrp, humanoid = GetFarmAstroCharacter()
+    if not char or not hrp or not humanoid then return false end
+    if humanoid.Health <= 0 then return false end
+    -- ReviveUI is only trusted after the player is downed at 1 HP.
+    -- Do not read old/stale UI while normal God Mode percentage is blocked.
+    return humanoid.Health <= 1.05
+end
+
+function GetFarmAstroReviveTimerLabel()
+    if not IsFarmAstroReviveState() then return nil end
+    local char, hrp = GetFarmAstroCharacter()
+    if not char or not hrp then return nil end
+    local reviveUI = hrp:FindFirstChild("ReviveUI")
+    if not reviveUI then return nil end
+    if reviveUI.Enabled == false then return nil end
+    local frame = reviveUI:FindFirstChild("Frame")
+    if not frame then return nil end
+    if frame:IsA("GuiObject") and frame.Visible == false then return nil end
+    local label = frame:FindFirstChild("TextLabel")
+    if not label then return nil end
+    if label:IsA("GuiObject") and label.Visible == false then return nil end
+    return label
+end
+
+function GetFarmAstroReviveTimerValue()
+    local label = GetFarmAstroReviveTimerLabel()
+    if not label then return nil end
+    local textValue = tostring(label.Text or "")
+    local numberText = textValue:match("^%s*[Tt][Ii][Mm][Ee][Rr]%s*:%s*(%d+)%s*$")
+    if numberText then return tonumber(numberText) end
+    return nil
+end
+
+function UpdateFarmAstroReviveTimerArmed(timerValue)
+    FarmAstroLastReviveTimer = timerValue
+    if not IsFarmAstroReviveState() then
+        FarmAstroReviveTimerArmed = false
+        return
+    end
+    if timerValue ~= nil and timerValue > 5 then
+        FarmAstroReviveTimerArmed = true
+    end
+end
+
+function CheckFarmAstroReviveGodModeOnce()
+    if not FarmAstroTokenEnabled or not ShouldBlockFarmAstroGodModePercent() then
+        FarmAstroReviveGodTriggered = false
+        FarmAstroReviveTimerArmed = false
+        FarmAstroLastReviveTimer = nil
+        return
+    end
+
+    local reviveTimer = GetFarmAstroReviveTimerValue()
+    UpdateFarmAstroReviveTimerArmed(reviveTimer)
+
+    -- Required flow: downed at 1 HP -> UI shows TIMER : 30 -> wait until TIMER : 5 -> God Mode one-shot.
+    -- FarmAstroReviveTimerArmed becomes true only after this same ReviveUI was seen above 5.
+    if reviveTimer == 5 and FarmAstroReviveTimerArmed == true then
+        if not FarmAstroReviveGodTriggered then
+            if ForceGodModeOnce("Farm Astro Revive Timer") then
+                FarmAstroReviveGodTriggered = true
+                FarmAstroReviveTimerArmed = false
+            end
+        end
+    elseif reviveTimer == nil then
+        FarmAstroReviveGodTriggered = false
+        FarmAstroReviveTimerArmed = false
+        FarmAstroLastReviveTimer = nil
+    elseif reviveTimer > 5 then
+        FarmAstroReviveGodTriggered = false
+    end
+end
+
+function CheckFarmAstroBottomGodMode()
+    if not FarmAstroTokenEnabled or not ShouldBlockFarmAstroGodModePercent() then return end
+    if not FarmAstroFinalLockActive then return end
+    if FarmAstroBottomGodTriggered then return end
+
+    local reviveTimer = GetFarmAstroReviveTimerValue()
+    UpdateFarmAstroReviveTimerArmed(reviveTimer)
+
+    -- ต้องเลือดเหลือ 1 ก่อน และต้องเห็น TIMER มากกว่า 5 ใน ReviveUI รอบนี้ก่อน
+    -- จากนั้นรอให้ TIMER ลงมาถึง 5 จริง ๆ เท่านั้น
+    if reviveTimer == 5 and FarmAstroReviveTimerArmed == true then
+        if ForceGodModeOnce("Farm Astro bottom lock Revive Timer") then
+            FarmAstroBottomGodTriggered = true
+            FarmAstroReviveGodTriggered = true
+            FarmAstroReviveTimerArmed = false
+        end
+    elseif reviveTimer == nil then
+        FarmAstroBottomGodTriggered = false
+        FarmAstroReviveTimerArmed = false
+        FarmAstroLastReviveTimer = nil
+    elseif reviveTimer > 5 then
+        FarmAstroBottomGodTriggered = false
+    end
+end
+
+function FarmAstroRuntimeChecks()
+    if not FarmAstroTokenEnabled then return end
+    PauseFarmAstroGodModeForTimer()
+    CheckFarmAstroReviveGodModeOnce()
+    CheckFarmAstroBottomGodMode()
 end
 
 
 function GetFarmAstroCharacter()
     local char = LocalPlayer.Character or Character
+    if (not char or not char.Parent) and workspace:FindFirstChild("Living") then
+        char = workspace.Living:FindFirstChild(LocalPlayer.Name) or workspace.Living:FindFirstChild(LocalPlayer.DisplayName)
+    end
     if char and char ~= Character then Character = char end
     if char and (not HumanoidRootPart or HumanoidRootPart.Parent ~= char) then
         HumanoidRootPart = char:FindFirstChild("HumanoidRootPart")
     end
-    return char, HumanoidRootPart, char and char:FindFirstChildOfClass("Humanoid")
+    return char, HumanoidRootPart, char and (char:FindFirstChildOfClass("Humanoid") or char:FindFirstChild("Humanoid"))
 end
 
 function CreateFarmAstroTokenPart()
@@ -2073,13 +2275,23 @@ function CancelFarmAstroTween()
 end
 
 function MoveFarmAstroToTimerSafe()
-    FarmAstroTokenTimerHold = true
+    if FarmAstroFinalLockActive then return end
+
     CancelFarmAstroTween()
     CreateFarmAstroTokenPart()
 
+    FarmAstroTokenTimerHold = false
+    FarmAstroTimerDropping = true
+    FarmAstroFinalLockActive = false
+    FarmAstroBottomGodTriggered = false
+    FarmAstroReviveTimerArmed = false
+    FarmAstroLastReviveTimer = nil
+    FarmAstroWaveTimerArmed = false
+    FarmAstroLastWaveTimer = nil
+
     pcall(function()
         if FarmAstroTokenPart and FarmAstroTokenPart.Parent then
-            FarmAstroTokenPart.CFrame = FARM_ASTRO_TIMER_SAFE_CF * FARM_ASTRO_TIMER_PART_OFFSET
+            FarmAstroTokenPart.CFrame = FARM_ASTRO_TIMER_BOTTOM_CF * FARM_ASTRO_TIMER_PART_OFFSET
         end
     end)
 
@@ -2091,10 +2303,36 @@ function MoveFarmAstroToTimerSafe()
             hum.PlatformStand = false
             hum.AutoRotate = true
         end
-        char:PivotTo(FARM_ASTRO_TIMER_SAFE_CF)
+
+        char:PivotTo(FARM_ASTRO_TIMER_TOP_CF)
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
     end)
+
+    pcall(function()
+        local char, hrp, hum = GetFarmAstroCharacter()
+        if not char or not hrp then return end
+        local tween = TweenService:Create(
+            hrp,
+            TweenInfo.new(FARM_ASTRO_TIMER_DROP_TIME, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+            { CFrame = FARM_ASTRO_TIMER_BOTTOM_CF }
+        )
+        tween:Play()
+        tween.Completed:Wait()
+        if hum then
+            hum.Sit = false
+            hum.PlatformStand = false
+            hum.AutoRotate = true
+        end
+        char:PivotTo(FARM_ASTRO_TIMER_BOTTOM_CF)
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+    end)
+
+    FarmAstroTimerDropping = false
+    FarmAstroTokenTimerHold = true
+    FarmAstroFinalLockActive = true
+    CheckFarmAstroBottomGodMode()
 end
 
 function WaitFarmAstroRespawnAfterTimer()
@@ -2102,11 +2340,35 @@ function WaitFarmAstroRespawnAfterTimer()
     MoveFarmAstroToTimerSafe()
 
     while FarmAstroTokenEnabled and FarmAstroTokenRespawnCounter <= currentRespawn do
-        task.wait(0.2)
+        FarmAstroRuntimeChecks()
+        if FarmAstroFinalLockActive then
+            pcall(function()
+                local char, hrp, hum = GetFarmAstroCharacter()
+                if not char or not hrp then return end
+                if hum then
+                    hum.Sit = false
+                    hum.PlatformStand = false
+                    hum.AutoRotate = true
+                end
+                char:PivotTo(FARM_ASTRO_TIMER_BOTTOM_CF)
+                hrp.AssemblyLinearVelocity = Vector3.zero
+                hrp.AssemblyAngularVelocity = Vector3.zero
+            end)
+        end
+        task.wait(0.1)
     end
 
     FarmAstroTokenTimerHold = false
+    FarmAstroFinalLockActive = false
+    FarmAstroTimerDropping = false
+    FarmAstroBottomGodTriggered = false
+    FarmAstroReviveGodTriggered = false
+    FarmAstroReviveTimerArmed = false
+    FarmAstroLastReviveTimer = nil
+    FarmAstroWaveTimerArmed = false
+    FarmAstroLastWaveTimer = nil
     FarmAstroTokenTimerIgnoreUntil = tick() + 2
+    ResumeFarmAstroGodModeAfterRespawn("Farm Astro respawn")
 end
 
 function StartFarmAstroNoClip()
@@ -2120,14 +2382,19 @@ function StartFarmAstroNoClip()
                 if obj:IsA("BasePart") then obj.CanCollide = false end
             end
             if hum then hum.Sit = false; hum.PlatformStand = false end
-            if not FarmAstroTokenPauseCollect and FarmAstroTokenPart and FarmAstroTokenPart.Parent and hrp then
-                if FarmAstroTokenTimerHold then
-                    char:PivotTo(FARM_ASTRO_TIMER_SAFE_CF)
-                else
+            if not FarmAstroTokenPauseCollect and hrp then
+                if FarmAstroTimerDropping then
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                    hrp.AssemblyAngularVelocity = Vector3.zero
+                elseif FarmAstroFinalLockActive or FarmAstroTokenTimerHold then
+                    char:PivotTo(FARM_ASTRO_TIMER_BOTTOM_CF)
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                    hrp.AssemblyAngularVelocity = Vector3.zero
+                elseif FarmAstroTokenPart and FarmAstroTokenPart.Parent then
                     char:PivotTo(FarmAstroTokenPart.CFrame * CFrame.new(0, 4, 0))
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                    hrp.AssemblyAngularVelocity = Vector3.zero
                 end
-                hrp.AssemblyLinearVelocity = Vector3.zero
-                hrp.AssemblyAngularVelocity = Vector3.zero
             end
         end)
     end)
@@ -2147,6 +2414,7 @@ end
 
 function TweenFarmAstroTokenTo(cf, duration)
     if not FarmAstroTokenPart or not FarmAstroTokenPart.Parent then return false end
+    FarmAstroRuntimeChecks()
     if IsFarmAstroTimerEnding() then
         MoveFarmAstroToTimerSafe()
         return "timer_end"
@@ -2161,6 +2429,7 @@ function TweenFarmAstroTokenTo(cf, duration)
     FarmAstroTokenTween:Play()
 
     while FarmAstroTokenEnabled do
+        FarmAstroRuntimeChecks()
         if IsFarmAstroTimerEnding() then
             MoveFarmAstroToTimerSafe()
             return "timer_end"
@@ -2199,6 +2468,8 @@ function StartFarmAstroToken()
     AutoAttackEnabled = false
     AutoSkillEnabled = false
     FarmAstroTokenTimerHold = false
+    FarmAstroWaveTimerArmed = false
+    FarmAstroLastWaveTimer = nil
     CreateFarmAstroTokenPart()
     StartFarmAstroNoClip()
     CheckFarmAstroCollectMode()
@@ -2210,6 +2481,8 @@ function StartFarmAstroToken()
                 repeat task.wait(0.2) until not FarmAstroTokenPauseCollect or not FarmAstroTokenEnabled
             end
             if not FarmAstroTokenEnabled then break end
+
+            FarmAstroRuntimeChecks()
 
             if IsFarmAstroTimerEnding() then
                 WaitFarmAstroRespawnAfterTimer()
@@ -2250,8 +2523,15 @@ function StartFarmAstroToken()
         FarmAstroTokenPart = nil
         FarmAstroTokenPauseCollect = false
         FarmAstroTokenTimerHold = false
+        FarmAstroFinalLockActive = false
+        FarmAstroTimerDropping = false
+        FarmAstroBottomGodTriggered = false
+        FarmAstroReviveGodTriggered = false
+        FarmAstroWaveTimerArmed = false
+        FarmAstroLastWaveTimer = nil
         FarmAstroTokenRunning = false
         RestoreFarmCameraAndMovement()
+        ResumeFarmAstroGodModeAfterRespawn("Farm Astro stopped")
         HandleMiscOptions(MiscOptions)
     end)
 end
@@ -2259,12 +2539,35 @@ end
 function StopFarmAstroToken(saveState)
     FarmAstroTokenEnabled = false
     FarmAstroTokenTimerHold = false
+    FarmAstroFinalLockActive = false
+    FarmAstroTimerDropping = false
+    FarmAstroBottomGodTriggered = false
+    FarmAstroReviveGodTriggered = false
+    FarmAstroReviveTimerArmed = false
+    FarmAstroLastReviveTimer = nil
+    FarmAstroWaveTimerArmed = false
+    FarmAstroLastWaveTimer = nil
+    ResumeFarmAstroGodModeAfterRespawn("Farm Astro disabled")
     if saveState then
         Config:Set("FarmAstroTokenEnabled", false)
         Config:Save()
     end
     CancelFarmAstroTween()
 end
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if FarmAstroTokenEnabled then
+            FarmAstroRuntimeChecks()
+        else
+            FarmAstroReviveGodTriggered = false
+            FarmAstroBottomGodTriggered = false
+            FarmAstroWaveTimerArmed = false
+            FarmAstroLastWaveTimer = nil
+        end
+    end
+end)
 
 
 function MatchesPattern(objectName, pattern)
@@ -2761,7 +3064,16 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     Client           = LocalPlayer
     FarmAstroTokenRespawnCounter = FarmAstroTokenRespawnCounter + 1
     FarmAstroTokenTimerHold = false
+    FarmAstroFinalLockActive = false
+    FarmAstroTimerDropping = false
+    FarmAstroBottomGodTriggered = false
+    FarmAstroReviveGodTriggered = false
+    FarmAstroReviveTimerArmed = false
+    FarmAstroLastReviveTimer = nil
+    FarmAstroWaveTimerArmed = false
+    FarmAstroLastWaveTimer = nil
     FarmAstroTokenTimerIgnoreUntil = tick() + 2
+    ResumeFarmAstroGodModeAfterRespawn("character respawn")
     if FarmAstroTokenEnabled then CancelFarmAstroTween() end
     UpdateDYHUBWaitingPartCollision()
     MobHeightOverride   = {}
@@ -2913,7 +3225,7 @@ Main:Toggle({
 })
 
 
-Main:Section({ Title = "Farm Astro", Icon = "sparkles" })
+Main:Section({ Title = "Farm Astro", Icon = "flame" })
 
 FarmAstroTokenToggle = Main:Toggle({
     Title = "Farm Astro Token (Holdout)",
@@ -2961,6 +3273,7 @@ Main:Section({ Title = "General Settings", Icon = "zap" })
 
 SkillDropdown = Main:Dropdown({
     Title = "Auto Skill (Keys)",
+    Desc = "Selects which keyboard skill keys Auto Skill will press.",
     Values = skillDropdownValues,
     Multi = true,
     Value = SelectedSkills,
@@ -2969,6 +3282,7 @@ SkillDropdown = Main:Dropdown({
 
 SkillDelaySlider = Main:Slider({
     Title = "Skill Delay (S)",
+    Desc = "Sets the delay between each Auto Skill key press in seconds.",
     Value = { Min = 1, Max = 30, Default = SkillDelay },
     Step = 1,
     Callback = function(value) SkillDelay = value; Config:Set("SkillDelay", value); Config:Save() end
@@ -2976,6 +3290,7 @@ SkillDelaySlider = Main:Slider({
 
 FarmHeightSlider = Main:Slider({
     Title = "Farm Height (+Y)",
+    Desc = "Adjusts the vertical offset used while farming above or under mobs.",
     Value = { Min = -30, Max = 30, Default = HeightValue },
     Step = 1,
     Callback = function(value)
@@ -2988,6 +3303,7 @@ FarmHeightSlider = Main:Slider({
 
 Main:Slider({
     Title = "Safe Mode HP (%)",
+    Desc = "Sets the HP percent that Safe Mode uses before retreating.",
     Value = { Min = 1, Max = 100, Default = SafeValue },
     Step = 1,
     Callback = function(value) SafeValue = value; Config:Set("SafeValue", value); Config:Save() end
@@ -2995,6 +3311,7 @@ Main:Slider({
 
 Main:Slider({
     Title = "God Mode HP (%)",
+    Desc = "Sets the HP percent threshold for normal God Mode. Blocked during Farm Astro Token when Sync Farm Only is OFF; Revive controls it instead.",
     Value = { Min = 1, Max = 99, Default = GodModeValue },
     Step = 1,
     Callback = function(value)
@@ -3016,6 +3333,7 @@ Main:Paragraph({
 
 Main:Slider({
     Title = "HighHP Threshold (MaxHP)",
+    Desc = "Sets the MaxHP value needed for a mob to become HighHP priority.",
     Value = { Min = 1, Max = 100000, Default = HighHPThreshold },
     Step = 100,
     Callback = function(value)
@@ -3053,6 +3371,7 @@ PaddingSafeInput = Main:Input({
 
 Main:Slider({
     Title = "Anti-Clip Margin (studs)",
+    Desc = "Adds extra spacing to reduce clipping when farming near mob bodies.",
     Value = { Min = 0, Max = 10, Default = ANTI_CLIP_MARGIN },
     Step = 1,
     Callback = function(value)
@@ -3062,6 +3381,7 @@ Main:Slider({
 
 Main:Slider({
     Title = "Damage Threshold (confirm lock)",
+    Desc = "Sets how much damage confirms the current farm position as valid.",
     Value = { Min = 1, Max = 500, Default = DMG_THRESHOLD },
     Step = 1,
     Callback = function(value)
@@ -3086,6 +3406,7 @@ FlushAuraValue = Config:Get("FlushAuraValue", 5)
 
 Main:Slider({
     Title = "Flush Aura (stud)",
+    Desc = "Sets the distance used by Flush Aura to activate nearby prompts.",
     Value = { Min = 1, Max = 15, Default = FlushAuraValue },
     Step = 1,
     Callback = function(value) FlushAuraValue = value; Config:Set("FlushAuraValue", value); Config:Save() end
@@ -3455,7 +3776,9 @@ EspItemToggle = Main4:Toggle({
 Main4:Section({ Title = "Esp Settings", Icon = "settings" })
 
 EspSettingsDropdown = Main4:Dropdown({
-    Title = "ESP Options", Multi = true,
+    Title = "ESP Options",
+    Desc = "Selects which extra ESP labels and visuals are shown.",
+    Multi = true,
     Values = { "Highlight", "Distance", "Health", "Name" },
     Value = ESP.Settings,
     Callback = function(value)
@@ -3465,7 +3788,9 @@ EspSettingsDropdown = Main4:Dropdown({
 })
 
 EspItemDropdown = Main4:Dropdown({
-    Title = "ESP Items", Multi = true,
+    Title = "ESP Items",
+    Desc = "Selects which collectible item names should receive Item ESP.",
+    Multi = true,
     Values = ESP.ItemList,
     Value = ESP.SelectedItems,
     Callback = function(value)
@@ -3927,6 +4252,7 @@ GlobalTables.Gamepassts = SelectedGamepass
 
 GamepassDropdown = Main2:Dropdown({
     Title = "Select Gamepass",
+    Desc = "Selects which local gamepass flags to unlock.",
     Multi = true,
     Values = GlobalTables.Gamepasst,
     Value = SelectedGamepass,
@@ -4050,6 +4376,7 @@ Main7:Button({
 
 GameModeDropdown2 = Main7:Dropdown({
     Title = "Set Vote Mode",
+    Desc = "Selects which game mode Auto Vote will vote for.",
     Values = GlobalTables2.Votes2,
     Multi = false,
     Value = AutoVoteValue,
@@ -4102,6 +4429,7 @@ Main7:Section({ Title = "Game Mode", Icon = "gamepad-2" })
 
 GameModeDropdown = Main7:Dropdown({
     Title = "Set Game Mode",
+    Desc = "Selects which game mode Auto Create will create.",
     Values = GlobalTables.Mode,
     Multi = false,
     Value = AutoGameValue,
