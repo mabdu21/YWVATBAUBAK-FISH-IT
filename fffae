@@ -831,6 +831,7 @@ if isPremium then
             Config:Set("autoparryrange", v); Config:Save()
         end
     })
+    SurTab:Divider()
     SurTab:Paragraph({
         Title = "Information: God Mode",
         Desc  = "• A killer can carry & hook you.\n• A teammate can heal you.",
@@ -1357,7 +1358,7 @@ end
 EspTab:Divider()
 EspTab:Section({ Title = "Feature Esp", Icon = "eye" })
 EspTab:Toggle({
-    Title = "Enable ESP", Desc = "Master toggle for all ESP (low-lag design)", Value = espEnabled,
+    Title = "Enable ESP", Desc = "Master toggle for all ESP (Option)", Value = espEnabled,
     Callback = function(v)
         espEnabled = v; settings.EspEnabled = v; Config:Set("espEnabled", v); Config:Save()
         if not espEnabled then clearAllESP()
@@ -1418,19 +1419,24 @@ EspTab:Toggle({ Title = "ESP Patient", Desc = "ESP the Patient (SCP) locations t
 EspTab:Section({ Title = "Esp Settings", Icon = "settings" })
 EspTab:Toggle({ Title = "Show Name", Desc = "Displays object and player names", Value = ShowName,
     Callback = function(v) ShowName = v; settings.ShowName = v; Config:Set("ShowName", v); Config:Save() end })
-EspTab:Toggle({ Title = "Show Distance", Desc = "Shows the distance between you and ESP targets", Value = ShowDistance,
-    Callback = function(v) ShowDistance = v; settings.ShowDistance = v; Config:Set("ShowDistance", v); Config:Save() end })
+
 EspTab:Toggle({ Title = "Show Health", Desc = "Displays player health values", Value = ShowHP,
     Callback = function(v) ShowHP = v; settings.ShowHP = v; Config:Set("ShowHP", v); Config:Save() end })
+
+EspTab:Toggle({ Title = "Show Percent", Desc = "Displays generator percent values", Value = ShowPercent,
+    Callback = function(v) ShowPercent = v; settings.ShowPercent = v; Config:Set("ShowPercent", v); Config:Save() end })
+    
+EspTab:Toggle({ Title = "Show Distance", Desc = "Shows the distance between you and ESP targets", Value = ShowDistance,
+    Callback = function(v) ShowDistance = v; settings.ShowDistance = v; Config:Set("ShowDistance", v); Config:Save() end })
+
 EspTab:Toggle({ Title = "Show Highlight", Desc = "Adds highlights around ESP targets", Value = ShowHighlight,
     Callback = function(v)
         ShowHighlight = v; settings.ShowHighlight = v; Config:Set("ShowHighlight", v); Config:Save()
         for _, data in pairs(espObjects) do
             pcall(function() if data.highlight then data.highlight.Enabled = v end end)
         end
-    end })
-EspTab:Toggle({ Title = "Show Percent (Generator)", Desc = "Displays generator percent values", Value = ShowPercent,
-    Callback = function(v) ShowPercent = v; settings.ShowPercent = v; Config:Set("ShowPercent", v); Config:Save() end })
+    end 
+})
 
 DYHUB_RUNTIME.InvalidateGenCache = _invalidateGenCache
 DYHUB_RUNTIME.InvalidateWorldCache = invalidateWorldCache
