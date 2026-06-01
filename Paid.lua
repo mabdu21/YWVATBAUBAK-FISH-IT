@@ -1,7 +1,7 @@
 -- v160 | [Local Register Fix]
 -- =========================
 version = "Rework"
-ver = "v023.81"
+ver = "v023.82"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -155,6 +155,8 @@ Window = WindUI:CreateWindow({
     ScrollBarEnabled = true,
     User = { Enabled = true, Anonymous = false },
 })
+
+Window:SetToggleKey(Enum.KeyCode.K)
 
 Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") })
 
