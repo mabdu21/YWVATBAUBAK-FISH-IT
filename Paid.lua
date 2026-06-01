@@ -1,7 +1,7 @@
 -- v160 | [Local Register Fix]
 -- =========================
 version = "Rework"
-ver = "v023.85"
+ver = "v023.87"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -14,32 +14,97 @@ repeat task.wait() until game:IsLoaded()
 p = game:GetService("Players").LocalPlayer
 pg = p:WaitForChild("PlayerGui")
 
-function waitLoadingGone()
+function waitLoadingGone(maxWait)
+    maxWait = tonumber(maxWait) or 18
     local gui = pg:FindFirstChild("LoadingGui")
-    if gui then
-        WindUI:Notify({ Title = "Initialization", Content = "Game is loading, Please wait.", Duration = 3, Icon = "download" })
-        gui.AncestryChanged:Wait()
+    if not gui then return true end
+
+    WindUI:Notify({ Title = "Initialization", Content = "Game is loading, Please wait.", Duration = 3, Icon = "download" })
+
+    local startedAt = tick()
+    while gui and gui.Parent and tick() - startedAt < maxWait do
+        task.wait(0.1)
     end
+
+    if gui and gui.Parent then
+        warn("[DYHUB] LoadingGui did not disappear in time, continuing safely.")
+        return false
+    end
+
+    return true
 end
 
-waitLoadingGone()
+waitLoadingGone(18)
 
 WindUI:Notify({ Title = "Initialization", Content = "Load complete, Starting in 2 seconds.", Duration = 2, Icon = "shield-check" })
 task.wait(2)
 
--- ====================== FPS UNLOCK ======================
-part = Instance.new("Part")
-part.Size = Vector3.new(10, 1, 10)
-part.Position = Vector3.new(-23.3435822, 61, 0.341766357)
-part.Transparency = 1
-part.Anchored = true
-part.CanCollide = false
-part.CanTouch = false
-part.CanQuery = false
-part.Material = Enum.Material.Neon
-part.BrickColor = BrickColor.new("Bright blue")
-part.Name = "DYHUB_WAITING_PART"
-part.Parent = workspace
+-- ====================== WAITING PART / FPS UNLOCK ======================
+DYHUB_WAITING_PART_NAME = "DYHUB_WAITING_PART"
+iddyhub = "rbxassetid://104487529937663"
+DYHUB_WAITING_STAND_CF = CFrame.new(-23.3435822, 67, 0.341766357)
+DYHUB_WAITING_PART_CF = CFrame.new(-23.3435822, 63.95, 0.341766357)
+DYHUB_WAITING_PART_SIZE = Vector3.new(16, 1, 16)
+DYHUB_WAITING_PART_VISIBLE_TRANSPARENCY = 1
+
+function GetDYHUBWaitingStandCFrame()
+    return DYHUB_WAITING_STAND_CF
+end
+
+function ConfigureDYHUBWaitingPart(waitingPart)
+    if not waitingPart or not waitingPart:IsA("BasePart") then return nil end
+
+    waitingPart.Name = DYHUB_WAITING_PART_NAME
+    waitingPart.Size = DYHUB_WAITING_PART_SIZE
+    waitingPart.CFrame = DYHUB_WAITING_PART_CF
+    waitingPart.Anchored = true
+    waitingPart.CanTouch = false
+    waitingPart.CanQuery = false
+    waitingPart.Material = Enum.Material.Neon
+    waitingPart.BrickColor = BrickColor.new("Bright blue")
+    waitingPart.TopSurface = Enum.SurfaceType.Smooth
+    waitingPart.BottomSurface = Enum.SurfaceType.Smooth
+
+    local active = AutoFarmEnabled == true
+    waitingPart.CanCollide = active
+    waitingPart.Transparency = active and DYHUB_WAITING_PART_VISIBLE_TRANSPARENCY or 1
+
+    for _, face in ipairs(Enum.NormalId:GetEnumItems()) do
+        local decal = Instance.new("Decal")
+        decal.Name = "dyhub_image"
+        decal.Texture = iddyhub
+        decal.Face = face
+        decal.Transparency = 0
+        decal.Parent = waitingPart
+    end
+	
+    return waitingPart
+end
+
+function GetDYHUBWaitingPart()
+    local keep = nil
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj.Name == DYHUB_WAITING_PART_NAME and obj:IsA("BasePart") then
+            if not keep then
+                keep = obj
+            else
+                pcall(function() obj:Destroy() end)
+            end
+        end
+    end
+    return keep
+end
+
+function EnsureDYHUBWaitingPart()
+    local waitingPart = GetDYHUBWaitingPart()
+    if not waitingPart then
+        waitingPart = Instance.new("Part")
+        waitingPart.Parent = workspace
+    end
+    return ConfigureDYHUBWaitingPart(waitingPart)
+end
+
+part = EnsureDYHUBWaitingPart()
 
 if setfpscap then
     setfpscap(1000000)
@@ -59,8 +124,10 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/stbb_config.json"
-    if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
+    self.ConfigPath = ConfigFolder .. "/STBB_config.json"
+    if isfolder and makefolder and not isfolder(ConfigFolder) then
+        pcall(function() makefolder(ConfigFolder) end)
+    end
     self:Load()
     return self
 end
@@ -72,27 +139,46 @@ function CustomConfig:Get(key, default)
     return default
 end
 
-function CustomConfig:Save()
+function CustomConfig:Save(force)
+    if not writefile then return false end
+
+    local now = tick()
+    if not force and self._LastSaveAt and now - self._LastSaveAt < 0.75 then
+        if not self._SaveQueued then
+            self._SaveQueued = true
+            task.delay(0.85, function()
+                self._SaveQueued = false
+                self:Save(true)
+            end)
+        end
+        return true
+    end
+
     local success, err = pcall(function()
         writefile(self.ConfigPath, HttpService:JSONEncode(self.ConfigData))
     end)
-    if success then warn("[DYHUB] Config saved!") else warn("[DYHUB] Save failed:", err) end
+
+    if success then
+        self._LastSaveAt = now
+        return true
+    else
+        warn("[DYHUB] Save failed:", err)
+        return false
+    end
 end
 
 function CustomConfig:Load()
-    if isfile(self.ConfigPath) then
+    if isfile and readfile and isfile(self.ConfigPath) then
         local success, result = pcall(function()
             return HttpService:JSONDecode(readfile(self.ConfigPath))
         end)
         if success and type(result) == "table" then
             self.ConfigData = result
-            print("[DYHUB] Config loaded!")
         else
             warn("[DYHUB] Failed to load config, using defaults")
             self.ConfigData = {}
         end
     else
-        print("[DYHUB] No config found, creating new one")
         self.ConfigData = {}
     end
 end
@@ -191,9 +277,19 @@ Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 06/01/2026 | CL: " .. ver,
-    Desc = [[- [ Paid Version ] Mode Farm for different farming modes / Dark Dimension, Astro Holdout
-- [ Fixed ] Farm Astro Token / Check the time wave for God Mode.
-- [ Improved ] Bug issues, Loophook, Smart Database]],
+    Desc = [[• [ Fixed ] Waiting part duplicate.
+• [ Fixed ] Waiting part position.
+• [ Fixed ] Waiting part auto rebuild.
+• [ Fixed ] Loading wait timeout.
+• [ Fixed ] Farm loop stacking.
+• [ Fixed ] Tween wait timeout.
+• [ Fixed ] Config save spam.
+• [ Optimized ] Flush Aura prompt cache.
+• [ Optimized ] ESP scan timing.
+• [ Optimized ] FarmAstro NoClip cache.
+• [ Improved ] Reduced lag, freeze, and scan spam.
+• [ Improved ] Waiting part visibility.
+• [ Improved ] Waiting part collision toggle.]],
 })
 Info:Divider()
 Info:Section({ Title = "Discord Information", TextXAlignment = "Center", TextSize = 17 })
@@ -427,12 +523,12 @@ AutoStartLastReadyAt  = 0
 AutoFillUpEnabled      = false
 SelectedSkills         = Config:Get("SelectedSkills", { "All" })
 SafeModeEnabled        = false
-SafeValue              = Config:Get("SafeValue", 30)
+SafeValue              = Config:Get("SafeValue", 50)
 GodModeEnabled         = false
-GodModeValue           = Config:Get("GodModeValue", 30)
+GodModeValue           = Config:Get("GodModeValue", 50)
 GodModeTriggered       = false
 WaitingRespawn         = false
-IdlePosition           = CFrame.new(-23.3435822, 67, 0.341766357) * CFrame.Angles(math.rad(0), 0, 0)
+IdlePosition           = GetDYHUBWaitingStandCFrame() * CFrame.Angles(math.rad(0), 0, 0)
 IdleHoldDistance       = 12       -- distance allowed before re-teleporting to idle
 IdleTeleportCooldown   = 1.25     -- prevents repeated idle teleport / camera shake
 LastIdleTeleportAt     = 0
@@ -455,23 +551,23 @@ FarmCollecting         = false
 CombatDebugEnabled     = Config:Get("CombatDebugEnabled", false)
 CombatDebugCooldowns   = {}
 
-function GetDYHUBWaitingPart()
-    local waitingPart = workspace:FindFirstChild("DYHUB_WAITING_PART")
-    if waitingPart and waitingPart:IsA("BasePart") then return waitingPart end
-    return nil
-end
-
 function UpdateDYHUBWaitingPartCollision()
-    local waitingPart = GetDYHUBWaitingPart()
+    local waitingPart = EnsureDYHUBWaitingPart and EnsureDYHUBWaitingPart() or GetDYHUBWaitingPart()
     if not waitingPart then return end
     pcall(function()
-        waitingPart.CanCollide = AutoFarmEnabled == true
-        waitingPart.CanTouch = false
-        waitingPart.CanQuery = false
+        ConfigureDYHUBWaitingPart(waitingPart)
     end)
 end
 
 UpdateDYHUBWaitingPartCollision()
+
+workspace.ChildRemoved:Connect(function(obj)
+    if obj and obj.Name == DYHUB_WAITING_PART_NAME and AutoFarmEnabled == true then
+        task.defer(function()
+            UpdateDYHUBWaitingPartCollision()
+        end)
+    end
+end)
 
 function CombatDebug(tag, message, cooldown, showNotify)
     if not CombatDebugEnabled then return end
@@ -2162,6 +2258,27 @@ function GetStableFarmCFrame(cf)
     return cf
 end
 
+function WaitTweenWithTimeout(tween, timeout)
+    if not tween then return false end
+    timeout = tonumber(timeout) or 2
+
+    local completed = false
+    local conn
+    conn = tween.Completed:Connect(function()
+        completed = true
+    end)
+
+    local startedAt = tick()
+    while not completed and tick() - startedAt < timeout do
+        if not AutoFarmEnabled and not FarmAstroTokenEnabled and not DarkDimensionCollecting then break end
+        task.wait(0.03)
+    end
+
+    if conn then pcall(function() conn:Disconnect() end) end
+    if not completed then pcall(function() tween:Cancel() end) end
+    return completed
+end
+
 function MoveCharacterToFarmCFrame(cf)
     if not Character or not HumanoidRootPart or not cf then return end
 
@@ -2188,7 +2305,7 @@ function TeleportToMob(mob)
         local tweenInfo = TweenInfo.new(TweenSpeed, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
         local tween = TweenService:Create(HumanoidRootPart, tweenInfo, { CFrame = GetStableFarmCFrame(cf) })
         tween:Play()
-        tween.Completed:Wait()
+        WaitTweenWithTimeout(tween, (TweenSpeed or 1) + 0.45)
         MoveCharacterToFarmCFrame(cf)
     else
         -- Teleport mode: instant move with stable camera-safe CFrame.
@@ -2231,7 +2348,7 @@ function MoveFarmSpecialCFrame(cf, tweenTime)
                 { CFrame = cf }
             )
             tween:Play()
-            tween.Completed:Wait()
+            WaitTweenWithTimeout(tween, (tweenTime or TweenSpeed or 0.35) + 0.45)
             MoveSpecialCharacterCFrame(cf)
         end)
         return ok
@@ -3098,6 +3215,8 @@ end
 function TeleportToIdle(force)
     LockActive = false
     WaitingRespawn = true
+    IdlePosition = GetDYHUBWaitingStandCFrame() * CFrame.Angles(math.rad(0), 0, 0)
+    UpdateDYHUBWaitingPartCollision()
 
     if not Character or not Character.Parent or not HumanoidRootPart then return end
 
@@ -3138,17 +3257,61 @@ function ActivateProximityPrompt(prompt)
     end)
 end
 
+FlushPromptCache = {}
+FlushPromptCacheDirty = true
+FlushPromptCacheLastScan = 0
+FlushPromptCacheTTL = 5
+
+function IsFlushPrompt(prompt)
+    if not prompt or not prompt:IsA("ProximityPrompt") then return false end
+    local actionText = tostring(prompt.ActionText or ""):lower()
+    local objectText = tostring(prompt.ObjectText or ""):lower()
+    local combined = actionText .. " " .. objectText .. " " .. tostring(prompt.Name or ""):lower()
+    return combined:find("flush", 1, true) ~= nil
+        or combined:find("flash", 1, true) ~= nil
+        or combined:find("dragon", 1, true) ~= nil
+end
+
+function RegisterFlushPrompt(obj)
+    if obj and obj:IsA("ProximityPrompt") and IsFlushPrompt(obj) then
+        FlushPromptCache[obj] = true
+    end
+end
+
+function RebuildFlushPromptCache()
+    FlushPromptCache = {}
+    pcall(function()
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            RegisterFlushPrompt(obj)
+        end
+    end)
+    FlushPromptCacheDirty = false
+    FlushPromptCacheLastScan = tick()
+end
+
+workspace.DescendantAdded:Connect(function(obj)
+    if obj and obj:IsA("ProximityPrompt") then
+        task.defer(function() RegisterFlushPrompt(obj) end)
+    end
+end)
+
+workspace.DescendantRemoving:Connect(function(obj)
+    if obj and FlushPromptCache[obj] then
+        FlushPromptCache[obj] = nil
+    end
+end)
+
 function ActivateAllFlushPrompts()
     pcall(function()
-        for _, part in pairs(workspace:GetDescendants()) do
-            if part:IsA("BasePart") or part:IsA("Model") then
-                local prompt = part:FindFirstChildOfClass("ProximityPrompt")
-                if prompt then
-                    local actionText = prompt.ActionText:lower()
-                    if actionText:find("flush") or actionText:find("flash") or actionText:find("dragon") then
-                        ActivateProximityPrompt(prompt)
-                    end
-                end
+        if FlushPromptCacheDirty or tick() - (FlushPromptCacheLastScan or 0) > (FlushPromptCacheTTL or 5) then
+            RebuildFlushPromptCache()
+        end
+
+        for prompt in pairs(FlushPromptCache) do
+            if prompt and prompt.Parent and IsFlushPrompt(prompt) then
+                ActivateProximityPrompt(prompt)
+            else
+                FlushPromptCache[prompt] = nil
             end
         end
     end)
@@ -3472,7 +3635,7 @@ function CreateFarmAstroTokenPart()
     part.CanTouch = false
     part.CanQuery = false
     part.Material = Enum.Material.Neon
-    part.Transparency = 0.08
+    part.Transparency = 1
     part.CFrame = FARM_ASTRO_TOP_A
     part.Parent = workspace
 
@@ -3556,7 +3719,7 @@ function MoveFarmAstroToTimerSafe()
             { CFrame = FARM_ASTRO_TIMER_BOTTOM_CF }
         )
         tween:Play()
-        tween.Completed:Wait()
+        WaitTweenWithTimeout(tween, (FARM_ASTRO_TIMER_DROP_TIME or 0.35) + 0.45)
         if hum then
             hum.Sit = false
             hum.PlatformStand = false
@@ -3605,6 +3768,41 @@ function WaitFarmAstroRespawnAfterTimer()
     ResumeFarmAstroGodModeAfterRespawn("Farm Astro timer reset")
 end
 
+FarmAstroNoClipParts = FarmAstroNoClipParts or {}
+FarmAstroNoClipChar = nil
+FarmAstroNoClipPartsAt = 0
+
+function RebuildFarmAstroNoClipParts(char)
+    FarmAstroNoClipParts = {}
+    FarmAstroNoClipChar = char
+    FarmAstroNoClipPartsAt = tick()
+    if not char then return end
+
+    pcall(function()
+        for _, obj in ipairs(char:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                table.insert(FarmAstroNoClipParts, obj)
+            end
+        end
+    end)
+end
+
+function ApplyFarmAstroNoClipToCharacter(char)
+    if not char then return end
+    if FarmAstroNoClipChar ~= char or tick() - (FarmAstroNoClipPartsAt or 0) > 1.25 then
+        RebuildFarmAstroNoClipParts(char)
+    end
+
+    for i = #FarmAstroNoClipParts, 1, -1 do
+        local obj = FarmAstroNoClipParts[i]
+        if obj and obj.Parent then
+            obj.CanCollide = false
+        else
+            table.remove(FarmAstroNoClipParts, i)
+        end
+    end
+end
+
 function StartFarmAstroNoClip()
     if FarmAstroTokenNoClipConnection then return end
     FarmAstroTokenNoClipConnection = RunService.Heartbeat:Connect(function()
@@ -3612,9 +3810,7 @@ function StartFarmAstroNoClip()
         pcall(function()
             local char, hrp, hum = GetFarmAstroCharacter()
             if not char then return end
-            for _, obj in ipairs(char:GetDescendants()) do
-                if obj:IsA("BasePart") then obj.CanCollide = false end
-            end
+            ApplyFarmAstroNoClipToCharacter(char)
             if hum then hum.Sit = false; hum.PlatformStand = false end
             if not FarmAstroTokenPauseCollect and hrp then
                 if FarmAstroTimerDropping then
@@ -4067,17 +4263,22 @@ end)
 -- Priority: GiantST(4) → Heli(3) → HighHP>threshold(2) → Nearest(1)
 -- Interrupt: ถ้ากำลังตีมอนระดับต่ำ และมอบระดับสูงกว่าปรากฏ → หยุดทันที
 -- ============================================================
+FarmLoopToken = FarmLoopToken or 0
+
 function StartFarmLoop()
     if FarmLoopRunning then return end
     FarmLoopRunning = true
+    FarmLoopToken = (FarmLoopToken or 0) + 1
+    local thisFarmLoopToken = FarmLoopToken
 
     task.spawn(function()
         local ok, err = pcall(function()
             task.spawn(function()
-                while AutoFarmEnabled and FarmLoopRunning do
+                while AutoFarmEnabled and FarmLoopRunning and FarmLoopToken == thisFarmLoopToken do
                     if WaitingRespawn and not LockActive and not FarmCollecting then
                         pcall(function()
                             RefreshCombatCharacter()
+                            UpdateDYHUBWaitingPartCollision()
                             if Character and HumanoidRootPart then
                                 if IsNearIdlePosition() then
                                     IdlePositionReached = true
@@ -4091,11 +4292,11 @@ function StartFarmLoop()
                     else
                         IdlePositionReached = false
                     end
-                    task.wait(0.7)
+                    task.wait(0.35)
                 end
             end)
 
-            while AutoFarmEnabled do
+            while AutoFarmEnabled and FarmLoopToken == thisFarmLoopToken do
                 RefreshCombatCharacter()
 
                 if not Character or not HumanoidRootPart then
@@ -4446,8 +4647,11 @@ AutoFarmToggle = Main:Toggle({
             HandleMiscOptions(MiscOptions)
             WindUI:Notify({ Title = "Auto Farm", Content = "Enabled, Auto Farm now!", Duration = 2, Icon = "play" })
         else
+            FarmLoopToken = (FarmLoopToken or 0) + 1
+            WaitingRespawn = false
             LockActive = false
             RestoreFarmCameraAndMovement()
+            UpdateDYHUBWaitingPartCollision()
             if SyncFarmOnly then
                 StopMiscFarmRuntime("Auto Farm turned off while Sync Farm Only is ON")
                 WindUI:Notify({ Title = "Auto Farm", Content = "Turn off Auto Farm: Misc Farm system stops working (Sync Farm Only)", Duration = 3, Icon = "square" })
@@ -4610,7 +4814,7 @@ SkillDropdown = Main:Dropdown({
 SkillDelaySlider = Main:Slider({
     Title = "Skill Delay (S)",
     Desc = "Sets the delay between each Auto Skill key press in seconds.",
-    Value = { Min = 1, Max = 30, Default = SkillDelay },
+    Value = { Min = 1, Max = 60, Default = SkillDelay },
     Step = 1,
     Callback = function(value) SkillDelay = value; Config:Set("SkillDelay", value); Config:Save() end
 })
@@ -4618,7 +4822,7 @@ SkillDelaySlider = Main:Slider({
 FarmHeightSlider = Main:Slider({
     Title = "Farm Height (+Y)",
     Desc = "Adjusts the vertical offset used while farming above or under mobs.",
-    Value = { Min = -30, Max = 30, Default = HeightValue },
+    Value = { Min = -150, Max = 150, Default = HeightValue },
     Step = 1,
     Callback = function(value)
         HeightValue = value; Config:Set("HeightValue", value); Config:Save()
@@ -4631,7 +4835,7 @@ FarmHeightSlider = Main:Slider({
 Main:Slider({
     Title = "Safe Mode HP (%)",
     Desc = "Sets the HP percent that Safe Mode uses before retreating.",
-    Value = { Min = 1, Max = 100, Default = SafeValue },
+    Value = { Min = 1, Max = 99, Default = SafeValue },
     Step = 1,
     Callback = function(value) SafeValue = value; Config:Set("SafeValue", value); Config:Save() end
 })
@@ -4797,19 +5001,18 @@ Main:Toggle({
                         if not char then return end
                         local root = char:FindFirstChild("HumanoidRootPart")
                         if not root then return end
-                        for _, prompt in pairs(workspace:GetDescendants()) do
-                            if prompt:IsA("ProximityPrompt") then
-                                local at = prompt.ActionText
-                                if at == "Flush" or at == "Dragon Flash" or at == "flush" or at == "Flash" then
-                                    local part = prompt.Parent
-                                    if part and part:IsA("BasePart") then
-                                        if (root.Position - part.Position).Magnitude <= FlushAuraValue then
-                                            prompt.HoldDuration = 0; prompt.MaxActivationDistance = FlushAuraValue
-                                            if fireproximityprompt then fireproximityprompt(prompt)
-                                            else prompt:InputHoldBegin(); task.wait(); prompt:InputHoldEnd() end
-                                        end
-                                    end
+                        if FlushPromptCacheDirty or tick() - (FlushPromptCacheLastScan or 0) > (FlushPromptCacheTTL or 5) then
+                            RebuildFlushPromptCache()
+                        end
+                        for prompt in pairs(FlushPromptCache) do
+                            if prompt and prompt.Parent and IsFlushPrompt(prompt) then
+                                local parent = prompt.Parent
+                                local part = parent:IsA("BasePart") and parent or parent:FindFirstAncestorWhichIsA("BasePart")
+                                if part and (root.Position - part.Position).Magnitude <= FlushAuraValue then
+                                    ActivateProximityPrompt(prompt)
                                 end
+                            else
+                                FlushPromptCache[prompt] = nil
                             end
                         end
                     end)
@@ -5046,13 +5249,22 @@ ESPConnection = nil
 
 function StartESPLoop()
     if ESPConnection then ESPConnection:Disconnect(); ESPConnection = nil end
-    local tickCounter = 0
+    local lastMobScan, lastPlayerScan, lastItemScan = 0, 0, 0
     ESPConnection = RunService.Heartbeat:Connect(function()
-        tickCounter = tickCounter + 1
-        if tickCounter % 30 == 0 and ESP.Enabled and ESP.MobEnabled    then pcall(ScanMobs) end
-        if tickCounter % 47 == 0 and ESP.Enabled and ESP.PlayerEnabled then pcall(ScanPlayers) end
-        if tickCounter % 61 == 0 and ESP.Enabled and ESP.ItemEnabled   then pcall(ScanItems) end
-        if tickCounter >= 3660 then tickCounter = 0 end
+        if not ESP.Enabled then return end
+        local now = tick()
+        if ESP.MobEnabled and now - lastMobScan >= 0.5 then
+            lastMobScan = now
+            pcall(ScanMobs)
+        end
+        if ESP.PlayerEnabled and now - lastPlayerScan >= 0.75 then
+            lastPlayerScan = now
+            pcall(ScanPlayers)
+        end
+        if ESP.ItemEnabled and now - lastItemScan >= 2.5 then
+            lastItemScan = now
+            pcall(ScanItems)
+        end
     end)
 end
 
