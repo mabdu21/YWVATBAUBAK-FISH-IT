@@ -1,4 +1,4 @@
--- v160 | [Local Register Fix]
+-- v167 | [Local Register Fix]
 -- =========================
 version = "Rework"
 ver = "v023.88"
@@ -46,17 +46,37 @@ DYHUB_WAITING_STAND_CF = CFrame.new(-23.3435822, 67, 0.341766357)
 DYHUB_WAITING_PART_CF = CFrame.new(-23.3435822, 63.95, 0.341766357)
 DYHUB_WAITING_PART_SIZE = Vector3.new(16, 1, 16)
 -- Keep it visible enough to stand on, but avoid expensive decals/textures.
-DYHUB_WAITING_PART_VISIBLE_TRANSPARENCY = 0.65
+DYHUB_WAITING_PART_VISIBLE_TRANSPARENCY = 1
 
 function GetDYHUBWaitingStandCFrame()
     return DYHUB_WAITING_STAND_CF
 end
 
-function CleanDYHUBWaitingPartVisuals(waitingPart)
+function EnsureDYHUBWaitingPartImages(waitingPart)
     if not waitingPart or not waitingPart:IsA("BasePart") then return end
-    for _, child in ipairs(waitingPart:GetChildren()) do
-        if child:IsA("Decal") or child:IsA("Texture") or child.Name == "dyhub_image" then
-            pcall(function() child:Destroy() end)
+
+    local usedFaces = {}
+
+    for _, obj in ipairs(waitingPart:GetChildren()) do
+        if obj:IsA("Decal") and obj.Name == "dyhub_image" then
+            if usedFaces[obj.Face] then
+                obj:Destroy()
+            else
+                usedFaces[obj.Face] = obj
+                obj.Texture = iddyhub
+                obj.Transparency = 0
+            end
+        end
+    end
+
+    for _, face in ipairs(Enum.NormalId:GetEnumItems()) do
+        if not usedFaces[face] then
+            local decal = Instance.new("Decal")
+            decal.Name = "dyhub_image"
+            decal.Texture = iddyhub
+            decal.Face = face
+            decal.Transparency = 0
+            decal.Parent = waitingPart
         end
     end
 end
@@ -76,15 +96,13 @@ function ConfigureDYHUBWaitingPart(waitingPart)
     waitingPart.TopSurface = Enum.SurfaceType.Smooth
     waitingPart.BottomSurface = Enum.SurfaceType.Smooth
 
-    -- Important: old versions kept adding 6 new decals every update.
-    -- Remove legacy decals/textures once so the part does not lag when nearby.
-    CleanDYHUBWaitingPartVisuals(waitingPart)
-
     local active = AutoFarmEnabled == true
     waitingPart.CanCollide = active
     waitingPart.Transparency = active and DYHUB_WAITING_PART_VISIBLE_TRANSPARENCY or 1
 
-    return waitingPart
+	EnsureDYHUBWaitingPartImages(waitingPart)
+	
+	return waitingPart
 end
 
 function GetDYHUBWaitingPart()
