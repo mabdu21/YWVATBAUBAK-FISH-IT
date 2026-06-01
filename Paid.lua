@@ -1,7 +1,7 @@
 -- v160 | [Local Register Fix]
 -- =========================
 version = "Rework"
-ver = "v023.87"
+ver = "v023.88"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -45,10 +45,20 @@ iddyhub = "rbxassetid://104487529937663"
 DYHUB_WAITING_STAND_CF = CFrame.new(-23.3435822, 67, 0.341766357)
 DYHUB_WAITING_PART_CF = CFrame.new(-23.3435822, 63.95, 0.341766357)
 DYHUB_WAITING_PART_SIZE = Vector3.new(16, 1, 16)
-DYHUB_WAITING_PART_VISIBLE_TRANSPARENCY = 1
+-- Keep it visible enough to stand on, but avoid expensive decals/textures.
+DYHUB_WAITING_PART_VISIBLE_TRANSPARENCY = 0.65
 
 function GetDYHUBWaitingStandCFrame()
     return DYHUB_WAITING_STAND_CF
+end
+
+function CleanDYHUBWaitingPartVisuals(waitingPart)
+    if not waitingPart or not waitingPart:IsA("BasePart") then return end
+    for _, child in ipairs(waitingPart:GetChildren()) do
+        if child:IsA("Decal") or child:IsA("Texture") or child.Name == "dyhub_image" then
+            pcall(function() child:Destroy() end)
+        end
+    end
 end
 
 function ConfigureDYHUBWaitingPart(waitingPart)
@@ -60,24 +70,20 @@ function ConfigureDYHUBWaitingPart(waitingPart)
     waitingPart.Anchored = true
     waitingPart.CanTouch = false
     waitingPart.CanQuery = false
-    waitingPart.Material = Enum.Material.Neon
-    waitingPart.BrickColor = BrickColor.new("Bright blue")
+    waitingPart.CastShadow = false
+    waitingPart.Material = Enum.Material.SmoothPlastic
+    waitingPart.Color = Color3.fromRGB(45, 130, 255)
     waitingPart.TopSurface = Enum.SurfaceType.Smooth
     waitingPart.BottomSurface = Enum.SurfaceType.Smooth
+
+    -- Important: old versions kept adding 6 new decals every update.
+    -- Remove legacy decals/textures once so the part does not lag when nearby.
+    CleanDYHUBWaitingPartVisuals(waitingPart)
 
     local active = AutoFarmEnabled == true
     waitingPart.CanCollide = active
     waitingPart.Transparency = active and DYHUB_WAITING_PART_VISIBLE_TRANSPARENCY or 1
 
-    for _, face in ipairs(Enum.NormalId:GetEnumItems()) do
-        local decal = Instance.new("Decal")
-        decal.Name = "dyhub_image"
-        decal.Texture = iddyhub
-        decal.Face = face
-        decal.Transparency = 0
-        decal.Parent = waitingPart
-    end
-	
     return waitingPart
 end
 
@@ -95,19 +101,29 @@ function GetDYHUBWaitingPart()
     return keep
 end
 
+function DestroyDYHUBWaitingPart()
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj.Name == DYHUB_WAITING_PART_NAME and obj:IsA("BasePart") then
+            pcall(function() obj:Destroy() end)
+        end
+    end
+end
+
 function EnsureDYHUBWaitingPart()
     local waitingPart = GetDYHUBWaitingPart()
     if not waitingPart then
         waitingPart = Instance.new("Part")
+        waitingPart.Name = DYHUB_WAITING_PART_NAME
         waitingPart.Parent = workspace
     end
     return ConfigureDYHUBWaitingPart(waitingPart)
 end
 
-part = EnsureDYHUBWaitingPart()
+-- Do not create the waiting part while Auto Farm is off.
+-- UpdateDYHUBWaitingPartCollision() will create/destroy it after config loads.
 
 if setfpscap then
-    setfpscap(1000000)
+    setfpscap(240) -- 1000000 can max CPU/GPU and cause stutter
     WindUI:Notify({ Title = "Service", Content = "FPS Unlocked! | " .. ver, Duration = 3, Icon = "cpu" })
     warn("FPS Unlocked!")
 else
@@ -284,12 +300,12 @@ Info:Paragraph({
 • [ Fixed ] Farm loop stacking.
 • [ Fixed ] Tween wait timeout.
 • [ Fixed ] Config save spam.
-• [ Optimized ] Flush Aura prompt cache.
-• [ Optimized ] ESP scan timing.
-• [ Optimized ] FarmAstro NoClip cache.
 • [ Improved ] Reduced lag, freeze, and scan spam.
 • [ Improved ] Waiting part visibility.
-• [ Improved ] Waiting part collision toggle.]],
+• [ Improved ] Waiting part collision toggle.
+• [ Optimized ] Flush Aura prompt cache.
+• [ Optimized ] ESP scan timing.
+• [ Optimized ] FarmAstro NoClip cache.]],
 })
 Info:Divider()
 Info:Section({ Title = "Discord Information", TextXAlignment = "Center", TextSize = 17 })
@@ -552,8 +568,16 @@ CombatDebugEnabled     = Config:Get("CombatDebugEnabled", false)
 CombatDebugCooldowns   = {}
 
 function UpdateDYHUBWaitingPartCollision()
+    if AutoFarmEnabled ~= true then
+        if DestroyDYHUBWaitingPart then DestroyDYHUBWaitingPart() end
+        part = nil
+        return
+    end
+
     local waitingPart = EnsureDYHUBWaitingPart and EnsureDYHUBWaitingPart() or GetDYHUBWaitingPart()
     if not waitingPart then return end
+
+    part = waitingPart
     pcall(function()
         ConfigureDYHUBWaitingPart(waitingPart)
     end)
@@ -3252,7 +3276,7 @@ function ActivateProximityPrompt(prompt)
         prompt.MaxActivationDistance = 50
         if fireproximityprompt then fireproximityprompt(prompt) end
         prompt:InputHoldBegin()
-        task.wait(0.05)
+        task.wait(0.03)
         prompt:InputHoldEnd()
     end)
 end
@@ -3260,7 +3284,7 @@ end
 FlushPromptCache = {}
 FlushPromptCacheDirty = true
 FlushPromptCacheLastScan = 0
-FlushPromptCacheTTL = 5
+FlushPromptCacheTTL = 8
 
 function IsFlushPrompt(prompt)
     if not prompt or not prompt:IsA("ProximityPrompt") then return false end
@@ -3301,9 +3325,15 @@ workspace.DescendantRemoving:Connect(function(obj)
     end
 end)
 
+LastFlushPromptActivateAllAt = 0
+
 function ActivateAllFlushPrompts()
+    local now = tick()
+    if now - (LastFlushPromptActivateAllAt or 0) < 0.35 then return end
+    LastFlushPromptActivateAllAt = now
+
     pcall(function()
-        if FlushPromptCacheDirty or tick() - (FlushPromptCacheLastScan or 0) > (FlushPromptCacheTTL or 5) then
+        if FlushPromptCacheDirty or tick() - (FlushPromptCacheLastScan or 0) > (FlushPromptCacheTTL or 8) then
             RebuildFlushPromptCache()
         end
 
@@ -5001,7 +5031,7 @@ Main:Toggle({
                         if not char then return end
                         local root = char:FindFirstChild("HumanoidRootPart")
                         if not root then return end
-                        if FlushPromptCacheDirty or tick() - (FlushPromptCacheLastScan or 0) > (FlushPromptCacheTTL or 5) then
+                        if FlushPromptCacheDirty or tick() - (FlushPromptCacheLastScan or 0) > (FlushPromptCacheTTL or 8) then
                             RebuildFlushPromptCache()
                         end
                         for prompt in pairs(FlushPromptCache) do
@@ -5016,7 +5046,7 @@ Main:Toggle({
                             end
                         end
                     end)
-                    task.wait(0.1)
+                    task.wait(0.25)
                 end
             end)
         end
@@ -5150,7 +5180,7 @@ function ApplyMobESP(mob)
                 local humanoid = mob:FindFirstChild("Humanoid")
                 if not humanoid or humanoid.Health <= 0 then break end
                 if not IsInRange(hrp) then label.Visible = false; task.wait(0.5)
-                else label.Visible = true; label.Text = BuildLabelText(mob, settings.name, settings.health, settings.distance); task.wait(0.15) end
+                else label.Visible = true; label.Text = BuildLabelText(mob, settings.name, settings.health, settings.distance); task.wait(0.35) end
             end
             RemoveESP(mob); ESP._mobHighlights[mob] = nil
         end)
@@ -5181,7 +5211,7 @@ function ApplyPlayerESP(playerChar)
                 local humanoid = playerChar:FindFirstChild("Humanoid")
                 if not humanoid or humanoid.Health <= 0 then break end
                 if not IsInRange(hrp) then label.Visible = false; task.wait(0.5)
-                else label.Visible = true; label.Text = BuildLabelText(playerChar, settings.name, settings.health, settings.distance); task.wait(0.15) end
+                else label.Visible = true; label.Text = BuildLabelText(playerChar, settings.name, settings.health, settings.distance); task.wait(0.35) end
             end
             RemoveESP(playerChar); ESP._playerHighlights[playerChar] = nil
         end)
@@ -5218,7 +5248,7 @@ function ApplyItemESP(obj)
             while obj and obj.Parent and ESP.Enabled and ESP.ItemEnabled do
                 local currentRoot = GetItemRoot(obj); if not currentRoot then break end
                 if not IsInRange(currentRoot) then label.Visible = false; task.wait(0.5)
-                else label.Visible = true; label.Text = BuildItemLabelText(obj, settings.name, settings.distance); task.wait(0.25) end
+                else label.Visible = true; label.Text = BuildItemLabelText(obj, settings.name, settings.distance); task.wait(0.5) end
             end
             RemoveESP(obj); ESP._itemHighlights[obj] = nil
         end)
@@ -5253,15 +5283,15 @@ function StartESPLoop()
     ESPConnection = RunService.Heartbeat:Connect(function()
         if not ESP.Enabled then return end
         local now = tick()
-        if ESP.MobEnabled and now - lastMobScan >= 0.5 then
+        if ESP.MobEnabled and now - lastMobScan >= 0.8 then
             lastMobScan = now
             pcall(ScanMobs)
         end
-        if ESP.PlayerEnabled and now - lastPlayerScan >= 0.75 then
+        if ESP.PlayerEnabled and now - lastPlayerScan >= 1.0 then
             lastPlayerScan = now
             pcall(ScanPlayers)
         end
-        if ESP.ItemEnabled and now - lastItemScan >= 2.5 then
+        if ESP.ItemEnabled and now - lastItemScan >= 4.0 then
             lastItemScan = now
             pcall(ScanItems)
         end
@@ -6376,7 +6406,7 @@ function FireAutoSkillTrees()
                 warn("[DYHUB] Auto Skill Tree failed:", remoteArg, err)
             end
 
-            task.wait(0.15)
+            task.wait(0.35)
         end
     end
 
@@ -6423,7 +6453,7 @@ _G.__DYHUB_ShopSystems = function()
             if enabledFn and not enabledFn() then
                 return false
             end
-            task.wait(0.25)
+            task.wait(0.5)
             elapsed = elapsed + 0.25
         end
         return true
@@ -6834,12 +6864,12 @@ _G.__DYHUB_ShopSystems = function()
     local function FireSyncedShopBatch()
         if autoBuyWeaponEnabled and autoBuyWeaponValue then
             FireShopRemote("ShopSystem", "Buy", autoBuyWeaponValue)
-            task.wait(0.15)
+            task.wait(0.35)
         end
 
         if autoBuyMiscEnabled and autoBuyMiscValue then
             FireShopRemote("ShopSystem", "Buy", autoBuyMiscValue)
-            task.wait(0.15)
+            task.wait(0.35)
         end
 
         if autoRequestEnabled and selectedRequestItem then
@@ -6848,32 +6878,32 @@ _G.__DYHUB_ShopSystems = function()
             else
                 NotifyRequestWaveNotReady()
             end
-            task.wait(0.15)
+            task.wait(0.35)
         end
 
         if autoSkillTreeEnabled then
             FireAutoSkillTrees()
-            task.wait(0.15)
+            task.wait(0.35)
         end
 
         if upgradeTitanSpeakerEnabled then
             for _, upgradeName in ipairs(selectedTitanSpeakerUpgrades or {}) do
                 FireShopRemote("ChangeUpgradedTitanSpeaker", upgradeName)
-                task.wait(0.15)
+                task.wait(0.35)
             end
         end
 
         if upgradeUTCMEnabled then
             for _, upgradeName in ipairs(selectedUTCMUpgrades or {}) do
                 FireShopRemote("ForUpgradeUTCM", upgradeName)
-                task.wait(0.15)
+                task.wait(0.35)
             end
         end
 
         if upgradeTVEnabled then
             for _, upgradeName in ipairs(selectedTVUpgrades or {}) do
                 FireShopRemote("ForUpgradeTV", upgradeName)
-                task.wait(0.15)
+                task.wait(0.35)
             end
         end
     end
@@ -6894,13 +6924,13 @@ _G.__DYHUB_ShopSystems = function()
                 local shouldSyncHeli = ShouldShopSyncWithHeli()
                 if shouldSyncHeli then
                     TriggerAutoSkipHeli(false)
-                    task.wait(0.25)
+                    task.wait(0.5)
                 end
 
                 FireSyncedShopBatch()
 
                 if shouldSyncHeli then
-                    task.wait(0.25)
+                    task.wait(0.5)
                     TriggerAutoSkipHeli(true)
                 end
 
@@ -6989,7 +7019,7 @@ _G.__DYHUB_ShopSystems = function()
         for _, itemName in ipairs(selectedShopHourlyItems or {}) do
             if itemName and itemName ~= "" then
                 FireShopRemote("BuyItemFromShopHourly", itemName, amount)
-                task.wait(0.15)
+                task.wait(0.35)
             end
         end
     end
