@@ -99,7 +99,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/config_main.json"
+    self.ConfigPath = ConfigFolder .. "/vd_config.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -265,20 +265,16 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 06/01/2026 | CL: " .. ver,
-    Desc  = [[• [ Fixed ] Twist of Fate lock distance.
-• [ Fixed ] Old config lock distance reset.
-• [ Fixed ] Duplicate Revolver GUI watchdog.
-• [ Improved ] Respawn / new round cache refresh.
-• [ Improved ] Reduced lag, freeze, and cache issues.
-• [ Optimized ] Twist of Fate target scan.
-• [ Optimized ] Killer Aimbot scan.
-• [ Optimized ] Get Killer / loop scan debounce.
-• [ Optimized ] Killer character cache.
-• [ Optimized ] Crosshair update loop.
-• [ Optimized ] NoClip descendant scan.
+    Title = "Update: 06/02/2026 | CL: " .. ver,
+    Desc  = [[• [ Premium Only ] God Mode descendant scan.
+• [ Premium Only ] Auto Parry adjust the speed of protection.
+  • Hitframe: 0.13 -> 0.12 (ALL) / Hitframe: 0.10 -> 0.09 (Cure)
+    
+• [ Added ] Auto SkillCheck Perfect/Neutral mutual lock notify.
 • [ Fixed ] Auto SkillCheck saved toggle now boots after rejoin/reload.
-• [ Added ] Auto SkillCheck Perfect/Neutral mutual lock notify.]],
+• [ Fixed ] Save config for loop speed toggle.
+• [ Improved ] Reduced lag, bug issuses, and cache issues.
+• [ Optimized ] No Fall / No Flashlight descendant scan.]],
 })
 Info:Divider()
 
@@ -384,22 +380,22 @@ _G.AutoParryMode  = Config:Get("autoparrymode",  settings.AutoParryMode or "Fast
 _G.AutoParryRange = Config:Get("autoparryrange", settings.AutoParryRange or 10)
 
 local ANIM_HITFRAME = {
-    ["rbxassetid://139369275981139"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://110355011987939"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://135002183282873"] = { preDelay=0.00, hitAt=0.90 },
-    ["rbxassetid://121216847022485"] = { preDelay=0.00, hitAt=0.90 },
-    ["rbxassetid://105374834496520"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://111920872708571"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://118907603246885"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://78432063483146"]  = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://113255068724446"] = { preDelay=0.00, hitAt=0.90 },
-    ["rbxassetid://74968262036854"]  = { preDelay=0.00, hitAt=0.90 },
-    ["rbxassetid://129784271201071"] = { preDelay=0.00, hitAt=0.90 },
-    ["rbxassetid://132817836308238"] = { preDelay=0.00, hitAt=0.90 },
-    ["rbxassetid://112166042383605"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://122812055447896"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://117042998468241"] = { preDelay=0.00, hitAt=0.13 },
-    ["rbxassetid://133963973694098"] = { preDelay=0.00, hitAt=0.13 },
+    ["rbxassetid://139369275981139"] = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://110355011987939"] = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://135002183282873"] = { preDelay=0.00, hitAt=0.09 },
+    ["rbxassetid://121216847022485"] = { preDelay=0.00, hitAt=0.09 },
+    ["rbxassetid://105374834496520"] = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://111920872708571"] = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://118907603246885"] = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://78432063483146"]  = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://113255068724446"] = { preDelay=0.00, hitAt=0.09 },
+    ["rbxassetid://74968262036854"]  = { preDelay=0.00, hitAt=0.09 },
+    ["rbxassetid://129784271201071"] = { preDelay=0.00, hitAt=0.09 },
+    ["rbxassetid://132817836308238"] = { preDelay=0.00, hitAt=0.09 },
+    ["rbxassetid://112166042383605"] = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://122812055447896"] = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://117042998468241"] = { preDelay=0.00, hitAt=0.12 },
+    ["rbxassetid://133963973694098"] = { preDelay=0.00, hitAt=0.12 },
 }
 
 local function rootOf(obj)
