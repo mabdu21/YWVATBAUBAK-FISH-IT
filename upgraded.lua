@@ -1,7 +1,7 @@
--- v167 | [Stability + Lag Fix]
+-- v160 | [Local Register Fix]
 -- =========================
 version = "Rework"
-ver = "v023.88"
+ver = "v023.86"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -14,52 +14,87 @@ repeat task.wait() until game:IsLoaded()
 p = game:GetService("Players").LocalPlayer
 pg = p:WaitForChild("PlayerGui")
 
-function waitLoadingGone()
-    -- [v023.86] Prevent hard-freeze on games where LoadingGui never gets removed.
-    local startAt = tick()
-    local notified = false
+function waitLoadingGone(maxWait)
+    maxWait = tonumber(maxWait) or 18
+    local gui = pg:FindFirstChild("LoadingGui")
+    if not gui then return true end
 
-    while tick() - startAt < 15 do
-        local gui = pg and (pg:FindFirstChild("LoadingGui") or pg:FindFirstChild("LoadingScreen"))
-        if not gui or gui.Parent == nil then
-            return true
-        end
+    WindUI:Notify({ Title = "Initialization", Content = "Game is loading, Please wait.", Duration = 3, Icon = "download" })
 
-        if not notified then
-            notified = true
-            pcall(function()
-                WindUI:Notify({ Title = "Initialization", Content = "Game is loading, Please wait.", Duration = 3, Icon = "download" })
-            end)
-        end
-
-        task.wait(0.25)
+    local startedAt = tick()
+    while gui and gui.Parent and tick() - startedAt < maxWait do
+        task.wait(0.1)
     end
 
-    warn("[DYHUB] Loading GUI timeout, continuing startup safely.")
-    return false
+    if gui and gui.Parent then
+        warn("[DYHUB] LoadingGui did not disappear in time, continuing safely.")
+        return false
+    end
+
+    return true
 end
 
-waitLoadingGone()
+waitLoadingGone(18)
 
-pcall(function() WindUI:Notify({ Title = "Initialization", Content = "Load complete, Starting in 1 second.", Duration = 2, Icon = "shield-check" }) end)
-task.wait(1)
+WindUI:Notify({ Title = "Initialization", Content = "Load complete, Starting in 2 seconds.", Duration = 2, Icon = "shield-check" })
+task.wait(2)
 
--- ====================== FPS UNLOCK ======================
-part = workspace:FindFirstChild("DYHUB_WAITING_PART")
-if not (part and part:IsA("BasePart")) then
-    part = Instance.new("Part")
-    part.Name = "DYHUB_WAITING_PART"
-    part.Parent = workspace
+-- ====================== WAITING PART / FPS UNLOCK ======================
+DYHUB_WAITING_PART_NAME = "DYHUB_WAITING_PART"
+DYHUB_WAITING_STAND_CF = CFrame.new(-23.3435822, 67, 0.341766357)
+DYHUB_WAITING_PART_CF = CFrame.new(-23.3435822, 63.95, 0.341766357)
+DYHUB_WAITING_PART_SIZE = Vector3.new(16, 1, 16)
+DYHUB_WAITING_PART_VISIBLE_TRANSPARENCY = 0.35
+
+function GetDYHUBWaitingStandCFrame()
+    return DYHUB_WAITING_STAND_CF
 end
-part.Size = Vector3.new(10, 1, 10)
-part.Position = Vector3.new(-23.3435822, 61, 0.341766357)
-part.Transparency = 1
-part.Anchored = true
-part.CanCollide = false
-part.CanTouch = false
-part.CanQuery = false
-part.Material = Enum.Material.Neon
-part.BrickColor = BrickColor.new("Bright blue")
+
+function ConfigureDYHUBWaitingPart(waitingPart)
+    if not waitingPart or not waitingPart:IsA("BasePart") then return nil end
+
+    waitingPart.Name = DYHUB_WAITING_PART_NAME
+    waitingPart.Size = DYHUB_WAITING_PART_SIZE
+    waitingPart.CFrame = DYHUB_WAITING_PART_CF
+    waitingPart.Anchored = true
+    waitingPart.CanTouch = false
+    waitingPart.CanQuery = false
+    waitingPart.Material = Enum.Material.Neon
+    waitingPart.BrickColor = BrickColor.new("Bright blue")
+    waitingPart.TopSurface = Enum.SurfaceType.Smooth
+    waitingPart.BottomSurface = Enum.SurfaceType.Smooth
+
+    local active = AutoFarmEnabled == true
+    waitingPart.CanCollide = active
+    waitingPart.Transparency = active and DYHUB_WAITING_PART_VISIBLE_TRANSPARENCY or 1
+
+    return waitingPart
+end
+
+function GetDYHUBWaitingPart()
+    local keep = nil
+    for _, obj in ipairs(workspace:GetChildren()) do
+        if obj.Name == DYHUB_WAITING_PART_NAME and obj:IsA("BasePart") then
+            if not keep then
+                keep = obj
+            else
+                pcall(function() obj:Destroy() end)
+            end
+        end
+    end
+    return keep
+end
+
+function EnsureDYHUBWaitingPart()
+    local waitingPart = GetDYHUBWaitingPart()
+    if not waitingPart then
+        waitingPart = Instance.new("Part")
+        waitingPart.Parent = workspace
+    end
+    return ConfigureDYHUBWaitingPart(waitingPart)
+end
+
+part = EnsureDYHUBWaitingPart()
 
 if setfpscap then
     setfpscap(1000000)
@@ -79,8 +114,10 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/stbb_config_v1.json"
-    if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
+    self.ConfigPath = ConfigFolder .. "/stbb_config.json"
+    if isfolder and makefolder and not isfolder(ConfigFolder) then
+        pcall(function() makefolder(ConfigFolder) end)
+    end
     self:Load()
     return self
 end
@@ -92,28 +129,46 @@ function CustomConfig:Get(key, default)
     return default
 end
 
-function CustomConfig:Save()
+function CustomConfig:Save(force)
+    if not writefile then return false end
+
+    local now = tick()
+    if not force and self._LastSaveAt and now - self._LastSaveAt < 0.75 then
+        if not self._SaveQueued then
+            self._SaveQueued = true
+            task.delay(0.85, function()
+                self._SaveQueued = false
+                self:Save(true)
+            end)
+        end
+        return true
+    end
+
     local success, err = pcall(function()
         writefile(self.ConfigPath, HttpService:JSONEncode(self.ConfigData))
     end)
-    -- [v023.86] Do not warn on every successful auto-save; repeated warn/print can stutter low-end devices.
-    if not success then warn("[DYHUB] Save failed:", err) end
+
+    if success then
+        self._LastSaveAt = now
+        return true
+    else
+        warn("[DYHUB] Save failed:", err)
+        return false
+    end
 end
 
 function CustomConfig:Load()
-    if isfile(self.ConfigPath) then
+    if isfile and readfile and isfile(self.ConfigPath) then
         local success, result = pcall(function()
             return HttpService:JSONDecode(readfile(self.ConfigPath))
         end)
         if success and type(result) == "table" then
             self.ConfigData = result
-            print("[DYHUB] Config loaded!")
         else
             warn("[DYHUB] Failed to load config, using defaults")
             self.ConfigData = {}
         end
     else
-        print("[DYHUB] No config found, creating new one")
         self.ConfigData = {}
     end
 end
@@ -123,14 +178,9 @@ function CustomConfig:AutoSave(interval)
         pcall(function() task.cancel(self._AutoSaveThread) end)
         self._AutoSaveThread = nil
     end
-
-    interval = tonumber(interval) or 15
-    if interval <= 0 then return end
-    interval = math.max(interval, 3)
-
     self._AutoSaveThread = task.spawn(function()
-        while self._AutoSaveThread do
-            task.wait(interval)
+        while true do
+            task.wait(interval or 15)
             self:Save()
         end
     end)
@@ -148,14 +198,9 @@ ExtraVersion   = "Extra Version"
 
 function getData(url)
     local success, response = pcall(function() return game:HttpGet(url) end)
-    if not success or type(response) ~= "string" then return nil end
-
+    if not success then return nil end
     local func = loadstring(response)
-    if not func then return nil end
-
-    local ok, result = pcall(func)
-    if ok then return result end
-    warn("[DYHUB] Remote data load failed:", tostring(result))
+    if func then return func() end
     return nil
 end
 
@@ -222,26 +267,9 @@ Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 06/01/2026 | CL: " .. ver,
-    Desc = [[• [ Paid Version ] Mode Farm for different farming modes 
-  • Normal Mode
-  • Astro Holdout Mode
-  • Dark Dimension Mode
-
-• [ Fixed ] Loading wait timeout.
-• [ Fixed ] Config save log spam.
-• [ Fixed ] AutoSave delay issue.
-• [ Fixed ] Duplicate waiting part.
-• [ Fixed ] Lobby notify spam.
-• [ Safe ] Lobby remote protected with pcall.
-• [ Improved ] Respawn / new round cache rebuild.
-• [ Improved ] Reduced lag, freeze, and scan spam.
-• [ Optimized ] Character parts cache.
-• [ Optimized ] NoClip / FarmAstro scan.
-• [ Optimized ] FarmAstro NoClip smoothness.
-• [ Optimized ] Flush Aura prompt cache.
-• [ Optimized ] ESP scan timing.
-• [ Optimized ] Item ESP scan throttle.
-• [ Optimized ] Jeffrey fallback scan.]],
+    Desc = [[- [ Paid Version ] Mode Farm for different farming modes / Dark Dimension, Astro Holdout
+- [ Fixed ] Farm Astro Token / Check the time wave for God Mode.
+- [ Improved ] Bug issues, Loophook, Smart Database]],
 })
 Info:Divider()
 Info:Section({ Title = "Discord Information", TextXAlignment = "Center", TextSize = 17 })
@@ -351,57 +379,6 @@ Client         = LocalPlayer
 Character      = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
 
--- [v023.86] Shared character part cache for NoClip/FarmAstro.
--- This avoids Character:GetDescendants() every Heartbeat/Stepped frame.
-DYHUB_CharPartCache = { Char = nil, Parts = {}, Set = {}, Added = nil, Removing = nil, LastRebuild = 0 }
-
-function DYHUB_DisconnectCharPartCache()
-    if DYHUB_CharPartCache.Added then pcall(function() DYHUB_CharPartCache.Added:Disconnect() end) end
-    if DYHUB_CharPartCache.Removing then pcall(function() DYHUB_CharPartCache.Removing:Disconnect() end) end
-    DYHUB_CharPartCache.Added = nil
-    DYHUB_CharPartCache.Removing = nil
-end
-
-function DYHUB_AddCharPart(obj)
-    if obj and obj:IsA("BasePart") and not DYHUB_CharPartCache.Set[obj] then
-        DYHUB_CharPartCache.Set[obj] = true
-        table.insert(DYHUB_CharPartCache.Parts, obj)
-    end
-end
-
-function DYHUB_RebuildCharacterPartCache(char)
-    DYHUB_DisconnectCharPartCache()
-    DYHUB_CharPartCache.Char = char
-    DYHUB_CharPartCache.Parts = {}
-    DYHUB_CharPartCache.Set = {}
-    DYHUB_CharPartCache.LastRebuild = tick()
-
-    if not char then return end
-
-    for _, obj in ipairs(char:GetDescendants()) do
-        DYHUB_AddCharPart(obj)
-    end
-
-    DYHUB_CharPartCache.Added = char.DescendantAdded:Connect(function(obj)
-        DYHUB_AddCharPart(obj)
-    end)
-
-    DYHUB_CharPartCache.Removing = char.DescendantRemoving:Connect(function(obj)
-        if obj and DYHUB_CharPartCache.Set[obj] then
-            DYHUB_CharPartCache.Set[obj] = nil
-        end
-    end)
-end
-
-function DYHUB_GetCharacterParts(char)
-    if char ~= DYHUB_CharPartCache.Char or tick() - (DYHUB_CharPartCache.LastRebuild or 0) > 6 then
-        DYHUB_RebuildCharacterPartCache(char)
-    end
-    return DYHUB_CharPartCache.Parts or {}
-end
-
-DYHUB_RebuildCharacterPartCache(Character)
-
 -- ====================== GLOBAL TABLES ======================
 GlobalTables = {
     redeemCodes = { "100MVisit2", "100MVisit1", "CamArmada", "CCTVBase", "ADelayedGameIsEventuallyGoodButRushedGameIsForeverBad" },
@@ -470,7 +447,7 @@ AntiJeffreyRange       = Config:Get("AntiJeffreyRange", 50)
 BypassJeffreyEnabled   = Config:Get("BypassJeffreyEnabled", false)
 BypassJeffreyLoopRunning = false
 BypassJeffreyLastFullScanAt = 0
-BypassJeffreyFullScanDelay = 5
+BypassJeffreyFullScanDelay = 3
 AntiJeffreyLoopRunning = false
 AntiJeffreyGuardLoopRunning = false
 AntiJeffreyLastPushAt  = 0
@@ -531,7 +508,7 @@ GodModeEnabled         = false
 GodModeValue           = Config:Get("GodModeValue", 50)
 GodModeTriggered       = false
 WaitingRespawn         = false
-IdlePosition           = CFrame.new(-23.3435822, 67, 0.341766357) * CFrame.Angles(math.rad(0), 0, 0)
+IdlePosition           = GetDYHUBWaitingStandCFrame() * CFrame.Angles(math.rad(0), 0, 0)
 IdleHoldDistance       = 12       -- distance allowed before re-teleporting to idle
 IdleTeleportCooldown   = 1.25     -- prevents repeated idle teleport / camera shake
 LastIdleTeleportAt     = 0
@@ -554,23 +531,23 @@ FarmCollecting         = false
 CombatDebugEnabled     = Config:Get("CombatDebugEnabled", false)
 CombatDebugCooldowns   = {}
 
-function GetDYHUBWaitingPart()
-    local waitingPart = workspace:FindFirstChild("DYHUB_WAITING_PART")
-    if waitingPart and waitingPart:IsA("BasePart") then return waitingPart end
-    return nil
-end
-
 function UpdateDYHUBWaitingPartCollision()
-    local waitingPart = GetDYHUBWaitingPart()
+    local waitingPart = EnsureDYHUBWaitingPart and EnsureDYHUBWaitingPart() or GetDYHUBWaitingPart()
     if not waitingPart then return end
     pcall(function()
-        waitingPart.CanCollide = AutoFarmEnabled == true
-        waitingPart.CanTouch = false
-        waitingPart.CanQuery = false
+        ConfigureDYHUBWaitingPart(waitingPart)
     end)
 end
 
 UpdateDYHUBWaitingPartCollision()
+
+workspace.ChildRemoved:Connect(function(obj)
+    if obj and obj.Name == DYHUB_WAITING_PART_NAME and AutoFarmEnabled == true then
+        task.defer(function()
+            UpdateDYHUBWaitingPartCollision()
+        end)
+    end
+end)
 
 function CombatDebug(tag, message, cooldown, showNotify)
     if not CombatDebugEnabled then return end
@@ -948,14 +925,9 @@ function GetJeffreyRoots(forceRefresh)
         end
 
         -- Fallback only when common locations did not find Jeffrey/Jeffery.
-        -- [v023.86] Full workspace scan is expensive, so do it less often.
         if #list == 0 then
-            JeffreyFallbackFullScanAt = JeffreyFallbackFullScanAt or 0
-            if forceRefresh or tick() - JeffreyFallbackFullScanAt >= 3 then
-                JeffreyFallbackFullScanAt = tick()
-                for _, obj in ipairs(workspace:GetDescendants()) do
-                    AddJeffreyRootFromObject(obj, list, seen)
-                end
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                AddJeffreyRootFromObject(obj, list, seen)
             end
         end
     end)
@@ -2266,6 +2238,27 @@ function GetStableFarmCFrame(cf)
     return cf
 end
 
+function WaitTweenWithTimeout(tween, timeout)
+    if not tween then return false end
+    timeout = tonumber(timeout) or 2
+
+    local completed = false
+    local conn
+    conn = tween.Completed:Connect(function()
+        completed = true
+    end)
+
+    local startedAt = tick()
+    while not completed and tick() - startedAt < timeout do
+        if not AutoFarmEnabled and not FarmAstroTokenEnabled and not DarkDimensionCollecting then break end
+        task.wait(0.03)
+    end
+
+    if conn then pcall(function() conn:Disconnect() end) end
+    if not completed then pcall(function() tween:Cancel() end) end
+    return completed
+end
+
 function MoveCharacterToFarmCFrame(cf)
     if not Character or not HumanoidRootPart or not cf then return end
 
@@ -2292,7 +2285,7 @@ function TeleportToMob(mob)
         local tweenInfo = TweenInfo.new(TweenSpeed, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
         local tween = TweenService:Create(HumanoidRootPart, tweenInfo, { CFrame = GetStableFarmCFrame(cf) })
         tween:Play()
-        tween.Completed:Wait()
+        WaitTweenWithTimeout(tween, (TweenSpeed or 1) + 0.45)
         MoveCharacterToFarmCFrame(cf)
     else
         -- Teleport mode: instant move with stable camera-safe CFrame.
@@ -2335,7 +2328,7 @@ function MoveFarmSpecialCFrame(cf, tweenTime)
                 { CFrame = cf }
             )
             tween:Play()
-            tween.Completed:Wait()
+            WaitTweenWithTimeout(tween, (tweenTime or TweenSpeed or 0.35) + 0.45)
             MoveSpecialCharacterCFrame(cf)
         end)
         return ok
@@ -3202,6 +3195,8 @@ end
 function TeleportToIdle(force)
     LockActive = false
     WaitingRespawn = true
+    IdlePosition = GetDYHUBWaitingStandCFrame() * CFrame.Angles(math.rad(0), 0, 0)
+    UpdateDYHUBWaitingPartCollision()
 
     if not Character or not Character.Parent or not HumanoidRootPart then return end
 
@@ -3242,17 +3237,61 @@ function ActivateProximityPrompt(prompt)
     end)
 end
 
+FlushPromptCache = {}
+FlushPromptCacheDirty = true
+FlushPromptCacheLastScan = 0
+FlushPromptCacheTTL = 5
+
+function IsFlushPrompt(prompt)
+    if not prompt or not prompt:IsA("ProximityPrompt") then return false end
+    local actionText = tostring(prompt.ActionText or ""):lower()
+    local objectText = tostring(prompt.ObjectText or ""):lower()
+    local combined = actionText .. " " .. objectText .. " " .. tostring(prompt.Name or ""):lower()
+    return combined:find("flush", 1, true) ~= nil
+        or combined:find("flash", 1, true) ~= nil
+        or combined:find("dragon", 1, true) ~= nil
+end
+
+function RegisterFlushPrompt(obj)
+    if obj and obj:IsA("ProximityPrompt") and IsFlushPrompt(obj) then
+        FlushPromptCache[obj] = true
+    end
+end
+
+function RebuildFlushPromptCache()
+    FlushPromptCache = {}
+    pcall(function()
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            RegisterFlushPrompt(obj)
+        end
+    end)
+    FlushPromptCacheDirty = false
+    FlushPromptCacheLastScan = tick()
+end
+
+workspace.DescendantAdded:Connect(function(obj)
+    if obj and obj:IsA("ProximityPrompt") then
+        task.defer(function() RegisterFlushPrompt(obj) end)
+    end
+end)
+
+workspace.DescendantRemoving:Connect(function(obj)
+    if obj and FlushPromptCache[obj] then
+        FlushPromptCache[obj] = nil
+    end
+end)
+
 function ActivateAllFlushPrompts()
     pcall(function()
-        for _, part in pairs(workspace:GetDescendants()) do
-            if part:IsA("BasePart") or part:IsA("Model") then
-                local prompt = part:FindFirstChildOfClass("ProximityPrompt")
-                if prompt then
-                    local actionText = prompt.ActionText:lower()
-                    if actionText:find("flush") or actionText:find("flash") or actionText:find("dragon") then
-                        ActivateProximityPrompt(prompt)
-                    end
-                end
+        if FlushPromptCacheDirty or tick() - (FlushPromptCacheLastScan or 0) > (FlushPromptCacheTTL or 5) then
+            RebuildFlushPromptCache()
+        end
+
+        for prompt in pairs(FlushPromptCache) do
+            if prompt and prompt.Parent and IsFlushPrompt(prompt) then
+                ActivateProximityPrompt(prompt)
+            else
+                FlushPromptCache[prompt] = nil
             end
         end
     end)
@@ -3660,7 +3699,7 @@ function MoveFarmAstroToTimerSafe()
             { CFrame = FARM_ASTRO_TIMER_BOTTOM_CF }
         )
         tween:Play()
-        tween.Completed:Wait()
+        WaitTweenWithTimeout(tween, (FARM_ASTRO_TIMER_DROP_TIME or 0.35) + 0.45)
         if hum then
             hum.Sit = false
             hum.PlatformStand = false
@@ -3709,7 +3748,40 @@ function WaitFarmAstroRespawnAfterTimer()
     ResumeFarmAstroGodModeAfterRespawn("Farm Astro timer reset")
 end
 
-FarmAstroNoClipLastPartAt = 0
+FarmAstroNoClipParts = FarmAstroNoClipParts or {}
+FarmAstroNoClipChar = nil
+FarmAstroNoClipPartsAt = 0
+
+function RebuildFarmAstroNoClipParts(char)
+    FarmAstroNoClipParts = {}
+    FarmAstroNoClipChar = char
+    FarmAstroNoClipPartsAt = tick()
+    if not char then return end
+
+    pcall(function()
+        for _, obj in ipairs(char:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                table.insert(FarmAstroNoClipParts, obj)
+            end
+        end
+    end)
+end
+
+function ApplyFarmAstroNoClipToCharacter(char)
+    if not char then return end
+    if FarmAstroNoClipChar ~= char or tick() - (FarmAstroNoClipPartsAt or 0) > 1.25 then
+        RebuildFarmAstroNoClipParts(char)
+    end
+
+    for i = #FarmAstroNoClipParts, 1, -1 do
+        local obj = FarmAstroNoClipParts[i]
+        if obj and obj.Parent then
+            obj.CanCollide = false
+        else
+            table.remove(FarmAstroNoClipParts, i)
+        end
+    end
+end
 
 function StartFarmAstroNoClip()
     if FarmAstroTokenNoClipConnection then return end
@@ -3718,17 +3790,7 @@ function StartFarmAstroNoClip()
         pcall(function()
             local char, hrp, hum = GetFarmAstroCharacter()
             if not char then return end
-
-            -- [v023.86] Do not scan all character descendants every frame.
-            if tick() - (FarmAstroNoClipLastPartAt or 0) >= 0.12 then
-                FarmAstroNoClipLastPartAt = tick()
-                for _, obj in ipairs(DYHUB_GetCharacterParts(char)) do
-                    if obj and obj.Parent and obj:IsA("BasePart") then
-                        obj.CanCollide = false
-                    end
-                end
-            end
-
+            ApplyFarmAstroNoClipToCharacter(char)
             if hum then hum.Sit = false; hum.PlatformStand = false end
             if not FarmAstroTokenPauseCollect and hrp then
                 if FarmAstroTimerDropping then
@@ -4181,17 +4243,22 @@ end)
 -- Priority: GiantST(4) → Heli(3) → HighHP>threshold(2) → Nearest(1)
 -- Interrupt: ถ้ากำลังตีมอนระดับต่ำ และมอบระดับสูงกว่าปรากฏ → หยุดทันที
 -- ============================================================
+FarmLoopToken = FarmLoopToken or 0
+
 function StartFarmLoop()
     if FarmLoopRunning then return end
     FarmLoopRunning = true
+    FarmLoopToken = (FarmLoopToken or 0) + 1
+    local thisFarmLoopToken = FarmLoopToken
 
     task.spawn(function()
         local ok, err = pcall(function()
             task.spawn(function()
-                while AutoFarmEnabled and FarmLoopRunning do
+                while AutoFarmEnabled and FarmLoopRunning and FarmLoopToken == thisFarmLoopToken do
                     if WaitingRespawn and not LockActive and not FarmCollecting then
                         pcall(function()
                             RefreshCombatCharacter()
+                            UpdateDYHUBWaitingPartCollision()
                             if Character and HumanoidRootPart then
                                 if IsNearIdlePosition() then
                                     IdlePositionReached = true
@@ -4205,11 +4272,11 @@ function StartFarmLoop()
                     else
                         IdlePositionReached = false
                     end
-                    task.wait(0.7)
+                    task.wait(0.35)
                 end
             end)
 
-            while AutoFarmEnabled do
+            while AutoFarmEnabled and FarmLoopToken == thisFarmLoopToken do
                 RefreshCombatCharacter()
 
                 if not Character or not HumanoidRootPart then
@@ -4479,7 +4546,6 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     Character        = char
     HumanoidRootPart = char:WaitForChild("HumanoidRootPart")
     Client           = LocalPlayer
-    DYHUB_RebuildCharacterPartCache(char)
     FarmAstroTokenRespawnCounter = FarmAstroTokenRespawnCounter + 1
 
     if keepFarmAstroBottomLock then
@@ -4561,8 +4627,11 @@ AutoFarmToggle = Main:Toggle({
             HandleMiscOptions(MiscOptions)
             WindUI:Notify({ Title = "Auto Farm", Content = "Enabled, Auto Farm now!", Duration = 2, Icon = "play" })
         else
+            FarmLoopToken = (FarmLoopToken or 0) + 1
+            WaitingRespawn = false
             LockActive = false
             RestoreFarmCameraAndMovement()
+            UpdateDYHUBWaitingPartCollision()
             if SyncFarmOnly then
                 StopMiscFarmRuntime("Auto Farm turned off while Sync Farm Only is ON")
                 WindUI:Notify({ Title = "Auto Farm", Content = "Turn off Auto Farm: Misc Farm system stops working (Sync Farm Only)", Duration = 3, Icon = "square" })
@@ -4725,7 +4794,7 @@ SkillDropdown = Main:Dropdown({
 SkillDelaySlider = Main:Slider({
     Title = "Skill Delay (S)",
     Desc = "Sets the delay between each Auto Skill key press in seconds.",
-    Value = { Min = 1, Max = 30, Default = SkillDelay },
+    Value = { Min = 1, Max = 60, Default = SkillDelay },
     Step = 1,
     Callback = function(value) SkillDelay = value; Config:Set("SkillDelay", value); Config:Save() end
 })
@@ -4898,52 +4967,13 @@ Main:Slider({
     Callback = function(value) FlushAuraValue = value; Config:Set("FlushAuraValue", value); Config:Save() end
 })
 
-FlushPromptCache = {}
-FlushPromptCacheAt = 0
-FlushPromptCacheTTL = 2.5
-FlushAuraLoopRunning = false
-
-function IsFlushPrompt(prompt)
-    if not prompt or not prompt:IsA("ProximityPrompt") then return false end
-    local at = tostring(prompt.ActionText or "")
-    return at == "Flush" or at == "Dragon Flash" or at == "flush" or at == "Flash"
-end
-
-function RebuildFlushPromptCache()
-    FlushPromptCache = {}
-    pcall(function()
-        for _, prompt in ipairs(workspace:GetDescendants()) do
-            if IsFlushPrompt(prompt) then
-                table.insert(FlushPromptCache, prompt)
-            end
-        end
-    end)
-    FlushPromptCacheAt = tick()
-end
-
-function GetFlushPromptCache()
-    if tick() - (FlushPromptCacheAt or 0) > (FlushPromptCacheTTL or 2.5) then
-        RebuildFlushPromptCache()
-    end
-    return FlushPromptCache or {}
-end
-
-workspace.DescendantAdded:Connect(function(obj)
-    if obj and obj:IsA("ProximityPrompt") then
-        task.defer(function()
-            if IsFlushPrompt(obj) then FlushPromptCacheAt = 0 end
-        end)
-    end
-end)
-
 Main:Toggle({
     Title = "Flush Aura",
     Desc = "Automatically flushes nearby flush prompts within the set radius.",
     Value = Flushaura,
     Callback = function(enabled)
         Flushaura = enabled; Config:Set("flushaura", enabled); Config:Save()
-        if enabled and not FlushAuraLoopRunning then
-            FlushAuraLoopRunning = true
+        if enabled then
             task.spawn(function()
                 while Flushaura do
                     pcall(function()
@@ -4951,27 +4981,23 @@ Main:Toggle({
                         if not char then return end
                         local root = char:FindFirstChild("HumanoidRootPart")
                         if not root then return end
-
-                        for _, prompt in pairs(GetFlushPromptCache()) do
+                        if FlushPromptCacheDirty or tick() - (FlushPromptCacheLastScan or 0) > (FlushPromptCacheTTL or 5) then
+                            RebuildFlushPromptCache()
+                        end
+                        for prompt in pairs(FlushPromptCache) do
                             if prompt and prompt.Parent and IsFlushPrompt(prompt) then
-                                local part = prompt.Parent
-                                if part and part:IsA("BasePart") and (root.Position - part.Position).Magnitude <= FlushAuraValue then
-                                    prompt.HoldDuration = 0
-                                    prompt.MaxActivationDistance = FlushAuraValue
-                                    if fireproximityprompt then
-                                        fireproximityprompt(prompt)
-                                    else
-                                        prompt:InputHoldBegin()
-                                        task.wait(0.03)
-                                        prompt:InputHoldEnd()
-                                    end
+                                local parent = prompt.Parent
+                                local part = parent:IsA("BasePart") and parent or parent:FindFirstAncestorWhichIsA("BasePart")
+                                if part and (root.Position - part.Position).Magnitude <= FlushAuraValue then
+                                    ActivateProximityPrompt(prompt)
                                 end
+                            else
+                                FlushPromptCache[prompt] = nil
                             end
                         end
                     end)
-                    task.wait(0.22)
+                    task.wait(0.1)
                 end
-                FlushAuraLoopRunning = false
             end)
         end
     end
@@ -5182,11 +5208,6 @@ end
 
 function ScanItems()
     if #ESP.SelectedItems == 0 then return end
-    -- [v023.86] Item ESP scans the full workspace, so throttle by real time instead of FPS.
-    ESP._lastItemFullScan = ESP._lastItemFullScan or 0
-    if tick() - ESP._lastItemFullScan < 2.5 then return end
-    ESP._lastItemFullScan = tick()
-
     for _, obj in ipairs(workspace:GetDescendants()) do
         if not ESP._itemHighlights[obj] and IsESPItemTarget(obj.Name, ESP.SelectedItems) then
             local root = GetItemRoot(obj)
@@ -5208,25 +5229,18 @@ ESPConnection = nil
 
 function StartESPLoop()
     if ESPConnection then ESPConnection:Disconnect(); ESPConnection = nil end
-    local lastMobScan = 0
-    local lastPlayerScan = 0
-    local lastItemScan = 0
-
+    local lastMobScan, lastPlayerScan, lastItemScan = 0, 0, 0
     ESPConnection = RunService.Heartbeat:Connect(function()
         if not ESP.Enabled then return end
         local now = tick()
-
-        -- [v023.86] Real-time throttles prevent FPS unlock from making ESP scans run too often.
-        if ESP.MobEnabled and now - lastMobScan >= 0.75 then
+        if ESP.MobEnabled and now - lastMobScan >= 0.5 then
             lastMobScan = now
             pcall(ScanMobs)
         end
-
-        if ESP.PlayerEnabled and now - lastPlayerScan >= 1.0 then
+        if ESP.PlayerEnabled and now - lastPlayerScan >= 0.75 then
             lastPlayerScan = now
             pcall(ScanPlayers)
         end
-
         if ESP.ItemEnabled and now - lastItemScan >= 2.5 then
             lastItemScan = now
             pcall(ScanItems)
@@ -5639,24 +5653,15 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-NoClipLastApplyAt = 0
-
 RunService.Stepped:Connect(function()
     if NoClip and LocalPlayer.Character then
-        -- [v023.86] Avoid GetDescendants every frame.
-        if tick() - (NoClipLastApplyAt or 0) < 0.12 then return end
-        NoClipLastApplyAt = tick()
-
-        for _, v in pairs(DYHUB_GetCharacterParts(LocalPlayer.Character)) do
-            if v and v.Parent and v:IsA("BasePart") then
-                v.CanCollide = false
-            end
+        for _, v in pairs(LocalPlayer.Character:GetDescendants()) do
+            if v:IsA("BasePart") then v.CanCollide = false end
         end
     end
 end)
 
 LocalPlayer.CharacterAdded:Connect(function(char)
-    DYHUB_RebuildCharacterPartCache(char)
     task.wait(1)
     updatePlayerStats(true)
     if FlyEnabled then StartFly() end
@@ -6080,25 +6085,24 @@ end)
 
 --// NEW LOBBY SYSTEM
 task.spawn(function()
-    local lastLobbyNotify = 0
-    local lastLoadingDestroy = 0
-
     while true do
-        task.wait(0.75)
+        task.wait(0.5)
 
-        local loadingGui = pg and pg:FindFirstChild("LoadingScreen")
-        if loadingGui and tick() - lastLoadingDestroy >= 2 then
-            lastLoadingDestroy = tick()
+        local loadingGui = pg:FindFirstChild("LoadingScreen")
+
+        -- ลบ LoadingScreen ถ้ามี
+        if loadingGui then
             notify("Lobby System", "Removing LoadingScreen...")
-            pcall(function() loadingGui:Destroy() end)
+            pcall(function()
+                loadingGui:Destroy()
+            end)
         end
 
-        local lobby = pg and pg:FindFirstChild("Lobby")
+        local lobby = pg:FindFirstChild("Lobby")
+
+        -- รอจน Lobby เปิด
         if lobby and lobby.Enabled then
-            if tick() - lastLobbyNotify >= 3 then
-                lastLobbyNotify = tick()
-                notify("Lobby System", "Lobby detected, preparing auto setup...")
-            end
+            notify("Lobby System", "Lobby detected, preparing auto setup...")
 
             local btn =
                 lobby:FindFirstChild("MainFrame") and
@@ -6109,25 +6113,19 @@ task.spawn(function()
             if btn and btn.Visible then
                 notify("Lobby System", "Pressing TrackQuestButton...")
                 click_btn(btn)
+
                 task.wait(0.5)
 
+                -- ยิง Remote เฉพาะตอนเปิด Toggle
                 if AutoVoteEnabled then
                     notify("Lobby System", "Creating game mode...")
-                    local ok, err = pcall(function()
-                        local handler = ReplicatedStorage:FindFirstChild("MainHandler")
-                        if handler then
-                            handler:FireServer({
-                                [1] = "StartSolo",
-                                [2] = AutoGameValue
-                            })
-                        end
-                    end)
 
-                    if ok then
-                        notify("Lobby System", "Gamemode created successfully!")
-                    else
-                        warn("[DYHUB] Lobby create failed:", tostring(err))
-                    end
+                    ReplicatedStorage.MainHandler:FireServer({
+                        [1] = "StartSolo",
+                        [2] = AutoGameValue
+                    })
+
+                    notify("Lobby System", "Gamemode created successfully!")
                 else
                     notify("Lobby System", "Use with Auto Game Mode!")
                 end
@@ -7124,9 +7122,8 @@ AutoSaveDelay   = Config:Get("AutoSaveDelay", 15)
 AutoSaveThread  = nil
 
 function RestartAutoSave()
-    if AutoSaveThread then pcall(function() task.cancel(AutoSaveThread) end); AutoSaveThread = nil end
+    if AutoSaveThread then task.cancel(AutoSaveThread); AutoSaveThread = nil end
     if AutoSaveEnabled then
-        AutoSaveDelay = math.max(tonumber(AutoSaveDelay) or 15, 3)
         AutoSaveThread = task.spawn(function()
             while AutoSaveEnabled do
                 task.wait(AutoSaveDelay)
