@@ -1,7 +1,7 @@
 -- Powered by nig | v523
 -- =========================
 local version = "Rework"
-local ver     = "v015.11"
+local ver     = "v015.12"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -178,7 +178,7 @@ local settings = {
     SurvivorRevolverCrosshair = Config:Get("SurvivorRevolverCrosshair", false),
     SurvivorRevolverToughWall = Config:Get("SurvivorRevolverToughWall", false),
     SurvivorRevolverDragUI = Config:Get("SurvivorRevolverDragUI", false),
-    SurvivorRevolverDistance = Config:Get("SurvivorRevolverDistance", 400),
+    SurvivorRevolverDistance = Config:Get("SurvivorRevolverDistance", 80),
     SurvivorRevolverTarget = Config:Get("SurvivorRevolverTarget", "Killer"),
     SurvivorRevolverPart = Config:Get("SurvivorRevolverPart", "Head"),
     SurvivorRevolverKeybind = Config:Get("SurvivorRevolverKeybind", "B"),
@@ -265,12 +265,18 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 05/31/2026 | CL: " .. ver,
-    Desc  = [[• [ Premium Only ] God Mode It will make you immortal. / But there have been Issue.
-• [ Fixed ] Auto parry system isn't working. / mobile
-• [ Added ] Aimbot for twist of fate / BETA
-• [ Reworked ] No fall / Blocking the operation of a fall system.
-• [ Improved ] Upgraded of some features reduce lag/cache.]],
+    Title = "Update: 06/01/2026 | CL: " .. ver,
+    Desc  = [[• [ Fixed ] Twist of Fate lock distance.
+• [ Fixed ] Old config lock distance reset.
+• [ Fixed ] Duplicate Revolver GUI watchdog.
+• [ Improved ] Respawn / new round cache refresh.
+• [ Improved ] Reduced lag, freeze, and cache issues.
+• [ Optimized ] Twist of Fate target scan.
+• [ Optimized ] Killer Aimbot scan.
+• [ Optimized ] Get Killer / loop scan debounce.
+• [ Optimized ] Killer character cache.
+• [ Optimized ] Crosshair update loop.
+• [ Optimized ] NoClip descendant scan.]],
 })
 Info:Divider()
 
@@ -314,15 +320,28 @@ end
 -- =====================================================================================
 --  HELPER: isKillerChar (shared, defined early)
 -- =====================================================================================
+local _killerCharCache = setmetatable({}, {__mode="k"})
 local function isKillerChar(char)
     if not char then return false end
-    if char:FindFirstChild("Weapon") then return true end
-    for _, obj in ipairs(char:GetDescendants()) do
-        if (obj:IsA("Model") or obj:IsA("Tool")) and obj.Name:lower():find("weapon") then
-            return true
+    local now = os.clock()
+    local cached = _killerCharCache[char]
+    if cached and (now - cached.t) < 0.50 then return cached.v end
+
+    local result = false
+    if char:FindFirstChild("Weapon") then
+        result = true
+    else
+        for _, obj in ipairs(char:GetDescendants()) do
+            local n = tostring(obj.Name or ""):lower()
+            if (obj:IsA("Model") or obj:IsA("Tool") or obj:IsA("BasePart"))
+            and (n:find("weapon", 1, true) or n:find("knife", 1, true) or n:find("chainsaw", 1, true)) then
+                result = true
+                break
+            end
         end
     end
-    return false
+    _killerCharCache[char] = { t = now, v = result }
+    return result
 end
 
 -- =====================================================================================
@@ -344,7 +363,8 @@ local AP = {
     cd = 0.045,
     btn = nil,
     btnAt = 0,
-    btnTTL = 0.35,
+    btnTTL = 0.55,
+    scanQueued = false,
     isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled,
     iconId = "92951359322494",
     downHP = 20,
@@ -681,6 +701,15 @@ local function scanPlayers()
     for _,plr in ipairs(Players:GetPlayers()) do hookPlayer(plr) end
 end
 
+local function queueScanPlayers(delayTime)
+    if AP.scanQueued then return end
+    AP.scanQueued = true
+    task.delay(delayTime or 0.15, function()
+        AP.scanQueued = false
+        scanPlayers()
+    end)
+end
+
 local function nearestThreatTo(pos)
     local best, bd = nil, math.huge
     for _,plr in ipairs(Players:GetPlayers()) do
@@ -722,7 +751,7 @@ Workspace.DescendantAdded:Connect(function(obj)
     onHitbox(obj)
     local n = tostring(obj.Name or ""):lower()
     if n:find("weapon", 1, true) or n:find("knife", 1, true) or n:find("chainsaw", 1, true) then
-        task.defer(scanPlayers)
+        queueScanPlayers(0.15)
     end
 end)
 
@@ -2332,8 +2361,14 @@ local DYHUBREVOLVER_Enabled = DYHUBREVOLVER_Settings.Revolver.Enable
 local DYHUBREVOLVER_CrosshairVisible = DYHUBREVOLVER_Settings.Revolver.CrossHairUI
 local DYHUBREVOLVER_ToggleGUIVisible = DYHUBREVOLVER_Settings.Revolver.EnableUI
 local DYHUBREVOLVER_LockedTarget = nil
-local DYHUBREVOLVER_LockPart = "Head"
-local DYHUBREVOLVER_AuraRange = Config:Get("SurvivorRevolverDistance", 400)
+local DYHUBREVOLVER_LockPart = Config:Get("SurvivorRevolverPart", "Head")
+local DYHUBREVOLVER_AuraRange = tonumber(Config:Get("SurvivorRevolverDistance", 80)) or 80
+if DYHUBREVOLVER_AuraRange > 180 then
+    DYHUBREVOLVER_AuraRange = 80
+    Config:Set("SurvivorRevolverDistance", DYHUBREVOLVER_AuraRange)
+end
+DYHUBREVOLVER_AuraRange = math.clamp(DYHUBREVOLVER_AuraRange, 5, 180)
+settings.SurvivorRevolverDistance = DYHUBREVOLVER_AuraRange
 local DYHUBREVOLVER_KeybindLock = Enum.KeyCode.B
 local DYHUBREVOLVER_ToughWallEnabled = DYHUBREVOLVER_Settings.Revolver.TWallUI
 
@@ -2437,6 +2472,10 @@ task.spawn(function()
             if DYHUBREVOLVER_GuiFolder.Enabled == false then
                 DYHUBREVOLVER_GuiFolder.Enabled = true
             end
+            if not DYHUBREVOLVER_Crosshair or not DYHUBREVOLVER_Crosshair.Parent
+            or not DYHUBREVOLVER_MobileButton or not DYHUBREVOLVER_MobileButton.Parent then
+                DYHUBREVOLVER_EnsureGui()
+            end
         else
             DYHUBREVOLVER_EnsureGui()
         end
@@ -2448,13 +2487,7 @@ LocalPlayer.CharacterAdded:Connect(function()
     DYHUBREVOLVER_EnsureGui()
 end)
 
-task.spawn(function()
-    while task.wait(1) do
-        if not PlayerGui:FindFirstChild("DYHUB_Revolver_GUI") then
-            DYHUBREVOLVER_EnsureGui()
-        end
-    end
-end)
+-- [Optimized] Duplicate DYHUB_Revolver_GUI watchdog removed; handled by the watchdog above.
 
 ----------------------------------------------------------
 -- REVOLVER UI SETUP MOVED TO END FOR SAVE SUPPORT
@@ -2509,7 +2542,7 @@ end
 
 local function DYHUBREVOLVER_IsTargetType(plr)
     if not plr.Character then return false end
-    local hasWeapon = plr.Character:FindFirstChild("Weapon") ~= nil
+    local hasWeapon = isKillerChar(plr.Character)
     local isKiller = table.find(DYHUBREVOLVER_Settings.Revolver.SelectedTargets, "Killer") and hasWeapon
     local isSurvivor = table.find(DYHUBREVOLVER_Settings.Revolver.SelectedTargets, "Survivor") and not hasWeapon
     return isKiller or isSurvivor
@@ -2576,7 +2609,9 @@ function DYHUBREVOLVER_FindNearestTarget()
     return nil
 end
 
--- Main Revolver Loop
+-- Main Revolver Loop (throttled target scan)
+local DYHUBREVOLVER_LastTargetScan = 0
+local DYHUBREVOLVER_TargetScanDelay = 0.12
 RunService.RenderStepped:Connect(function()
     if not DYHUBREVOLVER_Enabled then
         DYHUBREVOLVER_LockedTarget = nil
@@ -2586,21 +2621,33 @@ RunService.RenderStepped:Connect(function()
     local cam = Workspace.CurrentCamera
     if not cam then return end
 
+    local now = os.clock()
     local target = DYHUBREVOLVER_LockedTarget
-    if not target or not DYHUBREVOLVER_IsValidTarget(target) then
-        target = DYHUBREVOLVER_FindNearestTarget()
-        DYHUBREVOLVER_LockedTarget = target
+    local valid, aimPart = false, nil
+    if target then
+        valid, aimPart = DYHUBREVOLVER_IsValidTarget(target)
     end
 
-    if target and target.Character and target.Character:FindFirstChild(DYHUBREVOLVER_LockPart) then
-        local aimPart = target.Character[DYHUBREVOLVER_LockPart]
+    if not valid then
+        if now - DYHUBREVOLVER_LastTargetScan < DYHUBREVOLVER_TargetScanDelay then return end
+        DYHUBREVOLVER_LastTargetScan = now
+        target = DYHUBREVOLVER_FindNearestTarget()
+        DYHUBREVOLVER_LockedTarget = target
+        if target then
+            valid, aimPart = DYHUBREVOLVER_IsValidTarget(target)
+        end
+    end
+
+    if valid and aimPart and aimPart.Parent then
         cam.CFrame = CFrame.new(cam.CFrame.Position, aimPart.Position)
     end
 end)
 
-RunService.Heartbeat:Connect(function()
-    if DYHUBREVOLVER_Crosshair and DYHUBREVOLVER_Crosshair.Parent then
-        DYHUBREVOLVER_Crosshair.Position = UDim2.new(0.5, 0, 0.5, 0)
+task.spawn(function()
+    while task.wait(0.35) do
+        if DYHUBREVOLVER_Crosshair and DYHUBREVOLVER_Crosshair.Parent then
+            DYHUBREVOLVER_Crosshair.Position = UDim2.new(0.5, 0, 0.5, 0)
+        end
     end
 end)
 
@@ -2696,12 +2743,13 @@ SurTab:Dropdown({
 })
 SurTab:Input({
     Title = "Lock Distance",
-    Desc = "Maximum lock distance for Twist of Fate.",
+    Desc = "Maximum lock distance for Twist of Fate. Recommended: 60-100. Max: 180.",
     Value = tostring(DYHUBREVOLVER_AuraRange),
-    Placeholder = "Default: 400",
+    Placeholder = "Default: 80 | Max: 180",
     Callback = function(text)
         local num = tonumber(text)
         if num and num > 0 then
+            num = math.clamp(num, 5, 180)
             DYHUBREVOLVER_AuraRange = num
             settings.SurvivorRevolverDistance = num
             Config:Set("SurvivorRevolverDistance", num); Config:Save()
@@ -3107,13 +3155,24 @@ task.spawn(function()
     end
 end)
 
+local DYHUB_LastAimTargetScan = 0
+local DYHUB_AimTargetScanDelay = 0.10
 RunService.RenderStepped:Connect(function()
-    if DYHUB_AimbotEnabled then
-        DYHUB_LockedTarget=DYHUB_GetClosestInScreen()
-        if DYHUB_LockedTarget and DYHUB_CanSeeTarget(DYHUB_LockedTarget) then DYHUB_AimAt_Normal(DYHUB_LockedTarget) end
-    elseif DYHUB_Aimbot28Enabled then
-        DYHUB_LockedTarget=DYHUB_GetClosestByDistance()
-        if DYHUB_LockedTarget and DYHUB_CanSeeTarget(DYHUB_LockedTarget) then DYHUB_AimAt_28(DYHUB_LockedTarget) end
+    if not DYHUB_AimbotEnabled and not DYHUB_Aimbot28Enabled then
+        DYHUB_LockedTarget = nil
+        return
+    end
+    local now = os.clock()
+    if not DYHUB_LockedTarget or now - DYHUB_LastAimTargetScan >= DYHUB_AimTargetScanDelay then
+        DYHUB_LastAimTargetScan = now
+        if DYHUB_AimbotEnabled then
+            DYHUB_LockedTarget = DYHUB_GetClosestInScreen()
+        else
+            DYHUB_LockedTarget = DYHUB_GetClosestByDistance()
+        end
+    end
+    if DYHUB_LockedTarget and DYHUB_CanSeeTarget(DYHUB_LockedTarget) then
+        if DYHUB_AimbotEnabled then DYHUB_AimAt_Normal(DYHUB_LockedTarget) else DYHUB_AimAt_28(DYHUB_LockedTarget) end
     end
 end)
 
@@ -3364,9 +3423,13 @@ PlayerTab:Toggle({
         NoClipEnabled=state; settings.NoClipEnabled=state; Config:Set("NoClipEnabled",state); Config:Save()
         if state then
             if noclipConnection then noclipConnection:Disconnect() end
+            local lastNoClipApply = 0
             noclipConnection=RunService.Stepped:Connect(function()
+                local now = os.clock()
+                if now - lastNoClipApply < 0.12 then return end
+                lastNoClipApply = now
                 local char=LocalPlayer.Character
-                if char then for _,part in pairs(char:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide=false end end end
+                if char then for _,part in pairs(char:GetDescendants()) do if part:IsA("BasePart") and part.CanCollide then part.CanCollide=false end end end
             end)
         else
             if noclipConnection then noclipConnection:Disconnect(); noclipConnection=nil end
@@ -3416,11 +3479,15 @@ applyNoFall()
 DYHUB_RUNTIME.RestoreNoClip = function()
     if NoClipEnabled then
         if noclipConnection then noclipConnection:Disconnect() end
+        local lastNoClipApply = 0
         noclipConnection = RunService.Stepped:Connect(function()
+            local now = os.clock()
+            if now - lastNoClipApply < 0.12 then return end
+            lastNoClipApply = now
             local char = LocalPlayer.Character
             if char then
                 for _, part in pairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") then part.CanCollide = false end
+                    if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
                 end
             end
         end)
