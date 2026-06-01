@@ -1,7 +1,7 @@
 -- v160 | [Local Register Fix]
 -- =========================
 version = "Rework"
-ver = "v023.86"
+ver = "v023.87"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -267,9 +267,19 @@ Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 06/01/2026 | CL: " .. ver,
-    Desc = [[- [ Paid Version ] Mode Farm for different farming modes / Dark Dimension, Astro Holdout
-- [ Fixed ] Farm Astro Token / Check the time wave for God Mode.
-- [ Improved ] Bug issues, Loophook, Smart Database]],
+    Desc = [[• [ Fixed ] Waiting part duplicate.
+• [ Fixed ] Waiting part position.
+• [ Fixed ] Waiting part auto rebuild.
+• [ Fixed ] Loading wait timeout.
+• [ Fixed ] Farm loop stacking.
+• [ Fixed ] Tween wait timeout.
+• [ Fixed ] Config save spam.
+• [ Optimized ] Flush Aura prompt cache.
+• [ Optimized ] ESP scan timing.
+• [ Optimized ] FarmAstro NoClip cache.
+• [ Improved ] Reduced lag, freeze, and scan spam.
+• [ Improved ] Waiting part visibility.
+• [ Improved ] Waiting part collision toggle.]],
 })
 Info:Divider()
 Info:Section({ Title = "Discord Information", TextXAlignment = "Center", TextSize = 17 })
