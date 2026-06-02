@@ -272,17 +272,13 @@ Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 06/02/2026 | CL: " .. ver,
-    Desc  = [[• [ Premium Only ] God Mode descendant scan.
-• [ Premium Only ] Auto Parry adjust the speed of protection.
-  • Hitframe: 0.13 -> 0.12 (ALL) / Hitframe: 0.10 -> 0.09 (Cure)
+    Desc  = [[• [ Premium Only ] God Mode, anti carry & hook.
+• [ Premium Only ] Auto Parry adjust the scan of protection.
+  • Smart: Checks should be smarter and more frequent, but without lag.
 
-• [ Added ] Auto Levers (No Hold) for Exit Lever prompt.
-• [ Added ] Auto SkillCheck Perfect/Neutral mutual lock system.
-• [ Fixed ] Auto Parry mobile cache/watchdog after rejoin or round refresh.
-• [ Fixed ] Auto SkillCheck saved toggle now boots after rejoin/reload.
-• [ Fixed ] Save config for loop speed toggle and watchdog system.
-• [ Improved ] Reduced lag, bug issuses, and cache issues.
-• [ Optimized ] No Fall / No Flashlight descendant scan.]],
+• [ Added ] Custom Crosshair for killer/survivor in Main tab.
+• [ Added ] Crosshair Setting for adjust crosshair.
+• [ Fixed ] Auto Parry & No Fall / No more, Bug issues.]],
 })
 Info:Divider()
 
@@ -4167,7 +4163,7 @@ ReplicatedStorage.DescendantAdded:Connect(function(obj)
         end)
     end
 end)
-PlayerTab:Toggle({Title="No Fall (Beta)",
+PlayerTab:Toggle({Title="No Fall",
     Desc = "Prevents movement slowdown after falling",Value=NF.Enabled,
     Callback=function(v)
         NF.Enabled=v; settings.NoFallEnabled=v; Config:Set("NoFallEnabled",v); Config:Save(); applyNoFall()
