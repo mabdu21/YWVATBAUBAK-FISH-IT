@@ -1,4 +1,4 @@
--- v167 | [Local Register Fix]
+-- v169 | [Local Register Fix]
 -- =========================
 version = "Rework"
 ver = "v023.90"
@@ -310,7 +310,7 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 06/01/2026 | CL: " .. ver,
+    Title = "Update: 06/02/2026 | CL: " .. ver,
     Desc = [[• [ Added ] Reset Wave in Misc Farm.
 • [ Added ] Silder for Reset Wave under God Mode silder.
 • [ Fixed ] Farm Astro Farm bug from timer wave run out.
