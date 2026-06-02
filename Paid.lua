@@ -1,7 +1,7 @@
 -- v167 | [Local Register Fix]
 -- =========================
 version = "Rework"
-ver = "v023.88"
+ver = "v023.90"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -311,19 +311,11 @@ Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 06/01/2026 | CL: " .. ver,
-    Desc = [[• [ Fixed ] Waiting part duplicate.
-• [ Fixed ] Waiting part position.
-• [ Fixed ] Waiting part auto rebuild.
-• [ Fixed ] Loading wait timeout.
-• [ Fixed ] Farm loop stacking.
-• [ Fixed ] Tween wait timeout.
-• [ Fixed ] Config save spam.
-• [ Improved ] Reduced lag, freeze, and scan spam.
-• [ Improved ] Waiting part visibility.
-• [ Improved ] Waiting part collision toggle.
-• [ Optimized ] Flush Aura prompt cache.
-• [ Optimized ] ESP scan timing.
-• [ Optimized ] FarmAstro NoClip cache.]],
+    Desc = [[• [ Added ] Reset Wave in Misc Farm.
+• [ Added ] Silder for Reset Wave under God Mode silder.
+• [ Fixed ] Farm Astro Farm bug from timer wave run out.
+• [ Fixed ] Camera mode in settings not sync with farming.
+• [ Optimized ] Farming loop/hook descendant scan.]],
 })
 Info:Divider()
 Info:Section({ Title = "Discord Information", TextXAlignment = "Center", TextSize = 17 })
