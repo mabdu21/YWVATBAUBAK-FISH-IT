@@ -313,8 +313,8 @@ Info:Paragraph({
     Title = "Update: 06/02/2026 | CL: " .. ver,
     Desc = [[• [ Added ] Reset Wave in Misc Farm.
 • [ Added ] Silder for Reset Wave under God Mode silder.
-• [ Fixed ] Reset Wave now holds reset point for 2 seconds and has priority over farm lock.
-• [ Fixed ] Reset Wave slider triggers immediately when current wave is already at/above target.
+• [ Fixed ] Reset Wave now holds reset point for delay and has priority over farm lock.
+• [ Fixed ] Reset Wave slider triggers immediately when current wave is already at above/under target.
 • [ Fixed ] Farm Astro Farm bug from timer wave run out.
 • [ Fixed ] Camera mode in settings not sync with farming.
 • [ Optimized ] Farming loop/hook descendant scan.]],
