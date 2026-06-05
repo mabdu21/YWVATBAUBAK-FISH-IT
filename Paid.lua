@@ -1,4 +1,4 @@
--- v168 | [Local Register Fix]
+-- v190 | [Local Register Fix]
 -- =========================
 version = "Rework"
 ver = "v023.91"
@@ -5339,7 +5339,7 @@ PaddingSafeInput = Main:Input({
 Main:Slider({
     Title = "Anti-Clip Margin (studs)",
     Desc = "Adds extra spacing to reduce clipping when farming near mob bodies.",
-    Value = { Min = 0, Max = 10, Default = ANTI_CLIP_MARGIN },
+    Value = { Min = -10, Max = 10, Default = ANTI_CLIP_MARGIN },
     Step = 1,
     Callback = function(value)
         ANTI_CLIP_MARGIN = value; Config:Set("AntiClipMargin", value); Config:Save()
