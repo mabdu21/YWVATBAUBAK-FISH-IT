@@ -1525,9 +1525,15 @@ Info:Divider()
 Info:Paragraph({
     Title = "Update: 06/08/2026 | CL: " .. ver,
     Desc = [[• [ Merged ] Systems from another hub for dyhub
+• [ Added ] Auto Farm, Redeem Code, More..
+• [ Fixed ] Auto Buy Seed / Standard, Rarity
+• [ Fixed ] Auto Buy All for bug issue, remote
+• [ Fixed ] Information tab nil error (Info tab was created as Tab)
+• [ Fixed ] moved premium/discord HTTP checks to background to reduce first-run freeze
+• [ Fixed ] cached WindUI source in memory for faster re-execute
 • [ Reworked ] One runtime kill switch + central scheduler to reduce duplicate loops.
 • [ Improved ] Lazy remotes, cached plot scans, no heavy stock scan on first run.
-• [ Added ] Smart farm, seed roll targets, rarity roll, transcended roll, pets, eggs, gear, events, rewards, player tools.]],
+• [ New ] Smart farm, seed roll targets, rarity roll, transcended roll, pets, eggs, gear, events, rewards, player tools.]],
 })
 Info:Divider()
 Info:Section({ Title = "Discord Information", TextXAlignment = "Center", TextSize = 17 })
