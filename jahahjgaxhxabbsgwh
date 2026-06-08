@@ -1,4 +1,16 @@
 --// NAH WTF SO AI BUT I'M USING CLAUDE CODE OPUS 4.8 🤑😈
+
+local plr = game:GetService("Players").LocalPlayer
+
+getgenv().Anti = true -- Re-Execute if you change it
+
+local Anti = hookmetamethod(game, "__namecall", function(self, ...)
+    if self == plr and getnamecallmethod():lower() == "kick" and getgenv().Anti then
+        return warn("[ANTI-KICK] Client Tried To Call Kick Function On LocalPlayer")
+    end
+    return Anti(self, ...)
+end)
+
 local Players        = game:GetService("Players")
 local TweenService   = game:GetService("TweenService")
 local UIS            = game:GetService("UserInputService")
@@ -136,14 +148,14 @@ local REPAIR_STATIONS = {
         partName   = "AirIntake",
         partNames  = {"AirIntake","AirIntake_Turbo","AirIntake_Sport"},
         stationPath= {"Map","FirstCity","Buildings","PitStop(Large)","Station1"},
-        buttonPath = {":GetChildren()[4]","Button","ClickDetector"},
-        screenPath = {":GetChildren()[4]","Screen","Part","SurfaceGui","TextLabel"},
+        buttonPath = {"GrindingMachine","Button","ClickDetector"},
+        screenPath = {"GrindingMachine","Screen","Part","SurfaceGui","TextLabel"},
         isIndexed  = true,
     },
     {
         partName   = "ExhaustManifold",
         partNames  = {"ExhaustManifold","VETC"},
-        stationPath= {"Map","FirstCity","Buildings","PitStop(Large)","Station1"},
+        stationPath= {"Map","FirstCity","Buildings","PitStop(Large)","Station2"},
         buttonPath = {"GrindingMachine","Button","ClickDetector"},
         screenPath = {"GrindingMachine","Screen","Part","SurfaceGui","TextLabel"},
         isIndexed  = false,
@@ -151,7 +163,7 @@ local REPAIR_STATIONS = {
     {
         partName   = "EngineBlock",
         partNames  = {"EngineBlock","EngineBlock_Forged","CylinderHead","Injectors","Sparkplugs","TimingBelt","Alternator"},
-        stationPath= {"Map","FirstCity","Buildings","PitStop(Large)","Station2"},
+        stationPath= {"Map","FirstCity","Buildings","PitStop(Large)","Station3"},
         buttonPath = {"GrindingMachine","Button","ClickDetector"},
         screenPath = {"GrindingMachine","Screen","Part","SurfaceGui","TextLabel"},
         isIndexed  = false,
@@ -195,7 +207,7 @@ local Runtime = {
 
     -- JunkyardHub merge settings
     SelectThreshold = 1,
-    SelectText      = "< 1%",
+    SelectText      = "< 50%",
     CarEspEnabled   = false,
     MovementMode    = "Teleport",
     MovementText    = "Teleport",
@@ -215,7 +227,7 @@ ENV[RUNTIME_KEY] = Runtime
 --  _G.Kaitun = {
 --      ["Auto Farm"] = true,
 --      ["Movement Mode"] = "Tween", -- Tween / Teleport
---      ["Select Type (%)"] = "< 1%",
+--      ["Select Type (%)"] = "< 50%",
 --      ["Car ESP"] = false,
 --  }
 --  loadstring(game:HttpGet("YOUR_LINK_HERE"))()
