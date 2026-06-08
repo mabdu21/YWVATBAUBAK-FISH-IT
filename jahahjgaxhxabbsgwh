@@ -73,8 +73,8 @@ local JUNKYARD_ESP_NAME = "FixItUp_CarChance_ESP"
 local JUNKYARD_TAG_NAME = "FixItUp_CarChance_Tag"
 
 local PART_POSITIONS = {
-    AirIntake      = Vector3.new(-1097, 4.5,   -428),
-    ExhaustManifold= Vector3.new(-1103, 4.5,   -426.500),
+    AirIntake      = Vector3.new(-1098, 4.5,   -428),
+    ExhaustManifold= Vector3.new(-1103, 4.5,   -426),
     EngineBlock    = Vector3.new(-1073, 4.5,   -439),
 
     Battery        = Vector3.new(-1091, 4,   -431),
