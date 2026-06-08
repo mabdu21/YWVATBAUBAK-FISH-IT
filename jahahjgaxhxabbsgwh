@@ -1,4 +1,4 @@
---// NAH WTF SO AI BUT I'M USING CLAUDE CODE OPUS 4.8 🤑😈
+--// NAH WTF SO AI BUT I'M USING CLAUDE CODE OPUS 4.8 🤑😈🐛
 
 local Players        = game:GetService("Players")
 local TweenService   = game:GetService("TweenService")
@@ -74,7 +74,7 @@ local JUNKYARD_TAG_NAME = "FixItUp_CarChance_Tag"
 
 local PART_POSITIONS = {
     AirIntake      = Vector3.new(-1097, 4.5,   -428),
-    ExhaustManifold= Vector3.new(-1103, 4.5,   -426),
+    ExhaustManifold= Vector3.new(-1103, 4.5,   -426.500),
     EngineBlock    = Vector3.new(-1073, 4.5,   -439),
 
     Battery        = Vector3.new(-1091, 4,   -431),
@@ -196,7 +196,7 @@ local Runtime = {
     StatusCB    = nil,   -- set to GUI setter below
 
     -- JunkyardHub merge settings
-    SelectThreshold = 1,
+    SelectThreshold = 50,
     SelectText      = "< 50%",
     CarEspEnabled   = false,
     MovementMode    = "Teleport",
