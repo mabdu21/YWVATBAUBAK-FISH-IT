@@ -51,7 +51,7 @@ local PARALLEL_ASSIGN_TIMEOUT = 0.55    -- Quick scan per part name when buildin
 local PART_TP_VERIFY_RADIUS = 5.5       -- How close a part must be to count as really teleported
 local PART_TP_RETRIES = 6               -- Anti-visual/snap-back retry count for repair parts
 local PART_TP_SETTLE_FAST = 0.28        -- Short settle used by the parallel repair loader
-local CAR_TWEEN_SPEED = 135             -- Studs/second for Movement Mode = Tween
+local CAR_TWEEN_SPEED = 100             -- Studs/second for Movement Mode = Tween
 local CAR_TWEEN_MIN_TIME = 0.35
 local CAR_TWEEN_MAX_TIME = 9.00
 
