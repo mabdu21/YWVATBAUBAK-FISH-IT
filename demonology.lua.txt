@@ -1,0 +1,2076 @@
+local getfenv = getfenv().getfenv
+local getgenv = getfenv().getgenv or getfenv
+local getrenv = getfenv().getrenv or getfenv
+local executor = getgenv().identifyexecutor and (getgenv().identifyexecutor()) or game["Run Service"]:IsStudio() and (game["Run Service"]:IsServer() and "Server" or "Client").."StudioApp" or game["Run Service"]:IsServer() and "Server" or "Client"
+
+local RunService = game:GetService("RunService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local GuiService = game:GetService("GuiService")
+local Lightning = game:GetService("Lighting")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local TeleportService = game:GetService("TeleportService")
+local TweenService = game:GetService("TweenService")
+local Terrain = workspace:FindFirstChildOfClass("Terrain")
+local rbxasset = "rbxassetid://"
+
+repeat task.wait() until game:IsLoaded()
+
+local Players = game:GetService("Players")
+local Player = Players.LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart", 5)
+local Humanoid = Character:WaitForChild("Humanoid", 5)
+local Camera = workspace.CurrentCamera
+
+pcall(function()
+    sethiddenproperty(Player, "SimulationRadius", math.huge)
+end)
+
+local function updateCharacter(newChar)
+    Character = newChar
+    HumanoidRootPart = newChar:WaitForChild("HumanoidRootPart", 5)
+    Humanoid = newChar:WaitForChild("Humanoid", 5)
+
+	pcall(function()
+	    sethiddenproperty(Player, "SimulationRadius", math.huge)
+	end)
+end
+
+if Player.Character then
+    updateCharacter(Player.Character)
+end
+
+Player.CharacterAdded:Connect(function(char)
+    updateCharacter(char)
+end)
+
+local function parseNumber(str)
+    if not str then return 0 end
+
+    local cleaned = tostring(str):gsub("[^%d]", "")
+    return tonumber(cleaned) or 0
+end
+
+local function PlayersList()
+    local players = {}
+    for _, p in ipairs(game:GetService("Players"):GetPlayers()) do
+        if p ~= Player then
+            table.insert(players, p.Name)
+        end
+    end
+    return players
+end
+
+local function GetGhost()
+	return workspace:FindFirstChild("Ghost")
+end
+
+local function getDistance(pos)
+    if not HumanoidRootPart then return 0 end
+    return (HumanoidRootPart.Position - pos).Magnitude
+end
+
+local function Tp(Part, Pos)
+    if not Part or not Pos then
+        return
+    end
+
+    local targetCF
+
+    if typeof(Pos) == "Instance" then
+
+        if Pos:IsA("Model") then
+            targetCF = Pos:GetPivot()
+        elseif Pos:IsA("BasePart") then
+            targetCF = Pos.CFrame
+        end
+
+    elseif typeof(Pos) == "Vector3" then
+        targetCF = CFrame.new(Pos)
+
+    elseif typeof(Pos) == "CFrame" then
+        targetCF = Pos
+    end
+
+    if not targetCF then
+        warn("Invalid Argument.")
+        return
+    end
+
+    Part.AssemblyLinearVelocity = Vector3.zero
+    Part.AssemblyAngularVelocity = Vector3.zero
+
+    local character = Part:FindFirstAncestorOfClass("Model")
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+    Part.CFrame = targetCF
+
+    if humanoid then
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+    end
+end
+
+local function Disconnect(conn)
+    if conn then
+        if type(conn) == "thread" then task.cancel(conn)
+        else conn:Disconnect() end
+    end
+    return nil
+end
+
+local function IsOrb()
+    for _, p in pairs(workspace:GetChildren()) do
+        if p:IsA("BasePart") and p.Name == "GhostOrb" then
+            return true
+        end
+    end
+    return false
+end
+
+local function IsLaser()
+    local ghost = GetGhost()
+    if ghost then
+        return ghost:GetAttribute("LaserVisible")
+    end
+end
+
+local function IsSpiritBox()
+    local success, result = pcall(function()
+        local GhostText = Player.PlayerGui:WaitForChild("Subtitles"):WaitForChild("Holder"):WaitForChild("TextLabel").Text
+        local cleaned = GhostText:gsub("%s+", "")
+        return #cleaned >= 3
+    end)
+
+    return success and result
+end
+
+local function IsFreeze()
+    if not workspace:FindFirstChild("Map"):FindFirstChild("Rooms") then return false end
+
+    for _, r in ipairs(workspace:FindFirstChild("Map"):FindFirstChild("Rooms"):GetChildren()) do
+        if r:GetAttribute("Temperature") and r:GetAttribute("Temperature") < 0 then
+            return true
+        end
+    end
+    return false
+end
+
+local function IsWither()
+	for _, p in ipairs(workspace:WaitForChild("Items"):GetChildren()) do
+		if p:IsA("Model") and p:GetAttribute("ItemName") == "Flower Pot" then
+			local flower = p:FindFirstChild("OptimizedFlower")
+
+			if flower then
+				local petals = flower:FindFirstChild("Flower_Petals")
+
+				if petals then
+					local c = petals.Color
+
+					if c.R < 0.1 and c.G < 0.1 and c.B < 0.1 then
+						return true
+					end
+				end
+			end
+		end
+	end
+
+	return false
+end
+
+local function IsGhostWriting()
+	for _, item in ipairs(workspace:WaitForChild("Items"):GetChildren()) do
+		if item:IsA("Model") and item:GetAttribute("ItemName") == "Spirit Book" then
+			
+			for _, obj in ipairs(item:GetDescendants()) do
+				if obj:IsA("Decal") and obj.Texture ~= "" then
+					return true
+				end
+			end
+			
+		end
+	end
+
+	return false
+end
+
+local function IsHandPrints()
+    for _, h in pairs(workspace:WaitForChild("Handprints"):GetChildren()) do
+        if h:IsA("BasePart") and (string.find(h.Name, "Handprint") or string.find(h.Name, "Footprint")) then
+            return true
+        end
+    end
+    return false
+end
+
+local function EMFLevel()
+	local level = 0
+
+	for _, l in pairs(workspace:WaitForChild("Items"):GetChildren()) do
+		if l:IsA("Model")
+			and l:GetAttribute("ItemName") == "EMF Reader"
+		then
+			local indicators = l:FindFirstChild("Indicators")
+
+			if indicators then
+				for i = 1, 5 do
+					local part = indicators:FindFirstChild(tostring(i))
+
+					if part
+						and part:IsA("BasePart")
+						and part.Material == Enum.Material.Neon
+					then
+						level = math.max(level, i)
+					end
+				end
+			end
+		end
+	end
+
+	return level
+end
+
+local function RoomLightList()
+    local lights = {}
+    for _, m in pairs(workspace:WaitForChild("Map"):WaitForChild("Rooms"):GetChildren()) do
+        if m:IsA("Folder") and m:GetAttribute("LightsOn") ~= nil then
+            table.insert(lights, m.Name)
+        end
+    end
+
+    return lights
+end
+
+local function RoomDoorList()
+    local Doors = {}
+    for _, m in pairs(workspace:WaitForChild("Doors"):GetChildren()) do
+        if m:IsA("Model") and m:GetAttribute("DoorClosed") ~= nil then
+           table.insert(Doors, m.Name)
+        end
+    end
+
+    return Doors
+end
+
+local function ItemList()
+    local Items = {}
+    for _, m in pairs(workspace:WaitForChild("Items"):GetChildren()) do
+        if m:IsA("Model") and m:GetAttribute("ItemName") ~= nil then
+            table.insert(Items, m:GetAttribute("ItemName"))
+        end
+    end
+
+    return Items
+end
+
+local function FakeMove()
+
+    if not Humanoid or not HumanoidRootPart then
+        return
+    end
+
+    local randomOffset = Vector3.new(
+        math.random(-4, 4),
+        0,
+        math.random(-4, 4)
+    )
+
+    local targetPos = HumanoidRootPart.Position + randomOffset
+
+    Humanoid:MoveTo(targetPos)
+
+    Humanoid.MoveToFinished:Wait()
+
+    task.wait(0.15)
+end
+
+local function GetRoomSwitch(room)
+
+    local switch = room:FindFirstChild("LightSwitch", true)
+
+    if switch
+    and switch:IsA("Model")
+    and switch.PrimaryPart then
+
+        return switch
+    end
+end
+
+local function GetDoors(name)
+
+    local outerDoor = workspace:WaitForChild("Doors")
+        :FindFirstChild(name, true)
+
+    if not outerDoor or not outerDoor:IsA("Model") then
+        return
+    end
+
+    local innerDoor = outerDoor:FindFirstChild("Door")
+
+    if innerDoor
+    and innerDoor:IsA("Model")
+    and innerDoor.PrimaryPart then
+
+        return innerDoor
+    end
+end
+
+local function ToggleRoom(room, bringback, force)
+
+    local root = HumanoidRootPart
+
+    if not root or not room then
+        return false
+    end
+
+    local switch = GetRoomSwitch(room)
+
+    if not switch then
+        return false
+    end
+
+    local currentState = room:GetAttribute("LightsOn")
+
+    if force ~= nil and currentState == force then
+        return true
+    end
+
+    local oldCF = root.CFrame
+
+    if bringback then
+        Tp(root, switch.PrimaryPart.CFrame * CFrame.new(0,0,-3))
+        task.wait(0.15)
+    end
+
+    game:GetService("ReplicatedStorage")
+        :WaitForChild("Events")
+        :WaitForChild("UseLightSwitch")
+        :FireServer(room)
+
+    local success = false
+
+    for i = 1, 20 do
+
+        task.wait(0.05)
+
+        local newState = room:GetAttribute("LightsOn")
+
+        if force ~= nil then
+            if newState == force then
+                success = true
+                break
+            end
+        else
+            if newState ~= currentState then
+                success = true
+                break
+            end
+        end
+    end
+
+    if bringback then
+        task.wait(0.1)
+        Tp(root, oldCF)
+    end
+
+    return success
+end
+
+local function ToggleDoor(doorName, bringback, force)
+
+    local root = HumanoidRootPart
+
+    if not root or not doorName then
+        return false
+    end
+
+    local outerDoor = workspace:WaitForChild("Doors")
+        :FindFirstChild(doorName)
+
+    if not outerDoor then
+        return false
+    end
+
+    local currentState = outerDoor:GetAttribute("DoorClosed")
+
+    if force ~= nil and currentState == force then
+        return true
+    end
+
+    local door = GetDoors(doorName)
+
+    if not door then
+        return false
+    end
+
+    local oldCF = root.CFrame
+
+    if bringback then
+        Tp(root, door.PrimaryPart.CFrame * CFrame.new(0,0,-3))
+        task.wait(0.15)
+    end
+
+    game:GetService("ReplicatedStorage")
+        :WaitForChild("Events")
+        :WaitForChild("ClientChangeDoorState")
+        :FireServer(door)
+
+    local success = false
+
+    for i = 1, 30 do
+
+        task.wait(0.05)
+
+        local newState = outerDoor:GetAttribute("DoorClosed")
+
+        if force ~= nil then
+            if newState == force then
+                success = true
+                break
+            end
+        else
+            if newState ~= currentState then
+                success = true
+                break
+            end
+        end
+    end
+
+    if bringback then
+        task.wait(0.1)
+        Tp(root, oldCF)
+    end
+
+    return success
+end
+
+local function FindItem(name)
+    for _, v in pairs(workspace:WaitForChild("Items"):GetChildren()) do
+        if v:IsA("Model") and v:GetAttribute("ItemName") ~= nil and v:GetAttribute("ItemName") == name then
+            return v
+        end
+    end
+
+    return nil
+end
+
+local ItemESP = {}
+local GhostESP = {}
+local PlayerESP = {}
+
+local function createBillboard(parent, text)
+    local gui = Instance.new("BillboardGui")
+    gui.Size = UDim2.new(0, 200, 0, 50)
+    gui.AlwaysOnTop = true
+    gui.StudsOffset = Vector3.new(0, 2.5, 0)
+    gui.Parent = parent
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextStrokeTransparency = 0
+    label.TextScaled = false
+    label.TextSize = 12
+    label.Font = Enum.Font.GothamBold
+    label.Text = text
+    label.Parent = gui
+
+    return gui, label
+end
+
+local function addItemESP(item)
+    if not item:IsA("Model") then return end
+
+    local part = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart")
+    if not part then return end
+
+    local name = item:GetAttribute("ItemName") or item.Name
+
+    local gui, label = createBillboard(part, name .. " | 0m")
+
+    ItemESP[item] = {
+        gui = gui,
+        label = label,
+        part = part
+    }
+end
+
+local function removeItemESP(item)
+    local data = ItemESP[item]
+    if data then
+        if data.gui then data.gui:Destroy() end
+    end
+    ItemESP[item] = nil
+end
+
+local function addGhostESP(ghost)
+    if not ghost:IsA("Model") then return end
+
+    local part = ghost:FindFirstChild("Head") or ghost:FindFirstChild("HumanoidRootPart")
+    if not part then return end
+
+    local name = ghost.Name
+
+    local gui, label = createBillboard(part, name .. " | 0m")
+
+    GhostESP[ghost] = {
+        gui = gui,
+        label = label,
+        part = part
+    }
+end
+
+local function removeGhostESP(ghost)
+    local data = GhostESP[ghost]
+    if data then
+        if data.gui then data.gui:Destroy() end
+    end
+    GhostESP[ghost] = nil
+end
+
+local function addPlayerESP(character)
+    if not character or not character:IsA("Model") then return end
+
+    local head = character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
+    if not head then return end
+
+    local player = Players:GetPlayerFromCharacter(character)
+    if not player then return end
+
+    local gui, label = createBillboard(head, player.Name .. " | 0m")
+
+    PlayerESP[player] = {
+        gui = gui,
+        label = label,
+        part = head
+    }
+end
+
+local function removePlayerESP(player)
+    local data = PlayerESP[player]
+    if data then
+        if data.gui then
+            data.gui:Destroy()
+        end
+    end
+    PlayerESP[player] = nil
+end
+
+local funct = {
+    ["Ghost"] = {
+        ["Auto Escape (Chase)"] = false,
+        ["Ghost Esp"] = false,
+    },
+    
+    ["Game"] = {
+        ["UseLightInRoom"] = nil,
+        ["DoorToUse"] = nil,
+    },
+
+    ["Players"] = {
+        ["Selected_Player"] = nil,
+        ["Noclip"] = false,
+        ["CFrame_Walk_Speed"] = 4,
+        ["CFrame_Walk"] = false,
+        ["Viewing"] = false,
+        ["Esp Player"] = false,
+    },
+
+    ["Items"] = {
+        ["Item_Esp"] = false,
+        ["Selected_Item"] = nil,
+    },
+}
+
+local function setESPItem(state)
+    funct["Items"]["Item_Esp"] = state
+
+    if state then
+        local folder = workspace:WaitForChild("Items")
+
+        pcall(function()
+            sethiddenproperty(Player, "SimulationRadius", math.huge)
+        end)
+
+        for _, item in ipairs(folder:GetChildren()) do
+            addItemESP(item)
+        end
+
+        folder.ChildAdded:Connect(function(item)
+            if funct["Items"]["Item_Esp"] then
+                addItemESP(item)
+            end
+        end)
+
+    else
+        for item in pairs(ItemESP) do
+            removeItemESP(item)
+        end
+    end
+end
+
+local ghostConnection
+
+local function setESPGhost(state)
+    funct["Ghost"]["Ghost Esp"] = state
+
+    if state then
+        local ghost = GetGhost()
+
+        if ghost then
+            addGhostESP(ghost)
+        end
+
+        if ghostConnection then
+            ghostConnection:Disconnect()
+        end
+
+        ghostConnection = workspace.ChildAdded:Connect(function(obj)
+            if not funct["Ghost"]["Ghost Esp"] then return end
+            if obj:IsA("Model") then
+                addGhostESP(obj)
+            end
+        end)
+
+    else
+        for ghost in pairs(GhostESP) do
+            removeGhostESP(ghost)
+        end
+
+        if ghostConnection then
+            ghostConnection:Disconnect()
+            ghostConnection = nil
+        end
+    end
+end
+
+local characterConns = {}
+local playerAddedConn
+
+local function setESPPlayer(state)
+    funct["Players"]["Esp Player"] = state
+
+    if state then
+
+        for player, conn in pairs(characterConns) do
+            conn:Disconnect()
+        end
+        characterConns = {}
+
+        if playerAddedConn then
+            playerAddedConn:Disconnect()
+        end
+
+        -- existing players
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr.Character then
+                addPlayerESP(plr.Character)
+            end
+
+            characterConns[plr] = plr.CharacterAdded:Connect(function(char)
+                if funct["Players"]["Esp Player"] then
+                    task.wait(0.2)
+                    addPlayerESP(char)
+                end
+            end)
+        end
+
+        playerAddedConn = Players.PlayerAdded:Connect(function(plr)
+
+            if characterConns[plr] then
+                characterConns[plr]:Disconnect()
+            end
+
+            characterConns[plr] = plr.CharacterAdded:Connect(function(char)
+                if funct["Players"]["Esp Player"] then
+                    task.wait(0.2)
+                    addPlayerESP(char)
+                end
+            end)
+        end)
+
+    else
+
+        for player, data in pairs(PlayerESP) do
+            if data.gui then
+                data.gui:Destroy()
+            end
+        end
+        PlayerESP = {}
+
+        for _, conn in pairs(characterConns) do
+            conn:Disconnect()
+        end
+        characterConns = {}
+
+        if playerAddedConn then
+            playerAddedConn:Disconnect()
+            playerAddedConn = nil
+        end
+    end
+end
+
+local g_data = {}
+
+local libary = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local window = libary:CreateWindow({
+   Name = "Anchor Hub [ Demonology🕯️ ]",
+   Icon = 0,
+   LoadingTitle = "Demonology🕯️ | Project #4",
+   LoadingSubtitle = "by DmaxDAZ",
+   ShowText = "Toggle",
+   Theme = "Serenity",
+
+   ToggleUIKeybind = "K",
+
+   DisableRayfieldPrompts = false,
+   DisableBuildWarnings = false,
+
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = nil,
+      FileName = "Anchored"
+   },
+
+   Discord = {
+      Enabled = false,
+      Invite = "noinvitelink",
+      RememberJoins = true
+   },
+
+   KeySystem = true,
+   KeySettings = {
+      Title = "Anchor Hub",
+      Subtitle = "Key System",
+      Note = "https://pastebin.com/raw/GLpi8CGd (Get a key from here).",
+      FileName = "key_ss",
+      SaveKey = true,
+      GrabKeyFromSite = false,
+      Key = {"2abcq374128qczxbfg5227822"}
+   }
+})
+
+local Ghost = window:CreateTab("Ghost Tab", "ghost")
+Ghost:CreateSection("Ghost Functions")
+
+local Evidence = window:CreateTab("Evidence Tab", "album")
+Evidence:CreateSection("Evidence Functions")
+
+local Game = window:CreateTab("Game Tab", "gamepad-2")
+Game:CreateSection("Power Functions")
+
+local players = window:CreateTab("Players Tab", "users")
+players:CreateSection("Players Functions")
+
+local Items = window:CreateTab("Items Tab", "backpack")
+Items:CreateSection("Items Functions")
+
+Ghost:CreateButton({
+   Name = "Teleport To Ghost",
+   Callback = function()
+      local ghost = GetGhost()
+      if ghost then
+
+        if GetGhost():GetAttribute("Hunting") then
+            return
+        end
+
+        Tp(HumanoidRootPart, ghost:FindFirstChild("HumanoidRootPart").CFrame)
+     end
+  end,
+})
+
+local VisibleConnection
+
+Ghost:CreateToggle({
+   Name = "Visible Ghost's body",
+   CurrentValue = false,
+   Flag = "Visi",
+   Callback = function(bool)
+       if bool then
+           VisibleConnection = RunService.RenderStepped:Connect(function()
+            local ghost = GetGhost()
+               if ghost then
+                  if ghost:FindFirstChild("VisibleParts") then
+                      for _, p in pairs(ghost:FindFirstChild("VisibleParts"):GetChildren()) do
+                         if p:IsA("MeshPart") and p.Transparency ~= 0 then
+                            p.Transparency = 0
+                         end
+                      end
+                  end
+               end
+           end)
+       else
+        Disconnect(VisibleConnection)
+        task.wait()
+        local ghost = GetGhost()
+        if ghost then
+            if ghost:FindFirstChild("VisibleParts") then
+                for _, p in pairs(ghost:FindFirstChild("VisibleParts"):GetChildren()) do
+                    if p:IsA("MeshPart") and p.Transparency ~= 1 then
+                        p.Transparency = 1
+                    end
+                end
+             end
+          end
+       end
+   end,
+})
+
+Ghost:CreateToggle({
+   Name = "Auto Escape Chasing",
+   CurrentValue = false,
+   Flag = "Escape",
+   Callback = function(bool)
+       funct["Ghost"]["Auto Escape (Chase)"] = bool
+   end,
+})
+
+Ghost:CreateToggle({
+    Name = "Toggle Ghost Esp",
+    CurrentValue = false,
+    Flag = "ESP_ALL",
+
+    Callback = function(value)
+        setESPGhost(value)
+    end
+})
+
+Ghost:CreateSection("Ghost Status")
+
+local Stats = Ghost:CreateParagraph({Title = "Ghost Status", Content = "N/A"})
+
+local e_data = {}
+
+local Stats_Evidence = Evidence:CreateParagraph({Title = "Evidence Status", Content = "N/A"})
+
+Evidence:CreateButton({
+   Name = "Update Evidence",
+   Callback = function()
+
+       libary:Notify({
+          Title = "Information",
+          Content = "This is not realtime update so it wont be true sometime.",
+          Duration = 3.5,
+          Image = "info",
+       })
+
+       e_data[1] = "EMF Level: " .. tostring(EMFLevel())
+       e_data[2] = "Freezeing Temperature: " .. tostring(IsFreeze())
+       e_data[3] = "Ghost Orb: " .. tostring(IsOrb())
+       e_data[4] = "Handprint and Footprint: " .. tostring(IsHandPrints())
+       e_data[5] = "Visible On Laser: " .. tostring(IsLaser())
+       e_data[6] = "Ghost Writing: " .. tostring(IsGhostWriting())
+       e_data[7] = "Wither: " .. tostring(IsWither())
+       e_data[8] = "Spirit Box: " .. tostring(IsSpiritBox())
+
+       Stats_Evidence:Set({Title = "Evidence Status", Content = table.concat(e_data, "\n")})
+   end,
+})
+
+Game:CreateDropdown({
+   Name = "Select Room",
+   Options = RoomLightList(),
+   CurrentOption = {"None"},
+   MultipleOptions = false,
+   Flag = "LightR",
+   Callback = function(Option)
+
+        print(Option, typeof(Option))
+    
+        local selected = typeof(Option) == "table" and Option[1] or Option
+    
+        funct["Game"]["UseLightInRoom"] = selected
+    
+        local room = workspace:WaitForChild("Map")
+            :WaitForChild("Rooms")
+            :FindFirstChild(selected)
+    
+        local lightStatus = room and room:GetAttribute("LightsOn")
+    
+        libary:Notify({
+            Title = "Information",
+            Content = "Light in that room are " .. tostring(lightStatus),
+            Duration = 3.5,
+            Image = "info",
+      })
+  end,
+})
+
+Game:CreateButton({
+    Name = "Toggle Selected Room Light",
+    Callback = function()
+
+        if GetGhost():GetAttribute("Hunting") then return end
+
+        local selected = funct["Game"]["UseLightInRoom"]
+
+        if typeof(selected) == "table" then
+            selected = selected[1]
+        end
+
+        if not selected then
+            return
+        end
+
+        pcall(function()
+            sethiddenproperty(Player, "SimulationRadius", math.huge)
+        end)
+
+        local room = workspace:WaitForChild("Map"):WaitForChild("Rooms"):FindFirstChild(selected)
+
+        if room then
+            ToggleRoom(room, false)
+        end
+    end,
+})
+
+Game:CreateButton({
+    Name = "Turn On All Rooms Lights",
+    Callback = function()
+
+        if GetGhost():GetAttribute("Hunting") then return end
+
+        pcall(function()
+            sethiddenproperty(Player, "SimulationRadius", math.huge)
+        end)
+
+        for _, room in ipairs(workspace:WaitForChild("Map"):WaitForChild("Rooms"):GetChildren()) do
+
+            if room:IsA("Folder") then
+
+                if room:GetAttribute("LightsOn") == false then
+
+                    ToggleRoom(room, false)
+
+                    task.wait()
+                end
+            end
+        end
+    end,
+})
+
+Game:CreateButton({
+    Name = "Turn Off All Rooms Lights",
+    Callback = function()
+
+        if GetGhost():GetAttribute("Hunting") then return end
+
+        pcall(function()
+            sethiddenproperty(Player, "SimulationRadius", math.huge)
+        end)
+
+        for _, room in ipairs(workspace:WaitForChild("Map"):WaitForChild("Rooms"):GetChildren()) do
+
+            if room:IsA("Folder") then
+
+                if room:GetAttribute("LightsOn") == true then
+
+                    ToggleRoom(room, false)
+
+                    task.wait()
+                end
+            end
+        end
+    end,
+})
+
+Game:CreateButton({
+    Name = "Flick All Rooms Lights",
+    Callback = function()
+
+        local ghost = GetGhost()
+        if ghost and ghost:GetAttribute("Hunting") then
+            return
+        end
+
+        pcall(function()
+            sethiddenproperty(Player, "SimulationRadius", math.huge)
+        end)
+
+        local rooms = workspace:WaitForChild("Map"):WaitForChild("Rooms")
+
+        local delayStep = 0
+
+        for _, room in ipairs(rooms:GetChildren()) do
+
+            if room:IsA("Folder") then
+
+                task.delay(delayStep, function()
+
+                    local original = room:GetAttribute("LightsOn")
+                    if original == nil then return end
+
+                    for i = 1, math.random(2, 3) do
+
+                        ToggleRoom(room, false, not original)
+                        task.wait(0.05)
+
+                        ToggleRoom(room, false, original)
+                        task.wait(0.05)
+                    end
+
+                    if room:GetAttribute("LightsOn") ~= original then
+                        ToggleRoom(room, false, original)
+                    end
+                end)
+
+                delayStep += 0.15
+            end
+        end
+    end,
+})
+
+Game:CreateButton({
+   Name = "Fix Fusebox",
+   Callback = function()
+        pcall(function()
+            sethiddenproperty(Player, "SimulationRadius", math.huge)
+        end)
+       game:GetService("ReplicatedStorage"):WaitForChild("Events"):WaitForChild("ToggleFuseBox"):FireServer()
+   end,
+})
+
+Game:CreateSection("Interactable Functions")
+
+Game:CreateDropdown({
+   Name = "Select Door",
+   Options = RoomDoorList(),
+   CurrentOption = {"None"},
+   MultipleOptions = false,
+   Flag = "Doors",
+   Callback = function(Option)
+
+        print(Option, typeof(Option))
+    
+        local selected = typeof(Option) == "table" and Option[1] or Option
+    
+        funct["Game"]["DoorToUse"] = selected
+    
+        local door = workspace:WaitForChild("Doors")
+            :FindFirstChild(selected)
+    
+        local doorStatus = door and door:GetAttribute("DoorClosed")
+    
+        libary:Notify({
+            Title = "Information",
+            Content = "Door that you were selected were " .. tostring(doorStatus),
+            Duration = 3.5,
+            Image = "info",
+      })
+  end,
+})
+
+Game:CreateButton({
+    Name = "Toggle Selected Door",
+    Callback = function()
+
+        if GetGhost():GetAttribute("Hunting") then
+            return
+        end
+
+        pcall(function()
+            sethiddenproperty(Player, "SimulationRadius", math.huge)
+        end)
+
+        local selected = funct["Game"]["DoorToUse"]
+
+        if typeof(selected) == "table" then
+            selected = selected[1]
+        end
+
+        if not selected then
+            return
+        end
+
+        ToggleDoor(selected, false)
+    end,
+})
+
+Game:CreateButton({
+    Name = "Open All Doors",
+    Callback = function()
+
+        if GetGhost():GetAttribute("Hunting") then
+            return
+        end
+
+        pcall(function()
+            sethiddenproperty(Player, "SimulationRadius", math.huge)
+        end)
+
+        for _, doorModel in ipairs(workspace:WaitForChild("Doors"):GetChildren()) do
+
+            if doorModel:IsA("Model") then
+
+                local closed = doorModel:GetAttribute("DoorClosed")
+
+                if closed == true then
+
+                    local name = doorModel.Name
+
+                    task.spawn(function()
+                        ToggleDoor(name, false)
+                    end)
+
+                    task.wait(0.05)
+                end
+            end
+        end
+    end,
+})
+
+Game:CreateButton({
+    Name = "Close All Doors",
+    Callback = function()
+
+        if GetGhost():GetAttribute("Hunting") then
+            return
+        end
+
+        pcall(function()
+            sethiddenproperty(Player, "SimulationRadius", math.huge)
+        end)
+
+        for _, doorModel in ipairs(workspace:WaitForChild("Doors"):GetChildren()) do
+
+            if doorModel:IsA("Model") then
+
+                local closed = doorModel:GetAttribute("DoorClosed")
+
+                if closed == false then
+
+                    local name = doorModel.Name
+
+                    task.spawn(function()
+                        ToggleDoor(name, false)
+                    end)
+
+                    task.wait(0.05)
+                end
+            end
+        end
+    end,
+})
+
+Game:CreateButton({
+    Name = "Flick All Doors",
+    Callback = function()
+
+        if GetGhost():GetAttribute("Hunting") then
+            return
+        end
+
+        pcall(function()
+            sethiddenproperty(Player, "SimulationRadius", math.huge)
+        end)
+
+        for _, doorModel in ipairs(workspace:WaitForChild("Doors"):GetChildren()) do
+
+            if doorModel:IsA("Model") then
+
+                task.spawn(function()
+
+                    local original = doorModel:GetAttribute("DoorClosed")
+
+                    if original == nil then
+                        return
+                    end
+
+                    local name = doorModel.Name
+
+                    for i = 1, math.random(3, 5) do
+
+                        ToggleDoor(name, false, not original)
+
+                        task.wait(math.random(70,120) / 100)
+
+                        ToggleDoor(name, false, original)
+
+                        task.wait(math.random(70,120) / 100)
+                    end
+
+                    task.wait(math.random(0,150) / 100)
+
+                    ToggleDoor(name, false, original)
+
+                end)
+            end
+        end
+    end,
+})
+
+Game:CreateSection("Combo Functions")
+
+Game:CreateButton({
+    Name = "Chaos",
+    Callback = function()
+
+        local ghost = GetGhost()
+        if ghost and ghost:GetAttribute("Hunting") then
+            return
+        end
+
+        pcall(function()
+            sethiddenproperty(Player, "SimulationRadius", math.huge)
+        end)
+
+        local rooms = workspace:WaitForChild("Map"):WaitForChild("Rooms")
+        local doors = workspace:WaitForChild("Doors")
+
+        -- limit concurrency
+        local delayStep = 0
+
+        -- LIGHT CHAOS (staggered)
+        for _, room in ipairs(rooms:GetChildren()) do
+
+            if room:IsA("Folder") then
+
+                task.delay(delayStep, function()
+
+                    local original = room:GetAttribute("LightsOn")
+                    if original == nil then return end
+
+                    for i = 1, math.random(2, 4) do
+
+                        ToggleRoom(room, false, not original)
+                        task.wait(0.12)
+
+                        ToggleRoom(room, false, original)
+                        task.wait(0.12)
+                    end
+
+                    if room:GetAttribute("LightsOn") ~= original then
+                        ToggleRoom(room, false, original)
+                    end
+                end)
+
+                delayStep += 0.15
+            end
+        end
+
+        delayStep = 0
+
+        -- DOOR CHAOS (staggered)
+        for _, doorModel in ipairs(doors:GetChildren()) do
+
+            if doorModel:IsA("Model") then
+
+                task.delay(delayStep, function()
+
+                    local original = doorModel:GetAttribute("DoorClosed")
+                    if original == nil then return end
+
+                    local name = doorModel.Name
+
+                    for i = 1, math.random(2, 3) do
+
+                        ToggleDoor(name, false, not original)
+                        task.wait(0.5)
+
+                        ToggleDoor(name, false, original)
+                        task.wait(0.5)
+                    end
+
+                    if doorModel:GetAttribute("DoorClosed") ~= original then
+                        ToggleDoor(name, false, original)
+                    end
+                end)
+
+                delayStep += 0.25
+            end
+        end
+    end,
+})
+
+local flyingObjects = {}
+local flyConnection
+local addedConnection 
+
+local function clearForces(part)
+    for _, v in ipairs(part:GetChildren()) do
+        if v:IsA("AlignPosition") or v:IsA("AlignOrientation") or v:IsA("Attachment") then
+            v:Destroy()
+        end
+    end
+end
+
+local function isCharacterPart(obj)
+    if obj:FindFirstAncestorOfClass("Backpack") then return true end
+    local model = obj:FindFirstAncestorOfClass("Model")
+    if model and (model.Name == "Ghost" or model:FindFirstChildOfClass("Humanoid")) then
+        return true
+    end
+    return false
+end
+
+local function setupHover(obj)
+    if not obj:IsA("BasePart") or obj.Anchored then return end
+
+    pcall(function()
+        sethiddenproperty(Player, math.huge)
+    end)
+
+    local ghostModel = workspace:FindFirstChild("Ghost")
+    if ghostModel and obj:IsDescendantOf(ghostModel) then
+        return
+    end
+
+    if isCharacterPart(obj) or flyingObjects[obj] then return end
+
+    clearForces(obj)
+
+    local att = Instance.new("Attachment")
+    att.Name = "HoverAttachment"
+    att.Parent = obj
+
+    local alignPos = Instance.new("AlignPosition")
+    alignPos.Attachment0 = att
+    alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
+    alignPos.MaxForce = 100000
+    alignPos.MaxVelocity = math.huge
+    alignPos.Responsiveness = 15
+    alignPos.Parent = obj
+
+    local alignOri = Instance.new("AlignOrientation")
+    alignOri.Attachment0 = att
+    alignOri.Mode = Enum.OrientationAlignmentMode.OneAttachment
+    alignOri.MaxTorque = 100000
+    alignOri.MaxAngularVelocity = math.huge
+    alignOri.Responsiveness = 15
+    alignOri.Parent = obj
+
+    flyingObjects[obj] = {
+        alignPos = alignPos,
+        originPos = obj.Position,
+        lastPosition = obj.Position
+    }
+end
+
+Game:CreateToggle({
+    Name = "Toggle Hovering Objects",
+    CurrentValue = false,
+    Flag = "FlyingObj",
+    Callback = function(boolean)
+        if boolean then
+            flyConnection = RunService.Heartbeat:Connect(function()
+                pcall(function() sethiddenproperty(Player, "SimulationRadius", math.huge) end)
+
+                local t = os.clock()
+                local hoverHeight = 2.5 
+                local bobAmplitude = 1
+                local bobSpeed = 1.5    
+
+                for obj, data in pairs(flyingObjects) do
+                    if obj and obj.Parent and obj:IsA("BasePart") then
+                        if isCharacterPart(obj) then
+                            clearForces(obj)
+                            flyingObjects[obj] = nil
+                            continue
+                        end
+
+                        local currentPos = obj.Position
+                        local targetHoverPos = data.originPos + Vector3.new(0, hoverHeight, 0)
+                        
+                        if (currentPos - targetHoverPos).Magnitude > 7 then 
+                            data.originPos = currentPos
+                        end
+
+                        local offset = math.sin(t * bobSpeed) * bobAmplitude
+                        data.alignPos.Position = data.originPos + Vector3.new(0, hoverHeight + offset, 0)
+                    else
+                        flyingObjects[obj] = nil
+                    end
+                end
+            end)
+
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                setupHover(obj)
+            end
+
+            addedConnection = workspace.DescendantAdded:Connect(function(obj)
+                task.wait(0.1) 
+                setupHover(obj)
+            end)
+
+        else
+            if flyConnection then flyConnection:Disconnect() flyConnection = nil end
+            if addedConnection then addedConnection:Disconnect() addedConnection = nil end
+
+            for obj, _ in pairs(flyingObjects) do
+                if obj and obj.Parent then clearForces(obj) end
+            end
+            table.clear(flyingObjects)
+        end
+    end,
+})
+
+
+local PlayerDrop = players:CreateDropdown({
+   Name = "Select Player",
+   Options = PlayersList(),
+   CurrentOption = {"None"},
+   MultipleOptions = false,
+   Flag = "PlrS",
+   Callback = function(Option)
+   
+    print(Option, typeof(Option))
+
+    local selected = typeof(Option) == "table" and Option[1] or Option
+
+    if selected then
+         funct["Players"]["Selected_Player"] = selected
+      end
+   end,
+})
+
+players:CreateButton({
+   Name = "Teleport To Selected Player",
+   Callback = function()
+        if GetGhost():GetAttribute("Hunting") then
+            return
+        end
+
+        local selected = funct["Players"]["Selected_Player"]
+
+        if typeof(selected) == "table" then
+            selected = selected[1]
+        end
+
+        if not selected then
+            return
+        end
+
+        Tp(HumanoidRootPart, game:GetService("Players"):FindFirstChild(selected).Character:FindFirstChild("HumanoidRootPart").CFrame)
+   end,
+})
+
+local OldSubject = nil
+local OldCameraMode = nil
+local OldMinZoom = nil
+local OldMaxZoom = nil
+
+players:CreateToggle({
+    Name = "View Selected Player",
+    CurrentValue = false,
+    Flag = "ViewSelectedPlayer",
+
+    Callback = function(Value)
+        funct["Players"]["Viewing"] = Value
+
+        local selected = funct["Players"]["Selected_Player"]
+
+        if Value then
+            if typeof(selected) == "table" then
+                selected = selected[1]
+            end
+    
+            if not selected then
+                return
+            end
+
+            local Target = Players:FindFirstChild(selected)
+
+            if not Target or not Target.Character then
+                return
+            end
+
+            local Humanoid = Target.Character:FindFirstChildOfClass("Humanoid")
+
+            if not Humanoid then
+                return
+            end
+
+            OldSubject = Camera.CameraSubject
+            OldCameraMode = Player.CameraMode
+            OldMinZoom = Player.CameraMinZoomDistance
+            OldMaxZoom = Player.CameraMaxZoomDistance
+
+            Player.CameraMode = Enum.CameraMode.Classic
+            Player.CameraMinZoomDistance = 15
+            Player.CameraMaxZoomDistance = 25
+
+            Camera.CameraSubject = Humanoid
+
+        else
+            Player.CameraMode = OldCameraMode or Enum.CameraMode.Classic
+            Player.CameraMinZoomDistance = OldMinZoom or 0
+            Player.CameraMaxZoomDistance = OldMaxZoom or 0
+
+            if Player.Character then
+                if Humanoid then
+                    Camera.CameraSubject = Humanoid or OldSubject
+                end
+            end
+        end
+    end
+})
+
+players:CreateToggle({
+    Name = "Toggle Players Esp",
+    CurrentValue = false,
+    Flag = "ESP_ALL",
+
+    Callback = function(value)
+        setESPPlayer(value)
+    end
+})
+
+players:CreateSection("Local Functions")
+
+players:CreateSlider({
+   Name = "CFrame Walk Speed",
+   Range = {1, 10},
+   Increment = 1,
+   Suffix = "Stud per second",
+   CurrentValue = 4,
+   Flag = "CFW",
+   Callback = function(number)
+      funct["Players"]["CFrame_Walk_Speed"] = number
+   end,
+})
+
+local tpwalking
+local tpwalkStack = 0
+
+players:CreateToggle({
+   Name = "Toggle CFrame Walk",
+   CurrentValue = false,
+   Flag = "CFFW",
+   Callback = function(boolean)
+       if boolean then
+           tpwalking = RunService.Heartbeat:Connect(function(dt)
+               if not (Character and Humanoid and Humanoid.Parent) then
+                   tpwalking:Disconnect()
+                   return
+               end
+
+               if Humanoid.MoveDirection.Magnitude > 0 then
+                   Character:TranslateBy(Humanoid.MoveDirection * (funct["Players"]["CFrame_Walk_Speed"] + tpwalkStack) * dt * 10)
+               end
+           end)
+       else
+           if tpwalking then
+               tpwalking:Disconnect()
+               tpwalking = nil
+           end
+
+           tpwalkStack = 0
+       end
+   end,
+})
+
+local NoclipConnection
+
+players:CreateToggle({
+    Name = "Toggle Noclip",
+    CurrentValue = false,
+    Flag = "Noclip",
+
+    Callback = function(bool)
+        funct["Players"]["Noclip"] = bool
+
+        if bool then
+
+            NoclipConnection = RunService.Stepped:Connect(function()
+
+                if not Character then
+                    return
+                end
+
+                for _, v in ipairs(Character:GetDescendants()) do
+                    if v:IsA("BasePart") and v.CanCollide then
+                        v.CanCollide = false
+                    end
+                end
+            end)
+
+        else
+
+            Disconnect(NoclipConnection)
+
+            if Character then
+                for _, v in ipairs(Character:GetDescendants()) do
+                    if v:IsA("BasePart") then
+                        v.CanCollide = true
+                    end
+                end
+            end
+        end
+    end,
+})
+
+local OldLighting = {}
+
+players:CreateToggle({
+    Name = "Toggle Full Bright",
+    CurrentValue = false,
+    Flag = "FullBright",
+
+    Callback = function(bool)
+
+        if bool then
+            OldLighting = {
+                Brightness = Lightning.Brightness,
+                ClockTime = Lightning.ClockTime,
+                FogEnd = Lightning.FogEnd,
+                GlobalShadows = Lightning.GlobalShadows,
+                Ambient = Lightning.Ambient,
+                OutdoorAmbient = Lightning.OutdoorAmbient,
+            }
+
+            Lightning.Brightness = 3
+            Lightning.ClockTime = 12
+            Lightning.FogEnd = 1e10
+            Lightning.GlobalShadows = false
+            Lightning.Ambient = Color3.fromRGB(255,255,255)
+            Lightning.OutdoorAmbient = Color3.fromRGB(255,255,255)
+
+        else
+            for k, v in pairs(OldLighting) do
+                Lightning[k] = v
+            end
+        end
+    end
+})
+
+local ItemDrop = Items:CreateDropdown({
+   Name = "Select Item",
+   Options = ItemList(),
+   CurrentOption = {"None"},
+   MultipleOptions = false,
+   Flag = "Items_S",
+   Callback = function(Option)
+   
+    print(Option, typeof(Option))
+
+    local selected = typeof(Option) == "table" and Option[1] or Option
+
+    funct["Items"]["Selected_Item"] = selected
+   end,
+})
+
+Items:CreateButton({
+   Name = "Pickup Selected Item",
+   Callback = function()
+
+        local ghost = GetGhost()
+        if ghost and ghost:GetAttribute("Hunting") then
+            return
+        end
+
+        local oldCF = HumanoidRootPart.CFrame
+
+        local selected = funct["Items"]["Selected_Item"]
+        if typeof(selected) == "table" then
+            selected = selected[1]
+        end
+
+        if not selected then return end
+
+        local Item = FindItem(selected)
+        if not Item then return end
+
+        local targetPart = Item.PrimaryPart or Item:FindFirstChildWhichIsA("BasePart")
+        if not targetPart then return end
+
+        Tp(HumanoidRootPart, targetPart.CFrame)
+        task.wait()
+
+        local tools = Player:FindFirstChild("ToolsHolder")
+        if not tools then return end
+
+        local tool = workspace:WaitForChild("Items"):FindFirstChild(Item.Name)
+        if not tool then return end
+
+        game:GetService("ReplicatedStorage")
+            :WaitForChild("Events")
+            :WaitForChild("RequestItemPickup")
+           :FireServer(tool)
+
+        task.wait()
+
+        Tp(HumanoidRootPart, oldCF)
+   end,
+})
+
+Items:CreateToggle({
+    Name = "Toggle Items Esp",
+    CurrentValue = false,
+    Flag = "ESP_ALL",
+
+    Callback = function(value)
+        setESPItem(value)
+    end
+})
+
+Items:CreateSection("Move Items Functions")
+
+local SelectedGhostItems = {}
+
+local GhostItemDropdown = Items:CreateDropdown({
+    Name = "Select Items To Move Near Ghost",
+    Options = ItemList(),
+    CurrentOption = {},
+    MultipleOptions = true,
+    Flag = "GhostItemSelect",
+
+    Callback = function(options)
+
+        table.clear(SelectedGhostItems)
+
+        if typeof(options) == "table" then
+            for _, itemName in ipairs(options) do
+                table.insert(SelectedGhostItems, itemName)
+            end
+        end
+    end,
+})
+
+task.spawn(function()
+
+    local last = ""
+
+    while true do
+
+        local list = table.concat(ItemList(), ",")
+
+        if list ~= last then
+            last = list
+
+            GhostItemDropdown:Refresh(ItemList())
+        end
+
+        task.wait(1)
+    end
+end)
+
+local GhostItemConnection
+local GhostItemData = {}
+
+local function clearGhostItemForces(model)
+    for _, v in ipairs(model:GetDescendants()) do
+        if v.Name == "GhostItemAttach"
+        or v.Name == "GhostItemAlignPos"
+        or v.Name == "GhostItemAlignOri" then
+            v:Destroy()
+        end
+    end
+end
+
+Items:CreateToggle({
+    Name = "Move Selected Items Near Ghost",
+    CurrentValue = false,
+    Flag = "MoveItemsGhost",
+
+    Callback = function(state)
+
+        if state then
+
+            GhostItemConnection = RunService.Heartbeat:Connect(function()
+
+                pcall(function()
+                    sethiddenproperty(Player, "SimulationRadius", math.huge)
+                end)
+
+                local ghost = GetGhost()
+                if not ghost then
+                    return
+                end
+
+                local ghostCF = ghost:GetPivot()
+
+                local totalItems = #SelectedGhostItems
+                if totalItems <= 0 then
+                    return
+                end
+
+                local t = os.clock()
+
+                for index, itemName in ipairs(SelectedGhostItems) do
+
+                    local item = FindItem(itemName)
+
+                    if item then
+
+                        local part =
+                            item.PrimaryPart
+                            or item:FindFirstChildWhichIsA("BasePart")
+
+                        if part then
+
+                            if not GhostItemData[part] then
+
+                                clearGhostItemForces(item)
+
+                                local att = Instance.new("Attachment")
+                                att.Name = "GhostItemAttach"
+                                att.Parent = part
+
+                                -- POSITION
+                                local alignPos = Instance.new("AlignPosition")
+                                alignPos.Name = "GhostItemAlignPos"
+                                alignPos.Attachment0 = att
+                                alignPos.Mode = Enum.PositionAlignmentMode.OneAttachment
+                                alignPos.MaxForce = 100000
+                                alignPos.Responsiveness = 15
+                                alignPos.MaxVelocity = math.huge
+                                alignPos.RigidityEnabled = false
+                                alignPos.Parent = part
+
+                                -- ROTATION
+                                local alignOri = Instance.new("AlignOrientation")
+                                alignOri.Name = "GhostItemAlignOri"
+                                alignOri.Attachment0 = att
+                                alignOri.Mode = Enum.OrientationAlignmentMode.OneAttachment
+                                alignOri.MaxTorque = 100000
+                                alignOri.Responsiveness = 15
+                                alignOri.MaxAngularVelocity = math.huge
+                                alignOri.RigidityEnabled = false
+                                alignOri.Parent = part
+
+                                GhostItemData[part] = {
+                                    AlignPos = alignPos,
+                                    AlignOri = alignOri
+                                }
+                            end
+
+                            local data = GhostItemData[part]
+
+                            -- circle positioning
+                            local angle =
+                                ((index / totalItems) * math.pi * 2)
+                                + (t * 0.75)
+
+                            local radius = 3.5
+
+                            local bobAmplitude = 1
+                            local bobSpeed = 2
+
+                            local bobOffset =
+                                math.sin((t * bobSpeed) + index)
+                                * bobAmplitude
+
+                            local localOffset = Vector3.new(
+                                math.cos(angle) * radius,
+                                2 + bobOffset,
+                                math.sin(angle) * radius
+                            )
+
+                            local targetPos =
+                                ghostCF:PointToWorldSpace(localOffset)
+
+                            data.AlignPos.Position = targetPos
+
+                            data.AlignOri.CFrame =
+                                CFrame.lookAt(
+                                    targetPos,
+                                    ghostCF.Position
+                                )
+                        end
+                    end
+                end
+            end)
+
+        else
+
+            if GhostItemConnection then
+                GhostItemConnection:Disconnect()
+                GhostItemConnection = nil
+            end
+
+            for part, _ in pairs(GhostItemData) do
+                if part and part.Parent then
+                    clearGhostItemForces(part.Parent)
+                end
+            end
+
+            table.clear(GhostItemData)
+        end
+    end,
+})
+
+RunService.RenderStepped:Connect(function()
+
+    if funct["Items"]["Item_Esp"] then
+        for item, data in pairs(ItemESP) do
+            if data.label and data.part and data.part.Parent then
+                local dist = getDistance(data.part.Position)
+                local name = item:GetAttribute("ItemName") or item.Name
+
+                data.label.Text = name .. " | " .. math.floor(dist) .. "m"
+            end
+        end
+    end
+
+    if funct["Ghost"]["Ghost Esp"] then
+        for ghost, data in pairs(GhostESP) do
+            if data.label and data.part and data.part.Parent then
+                local dist = getDistance(data.part.Position)
+                local name = ghost.Name
+
+                data.label.Text = name .. " | " .. math.floor(dist) .. "m"
+            end
+        end
+    end
+
+    if funct["Players"]["Esp Player"] then
+        for player, data in pairs(PlayerESP) do
+            if typeof(player) ~= "Instance" or not player:IsA("Player") then
+                continue
+            end
+        
+            local character = player.Character
+            if not character then continue end
+        
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            if not data.part or not data.part.Parent then continue end
+        
+            local dist = getDistance(data.part.Position)
+            local hp = humanoid and math.floor(humanoid.Health) or "N/A"
+        
+            data.label.Text =
+                player.Name ..
+                " | " .. math.floor(dist) .. "m" ..
+                " | Health: " .. hp
+        end
+    end
+end)
+
+task.spawn(function()
+    while funct["Players"]["Viewing"] do
+        Player.CameraMode = Enum.CameraMode.Classic
+        Player.CameraMinZoomDistance = 15
+        task.wait()
+    end
+end)
+
+task.spawn(function()
+    local last = ""
+
+    while true do
+        local list = table.concat(PlayersList(), ",")
+
+        if list ~= last then
+            last = list
+            PlayerDrop:Refresh(PlayersList())
+        end
+
+        task.wait(1)
+    end
+end)
+
+task.spawn(function()
+    local last = ""
+
+    while true do
+        local list = table.concat(ItemList(), ",")
+
+        if list ~= last then
+            last = list
+            ItemDrop:Refresh(ItemList())
+        end
+
+        task.wait(1)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        local success, err = pcall(function()
+
+            local ghost = GetGhost()
+            local myRoot = HumanoidRootPart
+
+            if ghost and myRoot then
+                local ghostRoot = ghost:FindFirstChild("HumanoidRootPart")
+
+                local dist = 0
+
+                if ghostRoot then
+                    dist = getDistance(ghostRoot.Position)
+                end
+
+                g_data[1] = "Ghost's Favorite Room: " ..
+                    tostring(ghost:GetAttribute("FavoriteRoom") or "Unknown")
+
+                g_data[2] = "Ghost's Current Room: " ..
+                    tostring(ghost:GetAttribute("CurrentRoom") or "Unknown")
+
+                g_data[3] = "Ghost's Hunting: " ..
+                    tostring(ghost:GetAttribute("Hunting") or false)
+
+                g_data[4] = "Ghost Distance: " ..
+                    string.format("%.1f", dist)
+
+                Stats:Set({
+                    Title = "Ghost Status",
+                    Content = table.concat(g_data, "\n")
+                })
+            end
+        end)
+
+        if not success then
+            warn(err)
+        end
+
+        task.wait()
+    end
+end)
+
+local escaped = false
+local oldCF
+local huntConnection
+
+task.spawn(function()
+
+    while task.wait() do
+
+        local ghost = GetGhost()
+
+        if ghost then
+
+            if huntConnection then
+                huntConnection:Disconnect()
+            end
+
+            local function HandleHunt()
+
+                if not funct["Ghost"]["Auto Escape (Chase)"] then
+                    return
+                end
+
+                local hunting = ghost:GetAttribute("Hunting")
+
+                if hunting and not escaped then
+                    escaped = true
+
+                    if HumanoidRootPart then
+                        oldCF = HumanoidRootPart.CFrame
+
+                        Tp(
+                            HumanoidRootPart,
+                            workspace:WaitForChild("Map")
+                                :WaitForChild("Spawns")
+                                :WaitForChild("SpawnLocation").CFrame * CFrame.new(0, 5, 0)
+                        )
+                    end
+
+                elseif not hunting and escaped then
+                    escaped = false
+
+                    if oldCF and HumanoidRootPart then
+                        Tp(HumanoidRootPart, oldCF)
+                    end
+                end
+            end
+
+            HandleHunt()
+
+            huntConnection =
+                ghost:GetAttributeChangedSignal("Hunting"):Connect(HandleHunt)
+        end
+    end
+end)
