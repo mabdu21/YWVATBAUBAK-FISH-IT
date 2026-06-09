@@ -716,12 +716,12 @@ local g_data = {}
 
 local libary = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local window = libary:CreateWindow({
-   Name = "Anchor Hub [ Demonology🕯️ ]",
-   Icon = 0,
-   LoadingTitle = "Demonology🕯️ | Project #4",
-   LoadingSubtitle = "by DmaxDAZ",
-   ShowText = "Toggle",
-   Theme = "Serenity",
+   Name = "DYHUB | Demonology",
+   Icon = 104487529937663,
+   LoadingTitle = "DYHUB Loaded! - Demonology",
+   LoadingSubtitle = "by dyumra",
+   ShowText = "DYHUB",
+   Theme = "Default",
 
    ToggleUIKeybind = "K",
 
@@ -731,24 +731,24 @@ local window = libary:CreateWindow({
    ConfigurationSaving = {
       Enabled = true,
       FolderName = nil,
-      FileName = "Anchored"
+      FileName = "DYHUB_Demonology"
    },
 
    Discord = {
-      Enabled = false,
-      Invite = "noinvitelink",
+      Enabled = true,
+      Invite = "jWNDPNMmyB",
       RememberJoins = true
    },
 
-   KeySystem = true,
+   KeySystem = false,
    KeySettings = {
-      Title = "Anchor Hub",
+      Title = "DYHUB",
       Subtitle = "Key System",
-      Note = "https://pastebin.com/raw/GLpi8CGd (Get a key from here).",
-      FileName = "key_ss",
+      Note = "idk",
+      FileName = "idk",
       SaveKey = true,
       GrabKeyFromSite = false,
-      Key = {"2abcq374128qczxbfg5227822"}
+      Key = {"ifff"}
    }
 })
 
