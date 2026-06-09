@@ -273,7 +273,7 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 06/03/2026 | CL: " .. ver,
+    Title = "Update: 06/08/2026 | CL: " .. ver,
     Desc  = [[• [ Premium Only ] God Mode, anti carry & hook.
 • [ Premium Only ] Auto Parry optimized attack-frame lag on PC and mobile.
   • Added Show Parry Range circle under the player.
@@ -281,6 +281,7 @@ Info:Paragraph({
 • [ Added ] Custom Crosshair for killer/survivor in Main tab.
 • [ Added ] Crosshair Setting for adjust crosshair.
 • [ Fixed ] Auto Parry & No Fall / No more, Bug issues.
+• [ Fixed ] Can't movement when game start / round retry reset
 • [ Fixed ] Round Entry movement lock by resetting once before map load.]],
 })
 Info:Divider()
