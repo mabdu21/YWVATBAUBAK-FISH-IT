@@ -1,4 +1,4 @@
---// NAH WTF SO AI BUT I'M USING CLAUDE CODE OPUS 4.8 🤑😈🟢
+--// NAH WTF SO AI BUT I'M USING CLAUDE CODE OPUS 4.8 🤑😈🥀
 
 local Players        = game:GetService("Players")
 local TweenService   = game:GetService("TweenService")
@@ -37,14 +37,14 @@ local VEHICLE_READY_TIMEOUT = 22   -- Max wait for bought vehicle to come back a
 local VEHICLE_STABLE_TIME = 0.35   -- Small stability check after the 2s reload wait
 local BOUGHT_NEAREST_RADIUS = 65   -- Bought car should respawn very close to the player/original buy spot
 local BUY_MAX_TARGET_ATTEMPTS = 12 -- If one car cannot be bought, try another matching % car instead of stopping
-local SELL_RETRY_AFTER_BLOCK = 10  -- If sale confirmation does not open, wait 10s before trying again
+local SELL_RETRY_AFTER_BLOCK = 25  -- If sale confirmation does not open, wait 20 sec before trying again
 local MOVEABLE_REAPPLY_RADIUS = 100
 local REAPPLY_RETRY_ATTEMPTS = 3
 local REAPPLY_RETRY_DELAY = 0.35
 local NOT_ENOUGH_MONEY_TEXT = "You don't have enough money"
 local NOT_ENOUGH_GOLD_TEXT = "You don't have enough gold"
 local BUY_FAIL_SCAN_TIME = 2.5      -- After clicking/confirming buy, scan new HUD notifications for no-money before entering a car
-local REPAIR_WAIT_PER_PART = 15          -- Fixed repair time per part/station before moving to the parts pile
+local REPAIR_WAIT_PER_PART = 20          -- Fixed repair time per part/station before moving to the parts pile
 local REPAIR_WAKE_INTERVAL = 1.00       -- Re-seat/re-click while a repair station is still waiting for the part
 local MOVEABLE_WAIT_TIMEOUT = 5         -- Wait briefly for a stripped part to appear in MoveableParts
 local PARALLEL_ASSIGN_TIMEOUT = 0.55    -- Quick scan per part name when building repair queues
