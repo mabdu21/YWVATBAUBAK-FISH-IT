@@ -1,6 +1,4 @@
---// Lemon Sells - Optimized v8
---// Added Auto CashDrops (TP)
---// For your own Roblox tycoon / authorized testing only
+repeat task.wait() until game:IsLoaded()
 
 --// Rayfield
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
@@ -13,11 +11,40 @@ local LocalPlayer = Players.LocalPlayer
 
 --// Window
 local Window = Rayfield:CreateWindow({
-    Name = "Lemon Sells",
-    LoadingTitle = "Lemon Sell Auto",
-    LoadingSubtitle = "Optimized v8",
-    ConfigurationSaving = { Enabled = false },
-    KeySystem = false,
+   Name = "DYHUB | Sell Lemons",
+   Icon = 104487529937663,
+   LoadingTitle = "DYHUB Loaded! - Sell Lemons",
+   LoadingSubtitle = "by dyumra",
+   ShowText = "DYHUB",
+   Theme = "Default",
+
+   ToggleUIKeybind = "K",
+
+   DisableRayfieldPrompts = false,
+   DisableBuildWarnings = false,
+
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = nil,
+      FileName = "DYHUB_sl"
+   },
+
+   Discord = {
+      Enabled = true,
+      Invite = "jWNDPNMmyB",
+      RememberJoins = true
+   },
+
+   KeySystem = false,
+   KeySettings = {
+      Title = "DYHUB",
+      Subtitle = "Key System",
+      Note = "idk",
+      FileName = "idk",
+      SaveKey = true,
+      GrabKeyFromSite = false,
+      Key = {"ifff"}
+   }
 })
 
 local MainTab     = Window:CreateTab("Main",     4483362458)
