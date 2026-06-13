@@ -1,4 +1,4 @@
--- v55
+-- v56
 -- // ============================================================ \\ --
 --  Net  : local Net = require(ReplicatedStorage.SharedModules.Networking)
 --         Net.<Category>.<Action>:Fire(args...)   (single Packet RemoteEvent transport)
@@ -403,6 +403,7 @@ local S = {
     autoHarvest = false, harvestInterval = 2, harvestDelay = 0.01,
     autoSell = false, sellInterval = 15,
     autoExpand = false, autoPot = false, autoDaily = false,
+    autocs = false,
     -- boosts
     autoSprinkler = false, sprinklerInterval = 30,
     autoWater = false, waterInterval = 8,
@@ -454,6 +455,312 @@ local function pickMulti(sel, into)
         if v == true then into[k] = true elseif type(v) == "string" then into[v] = true end
     end end
 end
+
+-- AUTO COLLECT 
+--// Auto Collect Seed Runtime
+--// For your own game / authorized testing only
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
+
+local LP = Players.LocalPlayer
+local ENV = getgenv and getgenv() or _G
+
+--// Re-execute safe
+if ENV.DYHUB_AUTO_SEED_RUNTIME then
+    pcall(function()
+        ENV.DYHUB_AUTO_SEED_RUNTIME:Destroy()
+    end)
+end
+
+local Runtime = {
+    Alive = true,
+    Queue = {},
+    Queued = {},
+    Busy = false,
+    Connections = {},
+    LastCollect = {},
+}
+
+ENV.DYHUB_AUTO_SEED_RUNTIME = Runtime
+
+function Runtime:Connect(sig, fn)
+    local c = sig:Connect(fn)
+    table.insert(self.Connections, c)
+    return c
+end
+
+function Runtime:Destroy()
+    self.Alive = false
+
+    for _, c in ipairs(self.Connections) do
+        pcall(function()
+            c:Disconnect()
+        end)
+    end
+
+    table.clear(self.Connections)
+    table.clear(self.Queue)
+    table.clear(self.Queued)
+    table.clear(self.LastCollect)
+end
+
+--// Config
+local AUTO_SEED_CONFIG = {
+    ScanInterval = 1.25,
+    CollectCooldown = 1.5,
+    TeleportYOffset = 3.5,
+    PromptRetry = 2,
+    PromptRetryDelay = 0.25,
+
+    TargetSeedNames = {
+        Rainbow = true,
+        Gold = true,
+    }
+}
+
+--// Anti AFK
+Runtime:Connect(LP.Idled, function()
+    pcall(function()
+        VirtualUser:Button2Down(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
+        task.wait(0.15)
+        VirtualUser:Button2Up(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
+    end)
+end)
+
+local function getChar()
+    local char = LP.Character or LP.CharacterAdded:Wait()
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    return char, hum, hrp
+end
+
+local function isAlive()
+    local _, hum, hrp = getChar()
+    return hum and hum.Health > 0 and hrp
+end
+
+local function isTargetName(name)
+    return AUTO_SEED_CONFIG.TargetSeedNames[name] == true
+end
+
+local function getSeedRoot(inst)
+    local current = inst
+
+    while current and current ~= Workspace do
+        if isTargetName(current.Name) then
+            return current
+        end
+        current = current.Parent
+    end
+
+    return nil
+end
+
+local function getBasePart(obj)
+    if not obj then return nil end
+
+    if obj:IsA("BasePart") then
+        return obj
+    end
+
+    if obj:IsA("Model") then
+        if obj.PrimaryPart then
+            return obj.PrimaryPart
+        end
+
+        return obj:FindFirstChildWhichIsA("BasePart", true)
+    end
+
+    return obj:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function getPromptPart(prompt)
+    if not prompt then return nil end
+
+    if prompt.Parent and prompt.Parent:IsA("BasePart") then
+        return prompt.Parent
+    end
+
+    local root = getSeedRoot(prompt)
+    return getBasePart(root)
+end
+
+local function isValidPrompt(prompt)
+    if not prompt then return false end
+    if not prompt:IsA("ProximityPrompt") then return false end
+    if not prompt:IsDescendantOf(Workspace) then return false end
+    if prompt.Enabled == false then return false end
+
+    local root = getSeedRoot(prompt)
+    if not root then return false end
+
+    local part = getPromptPart(prompt)
+    if not part then return false end
+
+    return true
+end
+
+local function enqueuePrompt(prompt)
+    if not isValidPrompt(prompt) then return end
+    if Runtime.Queued[prompt] then return end
+
+    local now = os.clock()
+    local last = Runtime.LastCollect[prompt]
+
+    if last and now - last < AUTO_SEED_CONFIG.CollectCooldown then
+        return
+    end
+
+    Runtime.Queued[prompt] = true
+    table.insert(Runtime.Queue, prompt)
+end
+
+local function scanSeeds()
+    for _, inst in ipairs(Workspace:GetDescendants()) do
+        if not Runtime.Alive then return end
+
+        if inst:IsA("ProximityPrompt") then
+            enqueuePrompt(inst)
+        elseif isTargetName(inst.Name) then
+            for _, d in ipairs(inst:GetDescendants()) do
+                if d:IsA("ProximityPrompt") then
+                    enqueuePrompt(d)
+                end
+            end
+        end
+    end
+end
+
+local function safeTeleportToPrompt(prompt)
+    local _, hum, hrp = getChar()
+    if not hum or hum.Health <= 0 or not hrp then return false end
+
+    local part = getPromptPart(prompt)
+    if not part then return false end
+
+    pcall(function()
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+    end)
+
+    hrp.CFrame = part.CFrame + Vector3.new(0, AUTO_SEED_CONFIG.TeleportYOffset, 0)
+    task.wait(0.12)
+
+    return true
+end
+
+local function pressPrompt(prompt)
+    if not isValidPrompt(prompt) then return false end
+
+    pcall(function()
+        prompt.HoldDuration = 0
+        prompt.RequiresLineOfSight = false
+        prompt.MaxActivationDistance = math.max(prompt.MaxActivationDistance, 20)
+    end)
+
+    for _ = 1, AUTO_SEED_CONFIG.PromptRetry do
+        if not isValidPrompt(prompt) then return true end
+
+        if fireproximityprompt then
+            pcall(function()
+                fireproximityprompt(prompt)
+            end)
+        else
+            pcall(function()
+                prompt:InputHoldBegin()
+                task.wait()
+                prompt:InputHoldEnd()
+            end)
+        end
+
+        task.wait(AUTO_SEED_CONFIG.PromptRetryDelay)
+    end
+
+    return true
+end
+
+local function collectPrompt(prompt)
+    Runtime.Queued[prompt] = nil
+
+    if not S.autocs then return end
+    if not isValidPrompt(prompt) then return end
+    if not isAlive() then return end
+
+    Runtime.LastCollect[prompt] = os.clock()
+
+    if safeTeleportToPrompt(prompt) then
+        pressPrompt(prompt)
+    end
+end
+
+--// Detect seed spawn instantly
+Runtime:Connect(Workspace.DescendantAdded, function(inst)
+    if not Runtime.Alive then return end
+
+    task.defer(function()
+        if not Runtime.Alive then return end
+
+        if inst:IsA("ProximityPrompt") then
+            enqueuePrompt(inst)
+        elseif isTargetName(inst.Name) then
+            task.wait(0.15)
+
+            for _, d in ipairs(inst:GetDescendants()) do
+                if d:IsA("ProximityPrompt") then
+                    enqueuePrompt(d)
+                end
+            end
+        end
+    end)
+end)
+
+--// Queue cleaner
+task.spawn(function()
+    while Runtime.Alive do
+        for prompt in pairs(Runtime.Queued) do
+            if not isValidPrompt(prompt) then
+                Runtime.Queued[prompt] = nil
+            end
+        end
+
+        task.wait(3)
+    end
+end)
+
+--// Scanner loop
+task.spawn(function()
+    while Runtime.Alive do
+        if S.autocs then
+            scanSeeds()
+        end
+
+        task.wait(AUTO_SEED_CONFIG.ScanInterval)
+    end
+end)
+
+--// Collector loop
+task.spawn(function()
+    while Runtime.Alive do
+        if S.autocs and not Runtime.Busy then
+            local prompt = table.remove(Runtime.Queue, 1)
+
+            if prompt then
+                Runtime.Busy = true
+                pcall(function()
+                    collectPrompt(prompt)
+                end)
+                Runtime.Busy = false
+            else
+                task.wait(0.2)
+            end
+        else
+            task.wait(0.25)
+        end
+    end
+end)
 
 -- // ============================================================ \\ --
 -- //                     CORE FARM (master loop)                 \\ --
@@ -919,6 +1226,13 @@ secMaster:Toggle({ Name = "Auto Farm (Everything)", Default = false,
     Callback = function(v) S.autoFarm = v end }, "AutoFarm")
 secMaster:Toggle({ Name = "Auto Expand Garden", Default = false, Callback = function(v) S.autoExpand = v end }, "AutoExpand")
 secMaster:Toggle({ Name = "Auto Daily Deals", Default = false, Callback = function(v) S.autoDaily = v end }, "AutoDaily")
+secMaster:Toggle({
+    Name = "Auto Collect Seed",
+    Default = false,
+    Callback = function(v)
+        S.autocs = v
+    end
+}, "AutoCS")
 
 local secBuy = tabs.Farm:Section({ Side = "Right" })
 secBuy:Header({ Text = "Shop Seeds" })
