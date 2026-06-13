@@ -1,8 +1,8 @@
--- acc
+-- ui mac custom by me
 
 local MacLib = { 
 	Options = {}, 
-	Folder = "DYHUB_ACC", 
+	Folder = "DYHUB", 
 	ConfigMode = "shared", -- "shared" = one config for all accounts, "perUser" = separate config per account
 	GetService = function(service)
 		local svc
