@@ -1,4 +1,4 @@
--- v52
+-- v55
 -- // ============================================================ \\ --
 --  Net  : local Net = require(ReplicatedStorage.SharedModules.Networking)
 --         Net.<Category>.<Action>:Fire(args...)   (single Packet RemoteEvent transport)
@@ -914,14 +914,14 @@ local cashLabel = secStatus:Label({ Text = "Sheckles: …" })
 local statLabel = secStatus:Label({ Text = "—" })
 
 local secMaster = tabs.Farm:Section({ Side = "Left" })
-secMaster:Header({ Text = "Auto-Farm (master)" })
-secMaster:Toggle({ Name = "Auto-Farm (buy+plant+harvest+sell+expand)", Default = false,
+secMaster:Header({ Text = "Farm Option" })
+secMaster:Toggle({ Name = "Auto Farm (Everything)", Default = false,
     Callback = function(v) S.autoFarm = v end }, "AutoFarm")
-secMaster:Toggle({ Name = "Auto-Expand garden", Default = false, Callback = function(v) S.autoExpand = v end }, "AutoExpand")
-secMaster:Toggle({ Name = "Auto-Daily deals", Default = false, Callback = function(v) S.autoDaily = v end }, "AutoDaily")
+secMaster:Toggle({ Name = "Auto Expand Garden", Default = false, Callback = function(v) S.autoExpand = v end }, "AutoExpand")
+secMaster:Toggle({ Name = "Auto Daily Deals", Default = false, Callback = function(v) S.autoDaily = v end }, "AutoDaily")
 
 local secBuy = tabs.Farm:Section({ Side = "Right" })
-secBuy:Header({ Text = "Buy seeds" })
+secBuy:Header({ Text = "Shop Seeds" })
 secBuy:Dropdown({ Name = "Seeds to buy", Multi = true, Options = SEED_NAMES, Default = {},
     Callback = function(sel) pickMulti(sel, S.buySeeds) end }, "BuySeeds")
 secBuy:Toggle({ Name = "Auto-Buy selected", Default = false, Callback = function(v) S.autoBuy = v end }, "AutoBuy")
@@ -935,29 +935,29 @@ secPlant:Header({ Text = "Plant / Harvest / Sell" })
 local plantOpts = { "Best owned" }; for _, n in ipairs(SEED_NAMES) do plantOpts[#plantOpts + 1] = n end
 secPlant:Dropdown({ Name = "Seed to plant", Options = plantOpts, Default = "Best owned",
     Callback = function(v) S.plantSeed = v end }, "PlantSeed")
-secPlant:Toggle({ Name = "Auto-Plant (fill plot)", Default = false, Callback = function(v) S.autoPlant = v end }, "AutoPlant")
+secPlant:Toggle({ Name = "Auto Plant (fill plot)", Default = false, Callback = function(v) S.autoPlant = v end }, "AutoPlant")
 secPlant:Slider({ Name = "Plant spacing (studs)", Default = 4, Minimum = 2, Maximum = 10, DisplayMethod = "Value", Precision = 0,
     Callback = function(v) S.plantSpacing = v end }, "PlantSpacing")
-secPlant:Toggle({ Name = "Auto-Harvest ripe fruit", Default = false, Callback = function(v) S.autoHarvest = v end }, "AutoHarvest")
+secPlant:Toggle({ Name = "Auto Harvest (ripe fruit)", Default = false, Callback = function(v) S.autoHarvest = v end }, "AutoHarvest")
 secPlant:Slider({ Name = "Harvest pace (s/fruit · 0.02≈max)", Default = 0.01, Minimum = 0, Maximum = 0.2, DisplayMethod = "Value", Precision = 3,
     Callback = function(v) S.harvestDelay = v end }, "HarvestDelay")
-secPlant:Toggle({ Name = "Auto-Sell (auto-sells when pack full)", Default = false, Callback = function(v) S.autoSell = v end }, "AutoSell")
+secPlant:Toggle({ Name = "Auto Sell (backpack full)", Default = false, Callback = function(v) S.autoSell = v end }, "AutoSell")
 secPlant:Slider({ Name = "Sell interval (s, sell-only mode)", Default = 15, Minimum = 3, Maximum = 120, DisplayMethod = "Value", Precision = 0,
     Callback = function(v) S.sellInterval = v end }, "SellInterval")
-secPlant:Toggle({ Name = "Auto-Pot grown plants", Default = false, Callback = function(v) S.autoPot = v end }, "AutoPot")
+secPlant:Toggle({ Name = "Auto Pot (grown plants)", Default = false, Callback = function(v) S.autoPot = v end }, "AutoPot")
 
 -- ---- BOOSTS ----
 local secSpr = tabs.Boosts:Section({ Side = "Left" })
 secSpr:Header({ Text = "Sprinklers & Water" })
-secSpr:Toggle({ Name = "Auto-place Sprinklers", Default = false, Callback = function(v) S.autoSprinkler = v end }, "AutoSprinkler")
+secSpr:Toggle({ Name = "Auto Place Sprinklers", Default = false, Callback = function(v) S.autoSprinkler = v end }, "AutoSprinkler")
 secSpr:Slider({ Name = "Sprinkler interval (s)", Default = 30, Minimum = 10, Maximum = 120, DisplayMethod = "Value", Precision = 0,
     Callback = function(v) S.sprinklerInterval = v end }, "SprinklerInterval")
-secSpr:Toggle({ Name = "Auto-Watering Can", Default = false, Callback = function(v) S.autoWater = v end }, "AutoWater")
+secSpr:Toggle({ Name = "Auto Watering Can", Default = false, Callback = function(v) S.autoWater = v end }, "AutoWater")
 secSpr:Slider({ Name = "Water interval (s)", Default = 8, Minimum = 2, Maximum = 60, DisplayMethod = "Value", Precision = 0,
     Callback = function(v) S.waterInterval = v end }, "WaterInterval")
 
 local secSkill = tabs.Boosts:Section({ Side = "Right" })
-secSkill:Header({ Text = "Skill points" })
+secSkill:Header({ Text = "Skill Points" })
 secSkill:Dropdown({ Name = "Stats to level", Multi = true,
     Options = { "BaseSpeed", "BaseJump", "ShovelPower", "MaxBackpack" }, Default = {},
     Callback = function(sel) pickMulti(sel, S.skillStats) end }, "SkillStats")
@@ -965,10 +965,10 @@ secSkill:Toggle({ Name = "Auto-Spend skill points", Default = false, Callback = 
 
 -- ---- PETS ----
 local secPet = tabs.Pets:Section({ Side = "Left" })
-secPet:Header({ Text = "Pets" })
-secPet:Toggle({ Name = "Auto-Equip pets (to slot cap)", Default = false, Callback = function(v) S.autoEquipPets = v end }, "AutoEquipPets")
-secPet:Toggle({ Name = "Auto-Buy pet slots", Default = false, Callback = function(v) S.autoPetSlot = v end }, "AutoPetSlot")
-secPet:Toggle({ Name = "Auto-Buy world pets (walk up & buy)", Default = false, Callback = function(v) S.autoBuyPets = v end }, "AutoBuyPets")
+secPet:Header({ Text = "Pets Option" })
+secPet:Toggle({ Name = "Auto Equip pets (to slot cap)", Default = false, Callback = function(v) S.autoEquipPets = v end }, "AutoEquipPets")
+secPet:Toggle({ Name = "Auto Buy pet slots", Default = false, Callback = function(v) S.autoPetSlot = v end }, "AutoPetSlot")
+secPet:Toggle({ Name = "Auto Buy world pets (walk up & buy)", Default = false, Callback = function(v) S.autoBuyPets = v end }, "AutoBuyPets")
 secPet:Slider({ Name = "Max pet price (Sheckles)", Default = 25000, Minimum = 1000, Maximum = 1000000, DisplayMethod = "Value", Precision = 0,
     Callback = function(v) S.maxPetPrice = v end }, "MaxPetPrice")
 secPet:Toggle({ Name = "Teleport to pet (needed to buy)", Default = true, Callback = function(v) S.petTeleport = v end }, "PetTeleport")
@@ -976,58 +976,62 @@ secPet:Slider({ Name = "Pet buy interval (s)", Default = 5, Minimum = 2, Maximum
     Callback = function(v) S.petBuyInterval = v end }, "PetBuyInterval")
 
 local secPetSell = tabs.Pets:Section({ Side = "Right" })
-secPetSell:Header({ Text = "Sell pets" })
+secPetSell:Header({ Text = "Sell Pets" })
 secPetSell:Dropdown({ Name = "Pets to sell", Multi = true, Options = ownedPetNames(), Default = {},
     Callback = function(sel) pickMulti(sel, S.sellPets) end }, "SellPets")
-secPetSell:Toggle({ Name = "Auto-Sell selected pets", Default = false, Callback = function(v) S.autoSellPets = v end }, "AutoSellPets")
+secPetSell:Toggle({ Name = "Auto Sell selected pets", Default = false, Callback = function(v) S.autoSellPets = v end }, "AutoSellPets")
 
 -- ---- EGGS & CRATES ----
 local secOpen = tabs.Open:Section({ Side = "Left" })
-secOpen:Header({ Text = "Auto-Open" })
-secOpen:Toggle({ Name = "Auto-Open Eggs", Default = false, Callback = function(v) S.autoEgg = v end }, "AutoEgg")
-secOpen:Toggle({ Name = "Auto-Open Crates", Default = false, Callback = function(v) S.autoCrate = v end }, "AutoCrate")
-secOpen:Toggle({ Name = "Auto-Open Seed Packs", Default = false, Callback = function(v) S.autoPack = v end }, "AutoPack")
+secOpen:Header({ Text = "Open Option" })
+secOpen:Toggle({ Name = "Auto Open Eggs", Default = false, Callback = function(v) S.autoEgg = v end }, "AutoEgg")
+secOpen:Toggle({ Name = "Auto Open Crates", Default = false, Callback = function(v) S.autoCrate = v end }, "AutoCrate")
+secOpen:Toggle({ Name = "Auto Open Seed Packs", Default = false, Callback = function(v) S.autoPack = v end }, "AutoPack")
 secOpen:Slider({ Name = "Open interval (s)", Default = 4, Minimum = 1, Maximum = 30, DisplayMethod = "Value", Precision = 0,
     Callback = function(v) S.openInterval = v end }, "OpenInterval")
 local secOpenInfo = tabs.Open:Section({ Side = "Right" })
-secOpenInfo:Header({ Text = "Info" })
+secOpenInfo:Header({ Text = "Information" })
 secOpenInfo:Label({ Text = "Opens everything you own in each" })
 secOpenInfo:Label({ Text = "category. Confirm is automatic." })
 
 -- ---- SHOP ----
 local secShop = tabs.Shop:Section({ Side = "Left" })
-secShop:Header({ Text = "Gear shop" })
+secShop:Header({ Text = "Shop Gears" })
 secShop:Dropdown({ Name = "Gear to buy", Multi = true, Options = GEAR_NAMES, Default = {},
     Callback = function(sel) pickMulti(sel, S.gearBuy) end }, "GearBuy")
-secShop:Toggle({ Name = "Auto-Buy selected gear", Default = false, Callback = function(v) S.autoGear = v end }, "AutoGear")
+secShop:Toggle({ Name = "Auto Buy selected gear", Default = false, Callback = function(v) S.autoGear = v end }, "AutoGear")
 secShop:Slider({ Name = "Gear buy interval (s)", Default = 10, Minimum = 2, Maximum = 60, DisplayMethod = "Value", Precision = 0,
     Callback = function(v) S.gearInterval = v end }, "GearInterval")
 
 -- ---- STEAL ----
 local secSteal = tabs.Steal:Section({ Side = "Left" })
-secSteal:Header({ Text = "Auto-Steal (night only)" })
-secSteal:Toggle({ Name = "Auto-Steal others' ripe fruit", Default = false, Callback = function(v) S.autoSteal = v end }, "AutoSteal")
+secSteal:Header({ Text = "Steal Option (Night only)" })
+secSteal:Toggle({ Name = "Auto Steal (others ripe fruit)", Default = false, Callback = function(v) S.autoSteal = v end }, "AutoSteal")
 secSteal:Toggle({ Name = "Teleport to fruit (needed to steal)", Default = true, Callback = function(v) S.stealTeleport = v end }, "StealTeleport")
 secSteal:Toggle({ Name = "Return to base after each fruit (banks it)", Default = true, Callback = function(v) S.stealReturnBase = v end }, "StealReturnBase")
 secSteal:Slider({ Name = "Steal speed (delay/fruit, 0=instant)", Default = 0.05, Minimum = 0, Maximum = 1, DisplayMethod = "Value", Precision = 2,
     Callback = function(v) S.stealDelay = v end }, "StealDelay")
 local secStealInfo = tabs.Steal:Section({ Side = "Right" })
-secStealInfo:Header({ Text = "Info" })
-secStealInfo:Label({ Text = "Night-only · TP to fruit, steal," })
+secStealInfo:Header({ Text = "Information" })
+secStealInfo:Label({ Text = "Night-only · TP to fruit and steal" })
 secStealInfo:Label({ Text = "then TP home to bank each one." })
 
 -- ---- MISC ----
 local secMail = tabs.Misc:Section({ Side = "Left" })
 secMail:Header({ Text = "Mail & Gifts" })
-secMail:Toggle({ Name = "Auto-Claim mailbox", Default = false, Callback = function(v) S.autoMail = v end }, "AutoMail")
-secMail:Toggle({ Name = "Auto-Accept gifts", Default = false, Callback = function(v) S.autoAcceptGift = v end }, "AutoAcceptGift")
+secMail:Toggle({ Name = "Auto Claim mailbox", Default = false, Callback = function(v) S.autoMail = v end }, "AutoMail")
+secMail:Toggle({ Name = "Auto Accept gifts", Default = false, Callback = function(v) S.autoAcceptGift = v end }, "AutoAcceptGift")
 
 local secHop = tabs.Misc:Section({ Side = "Left" })
 secHop:Header({ Text = "Session" })
-secHop:Toggle({ Name = "Anti-AFK (never idle-kicked)", Default = true, Callback = function(v) S.antiAfk = v end }, "AntiAfk")
-secHop:Toggle({ Name = "Auto server-hop", Default = false, Callback = function(v) S.autoHop = v end }, "AutoHop")
+secHop:Toggle({ Name = "Anti-AFK (Blocked Kick)", Default = true, Callback = function(v) S.antiAfk = v end }, "AntiAfk")
+secHop:Toggle({ Name = "Auto Serverhop", Default = false, Callback = function(v) S.autoHop = v end }, "AutoHop")
 secHop:Slider({ Name = "Hop every (min, 0=off)", Default = 0, Minimum = 0, Maximum = 120, DisplayMethod = "Value", Precision = 0,
     Callback = function(v) S.hopInterval = v * 60 end }, "HopInterval")
+
+local listocde = tabs.Misc:Section({ Side = "Right" })
+listocde:Header({ Text = "Code List" })
+listocde:Label({ Text = "1. TEAMGREENBEAN" })
 
 local secCode = tabs.Misc:Section({ Side = "Right" })
 secCode:Header({ Text = "Codes" })
@@ -1039,7 +1043,7 @@ pcall(function()
         end
     end }, "CodeInput")
 end)
-secCode:Toggle({ Name = "Auto-redeem code list", Default = false, Callback = function(v) S.autoCodes = v end }, "AutoCodes")
+secCode:Toggle({ Name = "Auto Redeem code list", Default = false, Callback = function(v) S.autoCodes = v end }, "AutoCodes")
 
 -- ---- SETTINGS ----
 local secPerf = tabs.Settings:Section({ Side = "Left" })
@@ -1066,9 +1070,10 @@ secWeb:Slider({ Name = "Report interval (min)", Default = 5, Minimum = 1, Maximu
 secWeb:Button({ Name = "Send test report", Callback = function() task.spawn(function() sendWebhook(true) end) end })
 
 local secInfo = tabs.Settings:Section({ Side = "Right" })
-secInfo:Header({ Text = "Info" })
-secInfo:Label({ Text = "Grow a Garden 2 · DYHUB" })
-secInfo:Label({ Text = "Hotkey: Left Ctrl toggles UI" })
+secInfo:Header({ Text = "Information" })
+secInfo:Label({ Text = "Script by DYHUB" })
+secInfo:Label({ Text = "Discord: https://dsc.gg/dyhub" })
+secInfo:Label({ Text = "Hotkey: K toggles UI" })
 
 -- Auto-Pot loop (own grown plants flagged via prompt tag is rare; pot all listed plants)
 loopOn(function() return S.autoPot end, 10, function()
@@ -1126,5 +1131,5 @@ pcall(function()
     task.delay(1.5, function() loadingCfg = false end)
 end)
 
-notify("DYHUB", "GAG2 full-auto loaded · " .. #SEED_NAMES .. " seeds · " .. #GEAR_NAMES .. " gear · drag side button to hide", 6)
-print("[DYHUB] Grow a Garden 2 full-auto loaded.")
+notify("DYHUB", "DATA | " .. #SEED_NAMES .. " seeds · " .. #GEAR_NAMES .. " gear · drag side button to hide", 6)
+print("[DYHUB] Grow a Garden 2 loaded.")
