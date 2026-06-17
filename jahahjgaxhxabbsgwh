@@ -1,6 +1,3 @@
---// DYHUB Fix It Up - patched by ChatGPT
---// Changes: Pitstop(Small) repair zone, nearest Pitstop resolver, duplicate GrindingMachine resolver, Tween movement, Body.Seat(s) cleanup, parallel all-machine repair, lower lag repair polling.
-
 --// NAH WTF SO AI BUT I'M USING CLAUDE CODE OPUS 4.8 🤑😈🥀💎
 
 local Players        = game:GetService("Players")
