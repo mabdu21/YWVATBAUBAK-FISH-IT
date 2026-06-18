@@ -1,5 +1,4 @@
--- // Script by DYHUB. This project has been sold and is no longer maintained or developed.
-
+-- // Script by DYHUB. This project has been sold and is no longer maintained or developed. | v6512
 local Players        = game:GetService("Players")
 local TweenService   = game:GetService("TweenService")
 local UIS            = game:GetService("UserInputService")
@@ -55,7 +54,7 @@ CAR_TWEEN_MAX_TIME = 9.00
 
 REPAIR100_CAR_CF        = CFrame.new(-1495, 5, -525)
 REPAIR100_BUY_PLAYER_CF = CFrame.new(-1448, 5, -534)
-REPAIR100_SWAP_CF       = CFrame.new(-1484, 4, -508)
+REPAIR100_SWAP_CF       = CFrame.new(-1485, 4, -515)
 REPLACED_PART_HIDE_CF   = CFrame.new(999, 99, 999)
 REPAIR100_NEAR_RADIUS   = 20
 REPAIR100_BUY_DELAY     = 1.00
@@ -90,8 +89,8 @@ JUNKYARD_SELECT_OPTIONS = {
     {Text = "< 5%",  Value = 5},
     {Text = "< 10%", Value = 10},
     {Text = "< 15%", Value = 15},
-    {Text = "< 19%", Value = 19},
     {Text = "< 20%", Value = 20},
+    {Text = "< 25%", Value = 25},
     {Text = "< 30%", Value = 30},
     {Text = "< 40%", Value = 40},
     {Text = "< 50%", Value = 50},
