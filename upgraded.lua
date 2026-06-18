@@ -1,4 +1,4 @@
--- // Script by DYHUB. This project has been sold and is no longer maintained or developed.
+-- // 23213213
 local Players        = game:GetService("Players")
 local TweenService   = game:GetService("TweenService")
 local UIS            = game:GetService("UserInputService")
@@ -38,8 +38,8 @@ REAPPLY_RETRY_DELAY = 0.35
 NOT_ENOUGH_MONEY_TEXT = "You don't have enough money"
 NOT_ENOUGH_GOLD_TEXT = "You don't have enough gold"
 GARAGE_LIMIT_TEXT = "Garage limit reached"
-GARAGE_LIMIT_WARNING_TEXT = "Garage limit reached. Please sell cars in your garage before buying a new one."
-BUY_FAIL_SCAN_TIME = 2.5
+GARAGE_LIMIT_WARNING_TEXT = "Garage limit reached. Please sell cars in your garage before buying more."
+BUY_FAIL_SCAN_TIME = 3.25
 REPAIR_WAIT_PER_PART = 20
 REPAIR_PARALLEL_ALL = true
 REPAIR_WAKE_INTERVAL = 1.00
@@ -235,10 +235,9 @@ local Runtime = {
     StatusCB    = nil,
 
     SelectThreshold = 50,
+    SelectMin       = 0,
+    SelectMax       = 50,
     SelectText      = "< 50%",
-    PercentMin      = 0,
-    PercentMax      = 50,
-    CustomPercentRangeEnabled = false,
     CarEspEnabled   = false,
     MovementMode    = "Tween",
     MovementText    = "Tween",
@@ -268,48 +267,47 @@ local function cleanKaitunText(value)
     return raw
 end
 
-local function clampPercent(value, fallback)
-    local n = tonumber(value)
-    if not n then
-        return fallback
+local function formatPercentNumber(value)
+    local numberValue = tonumber(value) or 0
+    if math.abs(numberValue - math.floor(numberValue)) < 0.000001 then
+        return tostring(math.floor(numberValue))
     end
-    if n ~= n then
-        return fallback
-    end
-    return math.clamp(n, 0, 100)
+    local textValue = string.format("%.2f", numberValue)
+    return textValue:gsub("0+$", ""):gsub("%.$", "")
 end
 
-local function parsePercentRangeText(value)
-    local raw = cleanKaitunText(value)
-    local a, b = raw:match("(%d+%.?%d*)%s*%-%s*(%d+%.?%d*)")
-    if a and b then
-        return tonumber(a), tonumber(b)
+local function applySelectRangeValues(minValue, maxValue, displayText)
+    local minNumber = tonumber(minValue)
+    local maxNumber = tonumber(maxValue)
+    if not minNumber or not maxNumber then
+        return false
     end
-    return tonumber(raw:match("(%d+%.?%d*)"))
+
+    minNumber = math.clamp(minNumber, 0, 100)
+    maxNumber = math.clamp(maxNumber, 0, 100)
+
+    if minNumber > maxNumber then
+        minNumber, maxNumber = maxNumber, minNumber
+    end
+
+    Runtime.SelectMin = minNumber
+    Runtime.SelectMax = maxNumber
+    Runtime.SelectThreshold = maxNumber
+    Runtime.SelectText = displayText or (formatPercentNumber(minNumber) .. "-" .. formatPercentNumber(maxNumber) .. "%")
+
+    syncKaitunSetting("Select Type (%)", Runtime.SelectText)
+    syncKaitunSetting("Select Min (%)", Runtime.SelectMin)
+    syncKaitunSetting("Select Max (%)", Runtime.SelectMax)
+    return true
 end
 
-local function applyPercentRange(minValue, maxValue, manual)
-    local minPercent = clampPercent(minValue, Runtime.PercentMin or 0)
-    local maxPercent = clampPercent(maxValue, Runtime.PercentMax or Runtime.SelectThreshold or 50)
-
-    if minPercent > maxPercent then
-        minPercent, maxPercent = maxPercent, minPercent
+local function parsePercentRangeText(rawText)
+    local textValue = cleanKaitunText(rawText)
+    local minText, maxText = textValue:match("(%d+%.?%d*)%s*[%-%–]%s*(%d+%.?%d*)")
+    if minText and maxText then
+        return tonumber(minText), tonumber(maxText)
     end
-
-    Runtime.PercentMin = minPercent
-    Runtime.PercentMax = maxPercent
-    Runtime.CustomPercentRangeEnabled = manual == true
-
-    syncKaitunSetting("Min Percent (%)", minPercent)
-    syncKaitunSetting("Max Percent (%)", maxPercent)
-    syncKaitunSetting("Select Range (%)", tostring(minPercent) .. "-" .. tostring(maxPercent))
-end
-
-local function getPercentFilterText()
-    if Runtime.CustomPercentRangeEnabled then
-        return tostring(Runtime.PercentMin or 0) .. "% - " .. tostring(Runtime.PercentMax or 50) .. "%"
-    end
-    return Runtime.SelectText
+    return nil, nil
 end
 
 local function applySelectTypeValue(selectedType)
@@ -318,17 +316,16 @@ local function applySelectTypeValue(selectedType)
     end
 
     local raw = cleanKaitunText(selectedType)
+    local rangeMin, rangeMax = parsePercentRangeText(raw)
+    if rangeMin and rangeMax then
+        return applySelectRangeValues(rangeMin, rangeMax)
+    end
+
     local asNumber = tonumber(raw)
 
     for _, option in ipairs(JUNKYARD_SELECT_OPTIONS) do
         if raw == option.Text or asNumber == option.Value then
-            Runtime.SelectText = option.Text
-            Runtime.SelectThreshold = option.Value
-            if not Runtime.CustomPercentRangeEnabled then
-                applyPercentRange(0, option.Value, false)
-            end
-            syncKaitunSetting("Select Type (%)", option.Text)
-            return true
+            return applySelectRangeValues(0, option.Value, option.Text)
         end
     end
 
@@ -336,23 +333,11 @@ local function applySelectTypeValue(selectedType)
     if extracted then
         for _, option in ipairs(JUNKYARD_SELECT_OPTIONS) do
             if extracted == option.Value then
-                Runtime.SelectText = option.Text
-                Runtime.SelectThreshold = option.Value
-                if not Runtime.CustomPercentRangeEnabled then
-                    applyPercentRange(0, option.Value, false)
-                end
-                syncKaitunSetting("Select Type (%)", option.Text)
-                return true
+                return applySelectRangeValues(0, option.Value, option.Text)
             end
         end
 
-        Runtime.SelectText = "< " .. tostring(extracted) .. "%"
-        Runtime.SelectThreshold = extracted
-        if not Runtime.CustomPercentRangeEnabled then
-            applyPercentRange(0, extracted, false)
-        end
-        syncKaitunSetting("Select Type (%)", Runtime.SelectText)
-        return true
+        return applySelectRangeValues(0, extracted, "< " .. tostring(extracted) .. "%")
     end
 
     return false
@@ -402,17 +387,10 @@ local function applyKaitunConfig()
     local selectedType = cfg["Select Type (%)"] or cfg.SelectType or cfg["Car Percent"]
     applySelectTypeValue(selectedType)
 
-    local rangeText = cfg["Select Range (%)"] or cfg.SelectRange or cfg["Car Percent Range"]
-    local rangeMin, rangeMax = parsePercentRangeText(rangeText)
-    local cfgMin = cfg["Min Percent (%)"] or cfg.MinPercent or cfg["Min Car Percent"]
-    local cfgMax = cfg["Max Percent (%)"] or cfg.MaxPercent or cfg["Max Car Percent"]
-
-    if rangeMin and rangeMax then
-        applyPercentRange(rangeMin, rangeMax, true)
-    elseif cfgMin ~= nil or cfgMax ~= nil then
-        applyPercentRange(cfgMin or Runtime.PercentMin, cfgMax or Runtime.PercentMax, true)
-    elseif not Runtime.CustomPercentRangeEnabled then
-        applyPercentRange(0, Runtime.SelectThreshold, false)
+    local minCfg = cfg["Select Min (%)"] or cfg.SelectMin or cfg["Min Percent"]
+    local maxCfg = cfg["Select Max (%)"] or cfg.SelectMax or cfg["Max Percent"]
+    if minCfg ~= nil and maxCfg ~= nil then
+        applySelectRangeValues(minCfg, maxCfg)
     end
 end
 
@@ -522,6 +500,9 @@ local function hardStop(reason)
         setStatus("Stopped")
     end
     pcall(restoreCharacter)
+    if Runtime.ToggleUpdater then
+        pcall(Runtime.ToggleUpdater)
+    end
 end
 
 local function showTeleportWarning()
@@ -533,6 +514,17 @@ local function showTeleportWarning()
             Duration = 5,
         })
     end)
+end
+
+local function showGarageLimitWarning()
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "DYHUB Notice",
+            Text = GARAGE_LIMIT_WARNING_TEXT,
+            Duration = 7,
+        })
+    end)
+    hardStop(GARAGE_LIMIT_WARNING_TEXT)
 end
 
 local function getChar()   return LP.Character end
@@ -1225,25 +1217,17 @@ end
 
 local function chanceMatchesSelected(chance)
     if type(chance) ~= "number" then return false end
+
+    local minLimit = tonumber(Runtime.SelectMin) or 0
+    local maxLimit = tonumber(Runtime.SelectMax) or tonumber(Runtime.SelectThreshold)
+    if not maxLimit then return false end
+
+    if minLimit > maxLimit then
+        minLimit, maxLimit = maxLimit, minLimit
+    end
+
     if chance < 0 then return false end
-
-    if Runtime.CustomPercentRangeEnabled then
-        local minPercent = tonumber(Runtime.PercentMin) or 0
-        local maxPercent = tonumber(Runtime.PercentMax) or Runtime.SelectThreshold or 50
-        if minPercent > maxPercent then
-            minPercent, maxPercent = maxPercent, minPercent
-        end
-        return chance >= minPercent and chance <= maxPercent
-    end
-
-    local limit = Runtime.SelectThreshold
-    if type(limit) ~= "number" then return false end
-
-    if limit <= 0 then
-        return chance <= 0.000001
-    end
-
-    return chance <= limit
+    return chance >= (minLimit - 0.000001) and chance <= (maxLimit + 0.000001)
 end
 
 local function findBestJunkyardVehicle(ignoredNames)
@@ -1353,6 +1337,8 @@ local function isConfirmationVisible()
     return ok and visible == true
 end
 
+local clickGuiButton
+
 local function getConfirmationButton()
     local confirmation = getConfirmationFrame()
     if not confirmation then return nil end
@@ -1363,6 +1349,24 @@ local function getConfirmationButton()
     end
 
     return nil
+end
+
+local function closeConfirmationSoft()
+    local confirmation = getConfirmationFrame()
+    if not confirmation then return end
+
+    for _, name in ipairs({"Cancel", "Close", "No", "Decline"}) do
+        local btn = confirmation:FindFirstChild(name, true)
+        if btn and btn:IsA("GuiButton") then
+            clickGuiButton(btn)
+            task.wait(0.05)
+            return
+        end
+    end
+
+    pcall(function()
+        confirmation.Visible = false
+    end)
 end
 
 local function isGuiVisibleDeep(guiObject)
@@ -1460,6 +1464,7 @@ local function isGarageLimitText(txt)
     local lower = tostring(txt or ""):lower()
     return lower == tostring(GARAGE_LIMIT_TEXT):lower()
         or lower:find("garage limit reached", 1, true) ~= nil
+        or lower:find("garage limit", 1, true) ~= nil
 end
 
 local function hasActiveNotification()
@@ -1468,15 +1473,8 @@ end
 
 local function hasNotEnoughMoneyNotification(baseline)
     for _, item in ipairs(getNotificationTextObjects()) do
-        if isNoMoneyText(item.Text) then
-            if item.Visible then
-                return true, item.Text
-            end
-
-            local old = baseline and baseline[item.Object]
-            if not old or old.Text ~= item.Text or (old.Visible ~= true and item.Visible == true) then
-                return true, item.Text
-            end
+        if item.Visible and isNoMoneyText(item.Text) then
+            return true, item.Text
         end
     end
     return false, nil
@@ -1484,29 +1482,11 @@ end
 
 local function hasGarageLimitNotification(baseline)
     for _, item in ipairs(getNotificationTextObjects()) do
-        if isGarageLimitText(item.Text) then
-            if item.Visible then
-                return true, item.Text
-            end
-
-            local old = baseline and baseline[item.Object]
-            if not old or old.Text ~= item.Text or (old.Visible ~= true and item.Visible == true) then
-                return true, item.Text
-            end
+        if item.Visible and isGarageLimitText(item.Text) then
+            return true, item.Text
         end
     end
     return false, nil
-end
-
-local function stopForGarageLimit()
-    pcall(function()
-        StarterGui:SetCore("SendNotification", {
-            Title = "DYHUB Warning",
-            Text = GARAGE_LIMIT_WARNING_TEXT,
-            Duration = 7,
-        })
-    end)
-    hardStop(GARAGE_LIMIT_WARNING_TEXT)
 end
 
 local function waitForBuyFailureNotification(baseline, timeout)
@@ -1516,12 +1496,12 @@ local function waitForBuyFailureNotification(baseline, timeout)
     while os.clock() - start <= timeout do
         local garageFull, garageText = hasGarageLimitNotification(baseline)
         if garageFull then
-            return true, garageText, "garage_limit"
+            return true, garageText or GARAGE_LIMIT_TEXT, "garage_limit"
         end
 
         local noMoney, text = hasNotEnoughMoneyNotification(baseline)
         if noMoney then
-            return true, text, "not_enough_currency"
+            return true, text, "currency"
         end
         task.wait(0.1)
     end
@@ -1533,18 +1513,17 @@ local function checkStageAbortFromHud(expectedStage, actionAttempted)
     if expectedStage == "Buying" then
 
         if actionAttempted then
-            local garageFull = hasGarageLimitNotification(Runtime.BuyNoticeBaseline)
+            local garageFull, garageText = hasGarageLimitNotification(Runtime.BuyNoticeBaseline)
             if garageFull then
-                Runtime.LastBuyFailReason = GARAGE_LIMIT_TEXT
-                stopForGarageLimit()
+                Runtime.LastBuyFailReason = garageText or GARAGE_LIMIT_TEXT
+                showGarageLimitWarning()
                 return true
             end
 
             local noMoney, text = hasNotEnoughMoneyNotification(Runtime.BuyNoticeBaseline)
             if noMoney then
-
                 Runtime.LastBuyFailReason = text or NOT_ENOUGH_MONEY_TEXT
-                setStatus("Cannot buy this car — trying another")
+                setStatus("Not enough currency — trying another car")
                 return true
             end
         end
@@ -1559,7 +1538,7 @@ local function checkStageAbortFromHud(expectedStage, actionAttempted)
     return false
 end
 
-local function clickGuiButton(button)
+clickGuiButton = function(button)
     if not button or not button.Parent then return false end
 
     local fired = false
@@ -1831,7 +1810,7 @@ local function waitForPurchasedVehicle(model, runToken)
     Runtime.CurrentVehicleName = vehicleName
     Runtime.LastBuyFailReason = nil
     Runtime.BuyNoticeBaseline = snapshotNotificationTextObjects()
-    setStage("Buying", "Buying car: " .. tostring(vehicleName) .. " " .. tostring(getPercentFilterText()))
+    setStage("Buying", "Buying car: " .. tostring(vehicleName) .. " " .. tostring(Runtime.SelectText))
 
     local function pressBuyDetector()
         if not canContinue(runToken) or not sameStage("Buying") then return end
@@ -1864,13 +1843,17 @@ local function waitForPurchasedVehicle(model, runToken)
         return nil, Runtime.LastBuyFailReason or reason or "buy_failed"
     end
 
-    local buyFailed, text, failKind = waitForBuyFailureNotification(Runtime.BuyNoticeBaseline, BUY_FAIL_SCAN_TIME)
+    local buyFailed, failText, failKind = waitForBuyFailureNotification(Runtime.BuyNoticeBaseline, BUY_FAIL_SCAN_TIME)
     if buyFailed then
-        Runtime.LastBuyFailReason = text or NOT_ENOUGH_MONEY_TEXT
-        if failKind == "garage_limit" then
-            stopForGarageLimit()
-            return nil, GARAGE_LIMIT_TEXT
+        Runtime.LastBuyFailReason = failText or NOT_ENOUGH_MONEY_TEXT
+
+        if failKind == "garage_limit" or isGarageLimitText(Runtime.LastBuyFailReason) then
+            closeConfirmationSoft()
+            showGarageLimitWarning()
+            return nil, Runtime.LastBuyFailReason
         end
+
+        closeConfirmationSoft()
         setStatus("Not enough currency — trying another car")
         return nil, Runtime.LastBuyFailReason
     end
@@ -1905,7 +1888,7 @@ local function acquireJunkyardVehicle(runToken)
 
     while canContinue(runToken) and attempts < BUY_MAX_TARGET_ATTEMPTS do
         attempts += 1
-        setStage("FindingCar", "Finding car " .. tostring(getPercentFilterText()))
+        setStage("FindingCar", "Finding car " .. tostring(Runtime.SelectText))
 
         local target = findBestJunkyardVehicle(ignoredNames)
         if not target then
@@ -1938,10 +1921,6 @@ local function acquireJunkyardVehicle(runToken)
             setStatus("Seat failed — trying another car")
             task.wait(0.5)
         else
-            if buyReason == GARAGE_LIMIT_TEXT or not canContinue(runToken) then
-                return nil, buyReason or "Stopped"
-            end
-
             ignoredNames[target.Name] = true
             Runtime.CurrentVehicleName = nil
             setStatus("Buy failed — trying another car")
@@ -3642,8 +3621,8 @@ gui.Parent        = PG
 gui.Enabled       = not Runtime.AntiAfkEnabled
 
 local main = Instance.new("Frame")
-main.Size             = UDim2.new(0, 410, 0, 450)
-main.Position         = UDim2.new(0.5, -205, 0.5, -225)
+main.Size             = UDim2.new(0, 460, 0, 455)
+main.Position         = UDim2.new(0.5, -230, 0.5, -220)
 main.BackgroundColor3 = Color3.fromRGB(24, 24, 27)
 main.BorderSizePixel  = 0
 main.Active           = true
@@ -3829,7 +3808,7 @@ statusLbl.TextWrapped     = true
 statusLbl.Parent          = statusPanel
 
 local settingsPanel = Instance.new("Frame")
-settingsPanel.Size             = UDim2.new(1, -32, 0, 146)
+settingsPanel.Size             = UDim2.new(1, -32, 0, 130)
 settingsPanel.Position         = UDim2.new(0, 16, 0, 238)
 settingsPanel.BackgroundColor3 = Color3.fromRGB(31, 31, 35)
 settingsPanel.BorderSizePixel  = 0
@@ -3849,7 +3828,7 @@ selectTitle.TextXAlignment  = Enum.TextXAlignment.Left
 selectTitle.Parent          = settingsPanel
 
 local selectButton = Instance.new("TextButton")
-selectButton.Size             = UDim2.new(0, 142, 0, 30)
+selectButton.Size             = UDim2.new(0, 176, 0, 30)
 selectButton.Position         = UDim2.new(0, 14, 0, 42)
 selectButton.BackgroundColor3 = Color3.fromRGB(44, 44, 50)
 selectButton.BorderSizePixel  = 0
@@ -3863,8 +3842,8 @@ selectButton.Parent           = settingsPanel
 Instance.new("UICorner", selectButton).CornerRadius = UDim.new(0, 10)
 
 local selectMenu = Instance.new("Frame")
-selectMenu.Size             = UDim2.new(0, 142, 0, 284)
-selectMenu.Position         = UDim2.new(0, 14, 0, 76)
+selectMenu.Size             = UDim2.new(0, 216, 0, 334)
+selectMenu.Position         = UDim2.new(0, 30, 0, 312)
 selectMenu.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
 selectMenu.BorderSizePixel  = 0
 selectMenu.Visible          = false
@@ -3873,21 +3852,99 @@ selectMenu.Parent           = main
 
 Instance.new("UICorner", selectMenu).CornerRadius = UDim.new(0, 12)
 
-local selectMenuLayout = Instance.new("UIListLayout")
-selectMenuLayout.SortOrder = Enum.SortOrder.LayoutOrder
-selectMenuLayout.Padding = UDim.new(0, 4)
-selectMenuLayout.Parent = selectMenu
+Runtime.SelectScroll = Instance.new("ScrollingFrame")
+Runtime.SelectScroll.Size                  = UDim2.new(1, -16, 0, 218)
+Runtime.SelectScroll.Position              = UDim2.new(0, 8, 0, 8)
+Runtime.SelectScroll.BackgroundTransparency= 1
+Runtime.SelectScroll.BorderSizePixel       = 0
+Runtime.SelectScroll.CanvasSize            = UDim2.new(0, 0, 0, 0)
+Runtime.SelectScroll.ScrollBarThickness    = 3
+Runtime.SelectScroll.ZIndex                = 31
+Runtime.SelectScroll.Parent                = selectMenu
 
-local selectMenuPad = Instance.new("UIPadding")
-selectMenuPad.PaddingTop = UDim.new(0, 8)
-selectMenuPad.PaddingBottom = UDim.new(0, 8)
-selectMenuPad.PaddingLeft = UDim.new(0, 8)
-selectMenuPad.PaddingRight = UDim.new(0, 8)
-selectMenuPad.Parent = selectMenu
+Runtime.SelectLayout = Instance.new("UIListLayout")
+Runtime.SelectLayout.SortOrder = Enum.SortOrder.LayoutOrder
+Runtime.SelectLayout.Padding = UDim.new(0, 4)
+Runtime.SelectLayout.Parent = Runtime.SelectScroll
+
+Runtime.Add(Runtime.SelectLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    Runtime.SelectScroll.CanvasSize = UDim2.new(0, 0, 0, Runtime.SelectLayout.AbsoluteContentSize.Y + 8)
+end))
+
+Runtime.CustomRangeBox = Instance.new("Frame")
+Runtime.CustomRangeBox.Size             = UDim2.new(1, -16, 0, 96)
+Runtime.CustomRangeBox.Position         = UDim2.new(0, 8, 0, 230)
+Runtime.CustomRangeBox.BackgroundColor3 = Color3.fromRGB(27, 27, 32)
+Runtime.CustomRangeBox.BorderSizePixel  = 0
+Runtime.CustomRangeBox.ZIndex           = 31
+Runtime.CustomRangeBox.Parent           = selectMenu
+
+Instance.new("UICorner", Runtime.CustomRangeBox).CornerRadius = UDim.new(0, 10)
+
+Runtime.RangeTitle = Instance.new("TextLabel")
+Runtime.RangeTitle.Size                   = UDim2.new(1, -16, 0, 18)
+Runtime.RangeTitle.Position               = UDim2.new(0, 8, 0, 7)
+Runtime.RangeTitle.BackgroundTransparency = 1
+Runtime.RangeTitle.Text                   = "Custom Range"
+Runtime.RangeTitle.TextColor3             = Color3.fromRGB(210, 210, 218)
+Runtime.RangeTitle.Font                   = Enum.Font.GothamSemibold
+Runtime.RangeTitle.TextSize               = 11
+Runtime.RangeTitle.TextXAlignment         = Enum.TextXAlignment.Left
+Runtime.RangeTitle.ZIndex                 = 32
+Runtime.RangeTitle.Parent                 = Runtime.CustomRangeBox
+
+Runtime.PercentMinBox = Instance.new("TextBox")
+Runtime.PercentMinBox.Size             = UDim2.new(0.5, -11, 0, 28)
+Runtime.PercentMinBox.Position         = UDim2.new(0, 8, 0, 30)
+Runtime.PercentMinBox.BackgroundColor3 = Color3.fromRGB(42, 42, 48)
+Runtime.PercentMinBox.BorderSizePixel  = 0
+Runtime.PercentMinBox.ClearTextOnFocus = false
+Runtime.PercentMinBox.PlaceholderText  = "Min"
+Runtime.PercentMinBox.Text             = formatPercentNumber(Runtime.SelectMin or 0)
+Runtime.PercentMinBox.TextColor3       = Color3.fromRGB(245, 245, 248)
+Runtime.PercentMinBox.PlaceholderColor3= Color3.fromRGB(135, 135, 145)
+Runtime.PercentMinBox.Font             = Enum.Font.GothamSemibold
+Runtime.PercentMinBox.TextSize         = 12
+Runtime.PercentMinBox.ZIndex           = 32
+Runtime.PercentMinBox.Parent           = Runtime.CustomRangeBox
+
+Instance.new("UICorner", Runtime.PercentMinBox).CornerRadius = UDim.new(0, 8)
+
+Runtime.PercentMaxBox = Instance.new("TextBox")
+Runtime.PercentMaxBox.Size             = UDim2.new(0.5, -11, 0, 28)
+Runtime.PercentMaxBox.Position         = UDim2.new(0.5, 3, 0, 30)
+Runtime.PercentMaxBox.BackgroundColor3 = Color3.fromRGB(42, 42, 48)
+Runtime.PercentMaxBox.BorderSizePixel  = 0
+Runtime.PercentMaxBox.ClearTextOnFocus = false
+Runtime.PercentMaxBox.PlaceholderText  = "Max"
+Runtime.PercentMaxBox.Text             = formatPercentNumber(Runtime.SelectMax or Runtime.SelectThreshold or 50)
+Runtime.PercentMaxBox.TextColor3       = Color3.fromRGB(245, 245, 248)
+Runtime.PercentMaxBox.PlaceholderColor3= Color3.fromRGB(135, 135, 145)
+Runtime.PercentMaxBox.Font             = Enum.Font.GothamSemibold
+Runtime.PercentMaxBox.TextSize         = 12
+Runtime.PercentMaxBox.ZIndex           = 32
+Runtime.PercentMaxBox.Parent           = Runtime.CustomRangeBox
+
+Instance.new("UICorner", Runtime.PercentMaxBox).CornerRadius = UDim.new(0, 8)
+
+Runtime.PercentApplyBtn = Instance.new("TextButton")
+Runtime.PercentApplyBtn.Size             = UDim2.new(1, -16, 0, 26)
+Runtime.PercentApplyBtn.Position         = UDim2.new(0, 8, 0, 64)
+Runtime.PercentApplyBtn.BackgroundColor3 = Color3.fromRGB(52, 52, 60)
+Runtime.PercentApplyBtn.BorderSizePixel  = 0
+Runtime.PercentApplyBtn.AutoButtonColor  = false
+Runtime.PercentApplyBtn.Text             = "Apply Range"
+Runtime.PercentApplyBtn.TextColor3       = Color3.fromRGB(245, 245, 248)
+Runtime.PercentApplyBtn.Font             = Enum.Font.GothamSemibold
+Runtime.PercentApplyBtn.TextSize         = 12
+Runtime.PercentApplyBtn.ZIndex           = 32
+Runtime.PercentApplyBtn.Parent           = Runtime.CustomRangeBox
+
+Instance.new("UICorner", Runtime.PercentApplyBtn).CornerRadius = UDim.new(0, 8)
 
 local repair100Title = Instance.new("TextLabel")
 repair100Title.Size            = UDim2.new(0, 90, 0, 22)
-repair100Title.Position        = UDim2.new(0, 166, 0, 10)
+repair100Title.Position        = UDim2.new(0, 210, 0, 10)
 repair100Title.BackgroundTransparency = 1
 repair100Title.Text            = "Repair 100%"
 repair100Title.TextColor3      = Color3.fromRGB(220, 220, 228)
@@ -3898,7 +3955,7 @@ repair100Title.Parent          = settingsPanel
 
 local repair100Toggle = Instance.new("TextButton")
 repair100Toggle.Size             = UDim2.new(0, 60, 0, 30)
-repair100Toggle.Position         = UDim2.new(0, 166, 0, 42)
+repair100Toggle.Position         = UDim2.new(0, 210, 0, 42)
 repair100Toggle.BackgroundColor3 = Color3.fromRGB(58, 58, 64)
 repair100Toggle.Text             = ""
 repair100Toggle.AutoButtonColor  = false
@@ -3945,79 +4002,17 @@ espKnob.Parent           = espToggle
 
 Instance.new("UICorner", espKnob).CornerRadius = UDim.new(1, 0)
 
-local rangeTitle = Instance.new("TextLabel")
-rangeTitle.Size            = UDim2.new(0, 170, 0, 18)
-rangeTitle.Position        = UDim2.new(0, 14, 0, 84)
-rangeTitle.BackgroundTransparency = 1
-rangeTitle.Text            = "Custom Purchase Range (%)"
-rangeTitle.TextColor3      = Color3.fromRGB(220, 220, 228)
-rangeTitle.Font            = Enum.Font.GothamSemibold
-rangeTitle.TextSize        = 12
-rangeTitle.TextXAlignment  = Enum.TextXAlignment.Left
-rangeTitle.Parent          = settingsPanel
-
-local minBox = Instance.new("TextBox")
-minBox.Size             = UDim2.new(0, 70, 0, 30)
-minBox.Position         = UDim2.new(0, 14, 0, 108)
-minBox.BackgroundColor3 = Color3.fromRGB(44, 44, 50)
-minBox.BorderSizePixel  = 0
-minBox.ClearTextOnFocus = false
-minBox.PlaceholderText  = "Min"
-minBox.Text             = tostring(Runtime.PercentMin or 0)
-minBox.TextColor3       = Color3.fromRGB(245, 245, 248)
-minBox.PlaceholderColor3 = Color3.fromRGB(140, 140, 150)
-minBox.Font             = Enum.Font.GothamSemibold
-minBox.TextSize         = 12
-minBox.Parent           = settingsPanel
-Instance.new("UICorner", minBox).CornerRadius = UDim.new(0, 10)
-
-local maxBox = Instance.new("TextBox")
-maxBox.Size             = UDim2.new(0, 70, 0, 30)
-maxBox.Position         = UDim2.new(0, 92, 0, 108)
-maxBox.BackgroundColor3 = Color3.fromRGB(44, 44, 50)
-maxBox.BorderSizePixel  = 0
-maxBox.ClearTextOnFocus = false
-maxBox.PlaceholderText  = "Max"
-maxBox.Text             = tostring(Runtime.PercentMax or Runtime.SelectThreshold or 50)
-maxBox.TextColor3       = Color3.fromRGB(245, 245, 248)
-maxBox.PlaceholderColor3 = Color3.fromRGB(140, 140, 150)
-maxBox.Font             = Enum.Font.GothamSemibold
-maxBox.TextSize         = 12
-maxBox.Parent           = settingsPanel
-Instance.new("UICorner", maxBox).CornerRadius = UDim.new(0, 10)
-
-local rangeHelp = Instance.new("TextLabel")
-rangeHelp.Size            = UDim2.new(1, -184, 0, 30)
-rangeHelp.Position        = UDim2.new(0, 174, 0, 108)
-rangeHelp.BackgroundTransparency = 1
-rangeHelp.Text            = "Example: 0-50 or 1-50"
-rangeHelp.TextColor3      = Color3.fromRGB(155, 155, 165)
-rangeHelp.Font            = Enum.Font.Gotham
-rangeHelp.TextSize        = 11
-rangeHelp.TextXAlignment  = Enum.TextXAlignment.Left
-rangeHelp.TextWrapped     = true
-rangeHelp.Parent          = settingsPanel
-
-local function updatePercentBoxes()
-    minBox.Text = tostring(Runtime.PercentMin or 0)
-    maxBox.Text = tostring(Runtime.PercentMax or Runtime.SelectThreshold or 50)
-end
-
-local function applyRangeFromBoxes()
-    local a1, b1 = parsePercentRangeText(minBox.Text)
-    local a2, b2 = parsePercentRangeText(maxBox.Text)
-
-    if a1 and b1 then
-        applyPercentRange(a1, b1, true)
-    elseif a2 and b2 then
-        applyPercentRange(a2, b2, true)
-    else
-        applyPercentRange(a1 or Runtime.PercentMin or 0, a2 or Runtime.PercentMax or Runtime.SelectThreshold or 50, true)
-    end
-
-    updatePercentBoxes()
-    setStatus("Purchase range: " .. getPercentFilterText())
-end
+Runtime.FilterHint = Instance.new("TextLabel")
+Runtime.FilterHint.Size                   = UDim2.new(1, -28, 0, 28)
+Runtime.FilterHint.Position               = UDim2.new(0, 14, 0, 88)
+Runtime.FilterHint.BackgroundTransparency = 1
+Runtime.FilterHint.Text                   = "Tip: open Select Type (%) to use Min / Max range, e.g. 0-50 or 1-50."
+Runtime.FilterHint.TextColor3             = Color3.fromRGB(145, 145, 155)
+Runtime.FilterHint.Font                   = Enum.Font.Gotham
+Runtime.FilterHint.TextSize               = 11
+Runtime.FilterHint.TextWrapped            = true
+Runtime.FilterHint.TextXAlignment         = Enum.TextXAlignment.Left
+Runtime.FilterHint.Parent                 = settingsPanel
 
 local function updateEspToggle()
     local on = Runtime.CarEspEnabled
@@ -4041,6 +4036,12 @@ end
 
 local function updateSelectButton()
     selectButton.Text = Runtime.SelectText
+    if Runtime.PercentMinBox then
+        Runtime.PercentMinBox.Text = formatPercentNumber(Runtime.SelectMin or 0)
+    end
+    if Runtime.PercentMaxBox then
+        Runtime.PercentMaxBox.Text = formatPercentNumber(Runtime.SelectMax or Runtime.SelectThreshold or 50)
+    end
 end
 
 local function updateMovementButton()
@@ -4084,7 +4085,7 @@ end))
 
 for index, option in ipairs(JUNKYARD_SELECT_OPTIONS) do
     local opt = Instance.new("TextButton")
-    opt.Size             = UDim2.new(1, 0, 0, 26)
+    opt.Size             = UDim2.new(1, -2, 0, 24)
     opt.BackgroundColor3 = Color3.fromRGB(36, 36, 42)
     opt.BorderSizePixel  = 0
     opt.AutoButtonColor  = false
@@ -4094,21 +4095,15 @@ for index, option in ipairs(JUNKYARD_SELECT_OPTIONS) do
     opt.TextSize         = 12
     opt.LayoutOrder      = index
     opt.ZIndex           = 31
-    opt.Parent           = selectMenu
+    opt.Parent           = Runtime.SelectScroll
 
     Instance.new("UICorner", opt).CornerRadius = UDim.new(0, 8)
 
     Runtime.Add(opt.MouseButton1Click:Connect(function()
-        Runtime.SelectThreshold = option.Value
-        Runtime.SelectText = option.Text
-        if not Runtime.CustomPercentRangeEnabled then
-            applyPercentRange(0, option.Value, false)
-            updatePercentBoxes()
-        end
+        applySelectRangeValues(0, option.Value, option.Text)
         updateSelectButton()
         selectMenu.Visible = false
-        syncKaitunSetting("Select Type (%)", option.Text)
-        setStatus("Selected car type: " .. getPercentFilterText())
+        setStatus("Selected car range: " .. option.Text)
     end))
 end
 
@@ -4117,8 +4112,22 @@ Runtime.Add(selectButton.MouseButton1Click:Connect(function()
     movementMenu.Visible = false
 end))
 
-Runtime.Add(minBox.FocusLost:Connect(applyRangeFromBoxes))
-Runtime.Add(maxBox.FocusLost:Connect(applyRangeFromBoxes))
+Runtime.Add(Runtime.PercentApplyBtn.MouseButton1Click:Connect(function()
+    local minValue, maxValue = parsePercentRangeText(Runtime.PercentMinBox.Text)
+
+    if not minValue or not maxValue then
+        minValue = tonumber(tostring(Runtime.PercentMinBox.Text):match("(%d+%.?%d*)"))
+        maxValue = tonumber(tostring(Runtime.PercentMaxBox.Text):match("(%d+%.?%d*)"))
+    end
+
+    if applySelectRangeValues(minValue, maxValue) then
+        updateSelectButton()
+        selectMenu.Visible = false
+        setStatus("Selected car range: " .. Runtime.SelectText)
+    else
+        setStatus("Invalid range. Example: 0 and 50")
+    end
+end))
 
 Runtime.Add(repair100Toggle.MouseButton1Click:Connect(function()
     Runtime.Repair100Enabled = not Runtime.Repair100Enabled
@@ -4160,6 +4169,8 @@ local function updateToggle()
     end
 end
 
+Runtime.ToggleUpdater = updateToggle
+
 Runtime.Add(toggle.MouseButton1Click:Connect(function()
     local v = not Runtime.Enabled
     setEnabled(v)
@@ -4174,7 +4185,7 @@ end))
 Runtime.Add(miniBtn.MouseButton1Click:Connect(function()
     local small = main.Size.Y.Offset > 60
     TweenService:Create(main, TweenInfo.new(0.2), {
-        Size = small and UDim2.new(0, 410, 0, 48) or UDim2.new(0, 410, 0, 450)
+        Size = small and UDim2.new(0, 460, 0, 48) or UDim2.new(0, 460, 0, 455)
     }):Play()
     card.Visible        = not small
     statusPanel.Visible = not small
@@ -4239,7 +4250,6 @@ updateToggle()
 updateEspToggle()
 updateRepair100Toggle()
 updateSelectButton()
-updatePercentBoxes()
 updateMovementButton()
 
 if Runtime.MovementMode == "Teleport" then
