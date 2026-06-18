@@ -2349,7 +2349,7 @@ sections.MiscQolSection:Toggle({
         if v then
             qot([[
                 task.wait(10)
-                loadstring(game:HttpGet(""))()
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/mabdu21/YWVATBAUBAK-FISH-IT/refs/heads/main/test.ajha_twy.txt.lua"))()
             ]])
         else
             qot("")
