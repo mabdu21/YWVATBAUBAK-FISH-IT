@@ -1,4 +1,4 @@
--- // Script by DYHUB. This project has been sold and is no longer maintained or developed.
+-- // Script by DYHUB. This project has been sold and is no longer maintained or developed. | v517
 local Players        = game:GetService("Players")
 local TweenService   = game:GetService("TweenService")
 local UIS            = game:GetService("UserInputService")
@@ -74,7 +74,7 @@ REPAIR100_REPLACEMENT_PART_SET = {
     Sparkplugs = true,
 }
 TELEPORT_WARNING_TEXT = "Teleport mode is active. Higher ban risk — use carefully."
-REPAIR100_LOCKED_TEXT = "Repair 100% is locked. This feature is available only with the full source-code purchase or the official loader package priced at 200 THB / $23."
+REPAIR100_LOCKED_TEXT = "Repair 100% is locked. This feature is available only with the full source-code purchase or the official loader package priced at 200 THB / $10."
 
 MOVEMENT_MODE_OPTIONS = {"Tween", "Teleport"}
 
