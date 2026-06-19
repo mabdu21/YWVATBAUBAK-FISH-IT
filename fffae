@@ -1,7 +1,7 @@
 -- Powered by nig | v523
 -- =========================
 local version = "Rework"
-local ver     = "v015.22"
+local ver     = "v015.23"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -168,7 +168,7 @@ local settings = {
     -- Generator / Skill
     AutoSkillPerfect  = Config:Get("AutoSkillPerfect", false),
     AutoSkillNeutral  = Config:Get("AutoSkillNeutral", false),
-    AutoGenRepair     = Config:Get("AutoGenRepair",    false),
+    AutoGenRepair     = false, -- startup-safe: do not auto-start generator teleport from saved config
     AutoGenRepairMode = Config:Get("AutoGenRepairMode", "Highest percentage"),
     AutoGenTeleportMode = Config:Get("AutoGenTeleportMode", "Nearest"),
     AutoLeversNoHold  = Config:Get("AutoLeversNoHold",  false),
@@ -273,7 +273,7 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 06/08/2026 | CL: " .. ver,
+    Title = "Update: 06/20/2026 | CL: " .. ver,
     Desc  = [[• [ Premium Only ] God Mode, anti carry & hook.
 • [ Premium Only ] Auto Parry optimized attack-frame lag on PC and mobile.
   • Added Show Parry Range circle under the player.
@@ -290,32 +290,106 @@ Info:Divider()
 local DYHUB_RUNTIME = {}
 
 do
-local TP_TWEEN={Current=nil}
+local TP_TWEEN={Current=nil,StartedAt=0,TimeoutAt=0}
+
+local function runtimeChar()
+    return LocalPlayer.Character
+end
+
 local function runtimeRoot()
-    local c=LocalPlayer.Character
+    local c=runtimeChar()
     return c and (c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("Torso") or c:FindFirstChild("UpperTorso")) or nil
 end
+
+local function runtimeHum()
+    local c=runtimeChar()
+    return c and c:FindFirstChildOfClass("Humanoid") or nil
+end
+
+function DYHUB_RUNTIME.UnlockMovement(reason)
+    local char=runtimeChar()
+    local root=runtimeRoot()
+    local hum=runtimeHum()
+    if root then
+        pcall(function() root.Anchored=false end)
+        pcall(function() root.AssemblyLinearVelocity=Vector3.zero end)
+        pcall(function() root.AssemblyAngularVelocity=Vector3.zero end)
+    end
+    if hum then
+        pcall(function() hum.PlatformStand=false end)
+        pcall(function() hum.Sit=false end)
+        pcall(function() hum.AutoRotate=true end)
+        local state
+        pcall(function() state=hum:GetState() end)
+        if state==Enum.HumanoidStateType.PlatformStanding
+        or state==Enum.HumanoidStateType.Physics
+        or state==Enum.HumanoidStateType.Seated
+        or state==Enum.HumanoidStateType.FallingDown
+        or state==Enum.HumanoidStateType.Ragdoll then
+            pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end)
+        end
+        task.defer(function()
+            if hum and hum.Parent then
+                pcall(function() hum:ChangeState(Enum.HumanoidStateType.Running) end)
+            end
+        end)
+    end
+end
+
+function DYHUB_RUNTIME.UnlockMovementBurst(reason)
+    DYHUB_RUNTIME.UnlockMovement(reason)
+    task.delay(0.08,function() DYHUB_RUNTIME.UnlockMovement(reason) end)
+    task.delay(0.25,function() DYHUB_RUNTIME.UnlockMovement(reason) end)
+    task.delay(0.60,function() DYHUB_RUNTIME.UnlockMovement(reason) end)
+end
+
 function DYHUB_RUNTIME.GetTeleportTweenTime(fromPos,toPos)
     local d=(fromPos-toPos).Magnitude
     return d>450 and 1.5 or 1
 end
+
 function DYHUB_RUNTIME.CancelTeleportTween()
-    if TP_TWEEN.Current then pcall(function() TP_TWEEN.Current:Cancel() end); TP_TWEEN.Current=nil end
+    if TP_TWEEN.Current then
+        pcall(function() TP_TWEEN.Current:Cancel() end)
+        TP_TWEEN.Current=nil
+    end
+    DYHUB_RUNTIME.UnlockMovementBurst("cancel_teleport")
 end
+
 function DYHUB_RUNTIME.TweenToCFrame(cf,duration,onStep,onDone)
     local root=runtimeRoot()
     if not root or not cf then return false end
-    if TP_TWEEN.Current then pcall(function() TP_TWEEN.Current:Cancel() end); TP_TWEEN.Current=nil end
+    if TP_TWEEN.Current then
+        pcall(function() TP_TWEEN.Current:Cancel() end)
+        TP_TWEEN.Current=nil
+    end
+    DYHUB_RUNTIME.UnlockMovement("before_teleport")
     local t=duration or DYHUB_RUNTIME.GetTeleportTweenTime(root.Position,cf.Position)
     t=math.clamp(tonumber(t) or 1,0.15,1.5)
     local conn
-    if onStep then conn=RunService.Heartbeat:Connect(function() pcall(onStep,root) end) end
+    if onStep then
+        conn=RunService.Heartbeat:Connect(function()
+            DYHUB_RUNTIME.UnlockMovement("teleport_step")
+            pcall(onStep,root)
+        end)
+    end
     local tw=TweenService:Create(root,TweenInfo.new(t,Enum.EasingStyle.Quad,Enum.EasingDirection.Out),{CFrame=cf})
     TP_TWEEN.Current=tw
+    TP_TWEEN.StartedAt=os.clock()
+    TP_TWEEN.TimeoutAt=os.clock()+t+0.35
     tw.Completed:Connect(function(state)
-        if conn then conn:Disconnect() end
+        if conn then conn:Disconnect(); conn=nil end
         if TP_TWEEN.Current==tw then TP_TWEEN.Current=nil end
+        DYHUB_RUNTIME.UnlockMovementBurst("after_teleport")
         if state==Enum.PlaybackState.Completed and onDone then pcall(onDone,root) end
+    end)
+    task.delay(t+0.45,function()
+        if TP_TWEEN.Current==tw then
+            pcall(function() tw:Cancel() end)
+            TP_TWEEN.Current=nil
+            if conn then conn:Disconnect(); conn=nil end
+            DYHUB_RUNTIME.UnlockMovementBurst("teleport_timeout")
+        end
     end)
     tw:Play()
     return true,t
@@ -2278,7 +2352,7 @@ local GEN = {
     lastScanAt=0, lastSkillAt=0, lastPickAt=0, lastActiveScanAt=0, lastGuiScanAt=0, lastMoveCheckAt=0,
     cancelDB=false, skillDB=false, repairThread=nil, skillThread=nil, cache={}, pointCache={}, progressCache={},
     cacheDirty=true, invalidateQueued=false, cachedSkillGui=nil, cachedSkillCheck=nil,
-    lastPickGen=nil, lastPickPoint=nil, lastPickDist=math.huge, ignoreMoveUntil=0,
+    lastPickGen=nil, lastPickPoint=nil, lastPickDist=math.huge, ignoreMoveUntil=0, manualMoveUntil=0,
     safeDistance=30, repairRetryDelay=1.05, scanDelay=3.5, pickCooldown=0.45, activeScanDelay=0.55,
     repairLoopDelay=0.22, skillLoopDelay=0.085, guiScanDelay=0.20, nearDistance=9,
     finalCF=CFrame.new(1000,500,1000), finalDone=false, finalHoldPart=nil, finalNotified=false,
@@ -2510,8 +2584,10 @@ local function safeCFrameFromPoint(pointPos, look)
 end
 
 local function safePivotToPoint(pointPos, look, platform, onArrive)
+    if os.clock() < (GEN.manualMoveUntil or 0) then return false end
     local char=LocalPlayer.Character; local root=getRoot(char)
     if not char or not root then return false end
+    pcall(function() if DYHUB_RUNTIME.UnlockMovement then DYHUB_RUNTIME.UnlockMovement("gen_before_teleport") end end)
     local cf=safeCFrameFromPoint(pointPos,look or root.CFrame.LookVector)
     local dur=DYHUB_RUNTIME.GetTeleportTweenTime and DYHUB_RUNTIME.GetTeleportTweenTime(root.Position,cf.Position) or 1
     GEN.isTweening=true; GEN.tweenStartedAt=os.clock(); GEN.tweenTimeout=dur+0.75
@@ -2524,6 +2600,7 @@ local function safePivotToPoint(pointPos, look, platform, onArrive)
         end,function(r)
             GEN.isTweening=false
             if r then GEN.lastRootPos=r.Position; if platform then makePlatform(r.Position) end end
+            pcall(function() if DYHUB_RUNTIME.UnlockMovementBurst then DYHUB_RUNTIME.UnlockMovementBurst("gen_after_teleport") end end)
             if onArrive then onArrive() end
         end)
     end
@@ -2533,6 +2610,7 @@ local function safePivotToPoint(pointPos, look, platform, onArrive)
         task.defer(function()
             local r=getRoot(LocalPlayer.Character)
             if r then GEN.lastRootPos=r.Position; if platform then makePlatform(r.Position) end end
+            pcall(function() if DYHUB_RUNTIME.UnlockMovementBurst then DYHUB_RUNTIME.UnlockMovementBurst("gen_after_pivot") end end)
             if onArrive then onArrive() end
         end)
     end
@@ -2541,6 +2619,7 @@ end
 
 local function holdFinalPosition()
     if not settings.AutoGenRepair or not GEN.finalDone then return end
+    if os.clock() < (GEN.manualMoveUntil or 0) then return end
     local char=LocalPlayer.Character; local root=getRoot(char)
     if not root then return end
     if os.clock()-GEN.finalHoldAt>0.7 or (root.Position-GEN.finalCF.Position).Magnitude>GEN.finalHoldDistance then
@@ -2636,6 +2715,7 @@ local function startRepairOn(gen,point)
 end
 
 local function teleportToGenerator(forceNew)
+    if os.clock() < (GEN.manualMoveUntil or 0) then return false end
     if GEN.isTweening and os.clock()-GEN.tweenStartedAt<GEN.tweenTimeout then return true end
     local char=LocalPlayer.Character; local root=getRoot(char)
     if not root then return false end
@@ -2777,6 +2857,7 @@ end
 
 local function ensureRepair()
     if not settings.AutoGenRepair then return end
+    if os.clock() < (GEN.manualMoveUntil or 0) then return end
     if GEN.finalDone then holdFinalPosition(); return end
     if GEN.isTweening and os.clock()-GEN.tweenStartedAt<GEN.tweenTimeout then return end
     if GEN.isTweening then GEN.isTweening=false end
@@ -2955,7 +3036,15 @@ UserInputService.InputBegan:Connect(function(input,gpe)
         [Enum.KeyCode.W]=true,[Enum.KeyCode.A]=true,[Enum.KeyCode.S]=true,[Enum.KeyCode.D]=true,
         [Enum.KeyCode.Up]=true,[Enum.KeyCode.Down]=true,[Enum.KeyCode.Left]=true,[Enum.KeyCode.Right]=true,[Enum.KeyCode.Space]=true,
     }
-    if moveKeys[input.KeyCode] and isRepairValid() and os.clock()>=GEN.ignoreMoveUntil and not getSkillCheck(false) then cancelRepair("move") end
+    if moveKeys[input.KeyCode] and os.clock()>=GEN.ignoreMoveUntil and not getSkillCheck(false) then
+        GEN.manualMoveUntil=os.clock()+1.35
+        if GEN.isTweening then
+            GEN.isTweening=false
+            pcall(function() if DYHUB_RUNTIME.CancelTeleportTween then DYHUB_RUNTIME.CancelTeleportTween() end end)
+        end
+        if isRepairValid() then cancelRepair("move") end
+        pcall(function() if DYHUB_RUNTIME.UnlockMovementBurst then DYHUB_RUNTIME.UnlockMovementBurst("gen_player_move") end end)
+    end
 end)
 
 startSkillWatchdog()
@@ -4571,6 +4660,8 @@ end
 local function safePivot(cf)
     local char=LocalPlayer.Character; local root=getRoot()
     if not char or not root or not cf then return false end
+    pcall(function() if DYHUB_RUNTIME.CancelTeleportTween then DYHUB_RUNTIME.CancelTeleportTween() end end)
+    pcall(function() if DYHUB_RUNTIME.UnlockMovement then DYHUB_RUNTIME.UnlockMovement("tab_before_teleport") end end)
     local target=cf.Position+Vector3.new(0,3,0); local dir=target-root.Position
     if dir.Magnitude>6 then
         local hit=Workspace:Raycast(root.Position,dir,getRayParams())
@@ -4578,10 +4669,13 @@ local function safePivot(cf)
     end
     local ncf=CFrame.new(target,target+cf.LookVector)
     if DYHUB_RUNTIME.TweenToCFrame then
-        local ok=DYHUB_RUNTIME.TweenToCFrame(ncf,nil)
+        local ok=DYHUB_RUNTIME.TweenToCFrame(ncf,nil,nil,function()
+            pcall(function() if DYHUB_RUNTIME.UnlockMovementBurst then DYHUB_RUNTIME.UnlockMovementBurst("tab_after_teleport") end end)
+        end)
         if ok then return true end
     end
     pcall(function() char:PivotTo(ncf) end)
+    pcall(function() if DYHUB_RUNTIME.UnlockMovementBurst then DYHUB_RUNTIME.UnlockMovementBurst("tab_after_pivot") end end)
     return true
 end
 
