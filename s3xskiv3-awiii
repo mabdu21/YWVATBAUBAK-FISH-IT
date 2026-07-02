@@ -1,0 +1,4035 @@
+repeat task.wait() until game:IsLoaded()
+
+local RunService        = game:GetService("RunService")
+local Workspace         = game:GetService("Workspace")
+local Lighting          = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService  = game:GetService("UserInputService")
+local Players           = game:GetService("Players")
+local HttpService       = game:GetService("HttpService")
+local StarterGui        = game:GetService("StarterGui")
+local TeleportService   = game:GetService("TeleportService")
+local TweenService      = game:GetService("TweenService")
+local VirtualUser       = game:GetService("VirtualUser")
+local VIM               = game:GetService("VirtualInputManager")
+
+if getgenv().DYHUBAW3_Running then
+    getgenv().DYHUBAW3_Running = false
+end
+
+if getgenv().DYHUBAW3_Window then
+    pcall(function() getgenv().DYHUBAW3_Window:Destroy() end)
+    getgenv().DYHUBAW3_Window = nil
+end
+
+local Players_ = game:GetService("Players")
+local CoreGui_ = game:GetService("CoreGui")
+pcall(function()
+    local old = CoreGui_:FindFirstChild("AW3ToggleGui")
+    if old then old:Destroy() end
+end)
+pcall(function()
+    local old = Players_.LocalPlayer.PlayerGui:FindFirstChild("AW3ToggleGui")
+    if old then old:Destroy() end
+end)
+
+task.wait(0.2)
+
+getgenv().DYHUBAW3_Running = true
+
+local function isRunning()
+    return getgenv().DYHUBAW3_Running == true
+end
+
+if game.PlaceId ~= 18923620224 then
+    warn("Failed to load: This script only supports Anime Warriors III")
+    return
+end
+
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+if not WindUI then return end
+
+-- ============================================================
+--  SERVICES
+-- ============================================================
+local Svc = {
+    Players             = game:GetService("Players"),
+    Workspace           = game:GetService("Workspace"),
+    ReplicatedStorage   = game:GetService("ReplicatedStorage"),
+    TeleportService     = game:GetService("TeleportService"),
+    VirtualUser         = game:GetService("VirtualUser"),
+    VirtualInputManager = game:GetService("VirtualInputManager"),
+    TweenService        = game:GetService("TweenService"),
+    UserInputService    = game:GetService("UserInputService"),
+    CoreGui             = game:GetService("CoreGui"),
+    HttpService         = game:GetService("HttpService"),
+    GuiService          = game:GetService("GuiService"),
+}
+
+local RS  = Svc.ReplicatedStorage
+local WS  = Svc.Workspace
+
+local player        = Svc.Players.LocalPlayer
+local PlayerGui     = player:WaitForChild("PlayerGui")
+local EnemiesFolder = WS:WaitForChild("World"):WaitForChild("Enemies")
+
+-- ============================================================
+--  SAVE CONFIG
+-- ============================================================
+local CONFIG_FOLDER = "DYHUB"
+local CONFIG_FILE   = "DYHUB/AW3_config.json"
+
+local Options = {
+    ToggleUIKey          = "K",
+    AntiAFK              = false,
+    AutoRejoin           = false,
+    SelectedEggName      = "Nemak",
+    SelectedBossNames    = {},
+    SelectedEnemyNames   = {},
+    AutoFarm             = false,
+    AutoFarmBoss         = false,
+    AutoEgg              = false,
+    AutoEquip            = false,
+    AutoWeapon           = false,
+    AutoSendUnit         = false,
+    SendAllUnits         = false,
+    NoRetreat            = false,
+    AutoGauntlet         = false,
+    AutoSelectCard       = false,
+    AutoLeaveGauntlet    = false,
+    GauntletMaxFloor     = 6,
+    CardPriorityList     = {},
+    SelectedQuestId      = "",
+    AutoQuest            = false,
+    GauntletTeamSlot     = "1",
+    RaidTeamSlot         = "1",
+    ActiveRaids          = {},
+    AutoRaid             = false,
+    AutoFollowCart       = false,
+    ReplayTier           = "Tier 1 - Common",
+    AutoEscortStart      = false,
+    AutoEscortReplay     = false,
+    AutoEscortAccept     = false,
+    AutoJoinEscort       = false,
+    SelectedEscortMap    = "Journeys End",
+    AutoInfiltration     = false,
+    InfiltName           = "Rain Village",
+    InfiltPath           = "I",
+    InfiltTeamSlot       = "1",
+    -- Invasion
+    AutoInvasion         = false,
+    AutoJoinInvasion     = false,
+    AutoAcceptInvasion   = false,   -- [NEW] Auto Accept Invasion
+    AutoInvasionCard     = false,
+    InvasionCardPriority = {},
+    InvasionTeamSlot     = "1",
+    AutoInvasionReplay   = false,
+    AutoStandBarricade   = false,
+    AutoDigSummer = false,
+}
+
+local function SaveConfig()
+    pcall(function()
+        if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+        writefile(CONFIG_FILE, Svc.HttpService:JSONEncode(Options))
+    end)
+end
+
+local function LoadConfig()
+    pcall(function()
+        if isfile(CONFIG_FILE) then
+            local data = Svc.HttpService:JSONDecode(readfile(CONFIG_FILE))
+            for k, v in pairs(data) do Options[k] = v end
+        end
+    end)
+end
+
+LoadConfig()
+
+-- ============================================================
+--  REMOTES
+-- ============================================================
+local RemoContainer = RS
+    :WaitForChild("rbxts_include")
+    :WaitForChild("node_modules")
+    :WaitForChild("@rbxts")
+    :WaitForChild("remo")
+    :WaitForChild("src")
+    :WaitForChild("container")
+
+local Remote = {
+    SendUnit           = RemoContainer:WaitForChild("enemies.sendAndRetreat"),
+    OpenEgg            = RemoContainer:WaitForChild("eggs.open"),
+    UnequipAll         = RemoContainer:WaitForChild("warriors.unequipAll"),
+    EquipBest          = RemoContainer:WaitForChild("warriors.equipBest"),
+    SetState           = RemoContainer:WaitForChild("automation.setState"),
+    SettingsSet        = RemoContainer:WaitForChild("settings.set"),
+    ToolbarEquip       = RemoContainer:WaitForChild("toolbar.equip"),
+    GauntletCreate     = RemoContainer:WaitForChild("gauntlet.create"),
+    LobbiesStart       = RemoContainer:WaitForChild("lobbies.start"),
+    LobbiesJoin        = RemoContainer:WaitForChild("lobbies.join"),
+    GauntletCards      = RemoContainer:WaitForChild("gauntlet.displayCards"),
+    GauntletVote       = RemoContainer:WaitForChild("gauntlet.voteCard"),
+    GauntletClear      = RemoContainer:WaitForChild("gauntlet.clearButton"),
+    QuestClaim         = RemoContainer:WaitForChild("quests.claimPart"),
+    BossRaidCreate     = RemoContainer:WaitForChild("bossRaids.create"),
+    BossRaidLeave      = RemoContainer:WaitForChild("bossRaids.leaveRaid"),
+    TeamsLoad          = RemoContainer:WaitForChild("warriors.teams.load"),
+    EscortReplay       = RemoContainer:WaitForChild("escorts.replay"),
+    EscortAcceptReplay = RemoContainer:WaitForChild("escorts.acceptReplay"),
+    EscortCreate       = RemoContainer:WaitForChild("escorts.create"),
+    InfiltCreate       = RemoContainer:WaitForChild("infiltration.create"),
+    GauntletLeave      = RemoContainer:FindFirstChild("gauntlet.leaveGauntlet")
+                      or RemoContainer:FindFirstChild("gauntlet.leave")
+                      or RemoContainer:FindFirstChild("lobbies.leave")
+                      or RemoContainer:FindFirstChild("gauntlet.quit"),
+    -- Invasion
+    InvasionCreate     = RemoContainer:FindFirstChild("invasions.create"),
+    InvasionLeave      = RemoContainer:FindFirstChild("invasions.leave")
+                      or RemoContainer:FindFirstChild("lobbies.leave"),
+    InvasionCards      = RemoContainer:FindFirstChild("invasions.displayCards")
+                      or RemoContainer:FindFirstChild("gauntlet.displayCards"),
+    InvasionVote       = RemoContainer:FindFirstChild("invasions.voteCard")
+                      or RemoContainer:FindFirstChild("gauntlet.voteCard"),
+    InvasionReplay     = RemoContainer:FindFirstChild("invasions.replay"),
+    TreasureHuntDig = RemoContainer:FindFirstChild("treasureHunt.dig"),
+}
+
+-- ============================================================
+--  STATE
+-- ============================================================
+local State = {
+    isAutoFarm           = false,
+    isAutoSnipeBoss      = false,
+    isAutoEgg            = false,
+    isDoingEgg           = false,
+    isAutoWeapon         = false,
+    isAutoEquip          = false,
+    isAutoQuest          = false,
+    lastFarmCFrame       = nil,
+    savedFarmCFrame      = nil,
+    preGauntletCFrame    = nil,
+    isGauntletFarm       = false,
+    isGauntletAutoCard   = false,
+    isGauntletAutoLeave  = false,
+    isCardSelecting      = false,
+    pauseForGauntlet     = false,
+    gauntletRunning      = false,
+    gauntletMaxFloor     = Options.GauntletMaxFloor or 6,
+    cardPriorityList     = Options.CardPriorityList or {},
+    isFollowingCart      = false,
+    isAutoEscortStart    = Options.AutoEscortStart  or false,
+    isAutoEscortReplay   = Options.AutoEscortReplay or false,
+    isAutoEscortAccept   = Options.AutoEscortAccept or false,
+    isAutoJoinEscort     = Options.AutoJoinEscort   or false,
+    isAutoRaidEnabled    = Options.AutoRaid or false,
+    isQueueRunning       = false,
+    isAutoInfiltration   = Options.AutoInfiltration or false,
+    selectedEnemyNames   = Options.SelectedEnemyNames or {},
+    selectedBossNames    = Options.SelectedBossNames  or {},
+    selectedEggName      = Options.SelectedEggName    or "Nemak",
+    selectedQuestId      = Options.SelectedQuestId    or "",
+    selectedEscortMap    = Options.SelectedEscortMap  or "Journeys End",
+    selectedReplayTier   = Options.ReplayTier         or "Tier 1 - Common",
+    selectedInfiltName   = Options.InfiltName         or "Rain Village",
+    selectedInfiltPath   = Options.InfiltPath         or "I",
+    gauntletTeamSlot     = Options.GauntletTeamSlot or "1",
+    raidTeamSlot         = Options.RaidTeamSlot     or "1",
+    infiltTeamSlot       = Options.InfiltTeamSlot   or "1",
+    -- Invasion
+    isAutoInvasion        = Options.AutoInvasion      or false,
+    isAutoJoinInvasion    = Options.AutoJoinInvasion  or false,
+    isAutoAcceptInvasion  = Options.AutoAcceptInvasion or false,  -- [NEW]
+    isAutoInvasionCard    = Options.AutoInvasionCard  or false,
+    invasionCardPriority  = Options.InvasionCardPriority or {},
+    invasionTeamSlot      = Options.InvasionTeamSlot  or "1",
+    isInvasionCardSel     = false,
+    isAutoInvasionReplay  = Options.AutoInvasionReplay or false,
+    isStandingBarricade   = Options.AutoStandBarricade or false,
+    isAutoDigSummer = Options.AutoDigSummer or false,
+
+}
+
+-- ============================================================
+--  THREADS
+-- ============================================================
+local Thread = {
+    cartFollow      = nil,
+    escortStart     = nil,
+    escortReplay    = nil,
+    escortAccept    = nil,
+    escortJoin      = nil,
+    queueRunner     = nil,
+    infiltration    = nil,
+    invasion        = nil,
+    invasionJoin    = nil,
+    invasionAccept  = nil,   
+    invasionReplay  = nil,
+    standBarricade  = nil,
+    digSummer = nil,
+}
+
+-- ============================================================
+--  DATA
+-- ============================================================
+local Data = {
+    RaidConfig          = {},
+    RaidNamesList       = {},
+    RaidStates          = {},
+    RaidCooldowns       = {},
+    RaidNoPortal        = {},
+    WorldsData          = {},
+    QuestData           = {},
+    QuestLabelMap       = {},
+    EscortConfig        = {},
+    EscortNamesList     = {},
+    InfiltrationContent = {},
+    ALL_CARDS           = {},
+    CARD_WEIGHTS        = {},
+    EggsFolder          = RS:WaitForChild("Assets"):WaitForChild("Eggs"),
+    -- Invasion
+    INVASION_CARDS      = {
+        "Overflowing Wealth",
+        "Battle Momentum",
+        "Boss Killer",
+        "Warrior Blessing",
+        "Warrior Reinforcement",
+        "Barricade Repair",
+        "Espionage",
+    },
+    INVASION_NAME       = "Dark Matter Invasion",
+}
+
+-- ============================================================
+--  CONSTANTS
+-- ============================================================
+local CONST = {
+    TEAM_SLOTS           = {"1","2","3","4","5","6","7","8"},
+    RAID_MAX_RANGE       = 1000,
+    RAID_COOLDOWN_SEC    = 20 * 60,
+    ESCORT_LOOP_INTERVAL = 20,
+    INFILT_PATHS         = {"I","II","III"},
+    INFILT_ENEMY_RANGE   = 1000,
+    TIER_NAMES           = {"common","rare","epic","legendary","mythical"},
+    TIER_LABELS          = {
+        "Tier 1 - Common","Tier 2 - Rare","Tier 3 - Epic",
+        "Tier 4 - Legendary","Tier 5 - Mythical",
+    },
+    BOSS_LIST = {
+        "Genyu","Freeze","Freeze (2nd)","Android 17",
+        "Cel (Prime)","Super Cel (Prime)","Gurra",
+        "Orochi (Disguised)","Orochi","Ohem","Enil","Enil (Storm)",
+        "Pride (Summer)","Pride V2 (Summer)","Pride V3 (The One)",
+    },
+    RAID_PORTAL_PATHS = {
+        ["Desert Kingdom"]  = {"Sky Island",   "Components","Portal","sign","SurfaceGui","TextLabel"},
+        ["Clan Hideout"]    = {"Sand Village", "Components","Portal","sign","SurfaceGui","TextLabel"},
+        ["Destroyed Nemak"] = {"Planet Nemak", "Components","Portal","sign","SurfaceGui","TextLabel"},
+        ["Red Ribbon Base"] = {"Future City",  "Components","Portal","sign","SurfaceGui","TextLabel"},
+    },
+}
+
+-- ============================================================
+--  INIT
+-- ============================================================
+pcall(function()
+    Remote.SettingsSet:FireServer("enemy_render_distance", "2500 Studs")
+end)
+
+for _, name in ipairs(Options.ActiveRaids or {}) do
+    Data.RaidStates[name] = true
+end
+
+-- ============================================================
+--  UTIL HELPERS
+-- ============================================================
+local function isGuiActuallyVisible(obj)
+    local cur = obj
+    while cur and cur ~= PlayerGui and cur ~= Svc.CoreGui do
+        if cur:IsA("GuiObject") and not cur.Visible then return false end
+        if cur:IsA("ScreenGui") and not cur.Enabled then return false end
+        cur = cur.Parent
+    end
+    return true
+end
+
+local function clickObject(obj)
+    local inset = Svc.GuiService:GetGuiInset()
+    local cx = obj.AbsolutePosition.X + obj.AbsoluteSize.X / 2 + inset.X
+    local cy = obj.AbsolutePosition.Y + obj.AbsoluteSize.Y / 2 + inset.Y
+    Svc.VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true,  game, 1)
+    task.wait(0.05)
+    Svc.VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
+end
+
+local function findJoinButton()
+    for _, obj in ipairs(PlayerGui:GetDescendants()) do
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+            local ok, txt = pcall(function() return obj.Text end)
+            if ok and string.lower(txt or "") == "join" then
+                local vis = false
+                pcall(function()
+                    if obj.Visible and obj.Parent and obj.Parent.Visible and obj.AbsoluteSize.X > 0 then
+                        vis = true
+                    end
+                end)
+                if vis then return obj end
+            end
+        end
+    end
+    return nil
+end
+
+local function getInstanceCFrame(inst)
+    if not inst then return nil end
+    if inst:IsA("BasePart") then return inst.CFrame end
+    if inst:IsA("Model") then
+        local ok, cf = pcall(function() return inst:GetPivot() end)
+        if ok and cf then return cf end
+        if inst.PrimaryPart then return inst.PrimaryPart.CFrame end
+    end
+    for _, c in ipairs(inst:GetDescendants()) do
+        if c:IsA("BasePart") then return c.CFrame end
+    end
+    return nil
+end
+
+local function loadTeam(slot)
+    pcall(function() Remote.TeamsLoad:FireServer(tostring(slot)) end)
+end
+
+local function getTierString(label)
+    for i, l in ipairs(CONST.TIER_LABELS) do
+        if l == label then return CONST.TIER_NAMES[i] end
+    end
+    return "common"
+end
+
+local function startAutoInvasionReplay()
+    if Thread.invasionReplay then
+        pcall(function() task.cancel(Thread.invasionReplay) end)
+        Thread.invasionReplay = nil
+    end
+    Thread.invasionReplay = task.spawn(function()
+        while State.isAutoInvasionReplay and isRunning() do
+            pcall(function()
+                if Remote.InvasionReplay then
+                    Remote.InvasionReplay:InvokeServer()
+                end
+            end)
+            task.wait(20)
+        end
+    end)
+end
+
+local function stopAutoInvasionReplay()
+    State.isAutoInvasionReplay = false
+    if Thread.invasionReplay then
+        pcall(function() task.cancel(Thread.invasionReplay) end)
+        Thread.invasionReplay = nil
+    end
+end
+
+-- ============================================================
+--  AUTO ACCEPT INVASION  [NEW]
+-- ============================================================
+local function startAutoAcceptInvasion()
+    if Thread.invasionAccept then
+        pcall(function() task.cancel(Thread.invasionAccept) end)
+        Thread.invasionAccept = nil
+    end
+    Thread.invasionAccept = task.spawn(function()
+        while State.isAutoAcceptInvasion and isRunning() do
+            local btn = findJoinButton()
+            if btn then
+                clickObject(btn)
+                task.wait(2)
+            else
+                task.wait(0.5)
+            end
+        end
+    end)
+end
+
+local function stopAutoAcceptInvasion()
+    State.isAutoAcceptInvasion = false
+    if Thread.invasionAccept then
+        pcall(function() task.cancel(Thread.invasionAccept) end)
+        Thread.invasionAccept = nil
+    end
+end
+local function startAutoDigSummer()
+    if Thread.digSummer then
+        pcall(function() task.cancel(Thread.digSummer) end)
+        Thread.digSummer = nil
+    end
+    Thread.digSummer = task.spawn(function()
+        local slot = 1
+        while State.isAutoDigSummer and isRunning() do
+            pcall(function()
+                if Remote.TreasureHuntDig then
+                    Remote.TreasureHuntDig:InvokeServer(slot)
+                end
+            end)
+            slot += 1
+            if slot > 49 then slot = 1 end
+            task.wait(0.5)
+        end
+    end)
+end
+
+local function stopAutoDigSummer()
+    State.isAutoDigSummer = false
+    if Thread.digSummer then
+        pcall(function() task.cancel(Thread.digSummer) end)
+        Thread.digSummer = nil
+    end
+end
+-- ============================================================
+--  POSITION HELPERS
+-- ============================================================
+local function updateLastFarmPosition()
+    local char = player.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then State.lastFarmCFrame = hrp.CFrame end
+end
+
+local function getBestReturnCFrame()
+    return State.lastFarmCFrame or State.savedFarmCFrame
+end
+
+local function savePositionBeforeGauntlet()
+    local char = player.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        State.preGauntletCFrame = hrp.CFrame
+        WindUI:Notify({
+            Title    = "Position Saved",
+            Content  = string.format("Saved (%.0f, %.0f, %.0f) before Gauntlet",
+                hrp.Position.X, hrp.Position.Y, hrp.Position.Z),
+            Duration = 4,
+        })
+    end
+end
+
+local function restorePositionAfterGauntlet()
+    if not State.preGauntletCFrame then return end
+    local char = player.Character or player.CharacterAdded:Wait()
+    local hrp  = char and char:WaitForChild("HumanoidRootPart", 5)
+    if hrp then
+        hrp.CFrame = State.preGauntletCFrame
+        hrp.AssemblyLinearVelocity  = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        WindUI:Notify({
+            Title    = "Returned to Farm",
+            Content  = string.format("Back to (%.0f, %.0f, %.0f)",
+                State.preGauntletCFrame.Position.X,
+                State.preGauntletCFrame.Position.Y,
+                State.preGauntletCFrame.Position.Z),
+            Duration = 4,
+        })
+    end
+end
+
+-- ============================================================
+--  ENEMY HELPERS
+-- ============================================================
+local function getEnemyCFrame(entity)
+    if not entity then return nil end
+    local hrp = entity:FindFirstChild("HumanoidRootPart")
+    if hrp then return hrp.CFrame end
+    if entity:IsA("Model") then
+        if entity.PrimaryPart then return entity.PrimaryPart.CFrame end
+        local ok, cf = pcall(function() return entity:GetPivot() end)
+        if ok then return cf end
+    elseif entity:IsA("BasePart") then
+        return entity.CFrame
+    end
+    for _, c in ipairs(entity:GetDescendants()) do
+        if c.Name == "HumanoidRootPart" and c:IsA("BasePart") then return c.CFrame end
+    end
+    for _, c in ipairs(entity:GetDescendants()) do
+        if c:IsA("BasePart") then return c.CFrame end
+    end
+    return nil
+end
+
+local function isEnemyAlive(enemy)
+    if enemy:GetAttribute("dead") == true then return false end
+    local h = enemy:FindFirstChildOfClass("Humanoid")
+    if h and h.Health <= 0 then return false end
+    return true
+end
+
+local function getMyUnits()
+    local units = {}
+    local wf = WS:FindFirstChild("World") and WS.World:FindFirstChild("Warriors")
+    if wf then
+        for _, w in ipairs(wf:GetChildren()) do
+            if w:GetAttribute("Owner") == player.Name or w.Name == player.Name then
+                if w.Name == player.Name then
+                    for _, c in ipairs(w:GetChildren()) do table.insert(units, c.Name) end
+                else
+                    table.insert(units, w.Name)
+                end
+            end
+        end
+    end
+    return units
+end
+
+local function teleportUnitsTo(targetCF)
+    local wf = WS:FindFirstChild("World") and WS.World:FindFirstChild("Warriors")
+    if not wf then return end
+    for _, w in ipairs(wf:GetChildren()) do
+        if w:GetAttribute("Owner") == player.Name or w.Name == player.Name then
+            if w.Name == player.Name then
+                for _, c in ipairs(w:GetChildren()) do
+                    if c:IsA("Model") then pcall(function() c:PivotTo(targetCF) end) end
+                end
+            else
+                if w:IsA("Model") then pcall(function() w:PivotTo(targetCF) end) end
+            end
+        end
+    end
+end
+
+local function getEnemyRealName(enemy)
+    local ui = PlayerGui:FindFirstChild("enemy-overhead-" .. enemy.Name)
+    if ui then
+        local f = ui:FindFirstChild("Frame")
+        local l = f and f:FindFirstChild("TextLabel")
+        if l and l.Text ~= "" then return l.Text end
+    end
+    return enemy.Name
+end
+
+local function getAvailableEnemyNames()
+    local names, seen = {}, {}
+    if not EnemiesFolder then return names end
+    for _, e in ipairs(EnemiesFolder:GetChildren()) do
+        if e:GetAttribute("dead") == true then continue end
+        local ui = PlayerGui:FindFirstChild("enemy-overhead-" .. e.Name)
+        if ui and ui:FindFirstChild("Frame") and ui.Frame:FindFirstChild("TextLabel") then
+            local n = ui.Frame.TextLabel.Text
+            if n and n ~= "" and not seen[n] then seen[n] = true table.insert(names, n) end
+        end
+    end
+    table.sort(names)
+    return names
+end
+
+local function getTargetEnemy(nameToFind)
+    if not EnemiesFolder then return nil end
+    for _, e in ipairs(EnemiesFolder:GetChildren()) do
+        if e:GetAttribute("dead") == true then continue end
+        local ui = PlayerGui:FindFirstChild("enemy-overhead-" .. e.Name)
+        if ui and ui:FindFirstChild("Frame") and ui.Frame:FindFirstChild("TextLabel") then
+            if ui.Frame.TextLabel.Text == nameToFind then return e end
+        end
+    end
+    return nil
+end
+
+local function getEnemyRealNameSimple(entity)
+    local overheadUI = PlayerGui:FindFirstChild("enemy-overhead-" .. entity.Name)
+    if overheadUI and overheadUI:FindFirstChild("Frame") and overheadUI.Frame:FindFirstChild("TextLabel") then
+        local t = overheadUI.Frame.TextLabel.Text
+        if t and t ~= "" then return t end
+    end
+    return entity.Name
+end
+
+local function findEnemyMulti(nameList)
+    if not EnemiesFolder then return nil end
+    local allow = {}
+    for _, n in ipairs(nameList) do allow[n] = true end
+    local myPos = (player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        and player.Character.HumanoidRootPart.Position) or Vector3.zero
+    local best, bestDist = nil, math.huge
+    for _, e in ipairs(EnemiesFolder:GetChildren()) do
+        if e:GetAttribute("dead") == true then continue end
+        local ui = PlayerGui:FindFirstChild("enemy-overhead-" .. e.Name)
+        if ui and ui:FindFirstChild("Frame") and ui.Frame:FindFirstChild("TextLabel") then
+            local rn = ui.Frame.TextLabel.Text
+            if next(allow) == nil or allow[rn] then
+                local cf = getEnemyCFrame(e)
+                if cf then
+                    local d = (cf.Position - myPos).Magnitude
+                    if d < bestDist then bestDist = d best = e end
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function findNearestAnyEnemy()
+    local wf = WS:FindFirstChild("World") and WS.World:FindFirstChild("Enemies")
+    if not wf then return nil end
+    local myPos = (player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        and player.Character.HumanoidRootPart.Position) or Vector3.zero
+    local best, bestDist = nil, math.huge
+    for _, e in ipairs(wf:GetChildren()) do
+        if e:GetAttribute("dead") == true then continue end
+        local cf = getEnemyCFrame(e)
+        if cf then
+            local d = (cf.Position - myPos).Magnitude
+            if d < bestDist then bestDist = d best = e end
+        end
+    end
+    return best
+end
+
+local function findNearestEnemyInRange(range)
+    local char  = player.Character
+    local hrp   = char and char:FindFirstChild("HumanoidRootPart")
+    local myPos = hrp and hrp.Position or Vector3.zero
+    local best, bestDist = nil, math.huge
+    local enemiesFolder = WS:FindFirstChild("World") and WS.World:FindFirstChild("Enemies")
+    if not enemiesFolder then return nil end
+    for _, e in ipairs(enemiesFolder:GetChildren()) do
+        if e:GetAttribute("dead") == true then continue end
+        local h = e:FindFirstChildOfClass("Humanoid")
+        if not h or h.Health <= 0 then continue end
+        local cf = getEnemyCFrame(e)
+        if not cf then continue end
+        local d = (cf.Position - myPos).Magnitude
+        if d <= range and d < bestDist then
+            bestDist = d
+            best     = e
+        end
+    end
+    return best
+end
+
+local function attackTarget(target, allowListGetter, maxSeconds)
+    local lastActionTick = 0
+    local startTick       = tick()
+    maxSeconds             = maxSeconds or 25
+
+    while (State.isAutoFarm or State.isAutoSnipeBoss) and target and target.Parent do
+        if target:GetAttribute("dead") == true then break end
+        if State.pauseForGauntlet then break end
+        if tick() - startTick > maxSeconds then break end
+
+        if allowListGetter then
+            local allowList = allowListGetter()
+            if allowList and #allowList > 0 then
+                local realName = getEnemyRealNameSimple(target)
+                local stillAllowed = false
+                for _, n in ipairs(allowList) do
+                    if n == realName then stillAllowed = true break end
+                end
+                if not stillAllowed then break end
+            end
+        end
+
+        local char      = player.Character
+        local hrp       = char and char:FindFirstChild("HumanoidRootPart")
+        local myUnits   = getMyUnits()
+        local targetPos = getEnemyCFrame(target)
+        if targetPos then
+            if hrp then
+                hrp.CFrame = targetPos * CFrame.new(0, 5, 0)
+                hrp.AssemblyLinearVelocity = Vector3.zero
+                State.lastFarmCFrame = hrp.CFrame
+            end
+            if tick() - lastActionTick >= 0.2 then
+                lastActionTick = tick()
+                teleportUnitsTo(targetPos)
+                pcall(function() Remote.SendUnit:FireServer(target.Name, myUnits) end)
+            end
+        end
+        task.wait()
+    end
+end
+
+-- ============================================================
+--  EGG HELPERS
+-- ============================================================
+local function getEggNames()
+    local names = {}
+    if Data.EggsFolder then
+        for _, e in ipairs(Data.EggsFolder:GetChildren()) do table.insert(names, e.Name) end
+        table.sort(names)
+    end
+    return names
+end
+
+local function getEggCFrame(eggName)
+    local asset = Data.EggsFolder and Data.EggsFolder:FindFirstChild(eggName)
+    if asset then
+        local ok, cf = pcall(function() return asset:GetPivot() end)
+        if ok and cf then return cf end
+        if asset.PrimaryPart then return asset.PrimaryPart.CFrame end
+    end
+    local wf = WS:FindFirstChild("World")
+    if wf then
+        for _, d in ipairs(wf:GetDescendants()) do
+            if d.Name == eggName then
+                if d:IsA("Model") then
+                    if d.PrimaryPart then return d.PrimaryPart.CFrame end
+                    local ok, cf = pcall(function() return d:GetPivot() end)
+                    if ok then return cf end
+                elseif d:IsA("BasePart") then
+                    return d.CFrame
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- ============================================================
+--  QUEST HELPERS
+-- ============================================================
+local function buildQuestLabelMap()
+    Data.QuestLabelMap = {}
+    local ids = {}
+    for id in pairs(Data.QuestData) do table.insert(ids, id) end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+        local q = Data.QuestData[id]
+        if q and q.parts then
+            for pi, part in ipairs(q.parts) do
+                local label = part.title or (id .. " Part " .. pi)
+                if Data.QuestLabelMap[label] then
+                    label = label .. " (" .. (q.title or id) .. ")"
+                end
+                Data.QuestLabelMap[label] = { questId = id, partIndex = pi }
+            end
+        end
+    end
+end
+
+task.spawn(function()
+    local ok, mod = pcall(function()
+        return require(RS:WaitForChild("src"):WaitForChild("common")
+            :WaitForChild("content"):WaitForChild("world"):WaitForChild("quests"))
+    end)
+    if ok and mod and mod.questsContent then
+        Data.QuestData = mod.questsContent
+        buildQuestLabelMap()
+    end
+end)
+
+local function getQuestList()
+    local entries = {}
+    local ids = {}
+    for id in pairs(Data.QuestData) do table.insert(ids, id) end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+        local q = Data.QuestData[id]
+        if q and q.parts then
+            for pi, part in ipairs(q.parts) do
+                local label = part.title or (id .. " Part " .. pi)
+                table.insert(entries, label)
+            end
+        end
+    end
+    if #entries == 0 then entries = {"(No quests found)"} end
+    return entries
+end
+
+local function getQuestInfoFromLabel(label)
+    local info = Data.QuestLabelMap[label]
+    if not info then return nil, nil, {} end
+    local q = Data.QuestData[info.questId]
+    if not q or not q.parts then return nil, nil, {} end
+    local part = q.parts[info.partIndex]
+    if not part or not part.tasks then return nil, nil, {} end
+    local tasks = {}
+    for _, t in ipairs(part.tasks) do
+        if t.tracker == "enemy-kills" and t.enemy then
+            table.insert(tasks, { enemy = t.enemy, required = t.required or 1 })
+        end
+    end
+    return info.questId, info.partIndex, tasks
+end
+
+local function findQuestNPC(questId)
+    local NPC_NAMES = {
+        PlanetNemak       = {"Carrot","Quest Giver","NPC"},
+        FutureCity        = {"Rosha","Master Rosha","Quest Giver","NPC"},
+        SandVillage       = {"Kokoshi","Quest Giver","NPC"},
+        SkyIslandQuest    = {"Robin","Quest Giver","NPC"},
+        SingularityQuest  = {"Singularity","Quest Giver","NPC"},
+        SingularityQuest2 = {"Singularity","Quest Giver","NPC"},
+        KokoshiWaystone   = {"Kokoshi","Quest Giver","NPC"},
+        RobinWaystone     = {"Robin","Quest Giver","NPC"},
+        CarrotWaystone    = {"Carrot","Quest Giver","NPC"},
+        RoshaWaystone     = {"Rosha","Master Rosha","Quest Giver","NPC"},
+    }
+    if not Data.QuestData[questId] then return nil end
+    local world = WS:FindFirstChild("World")
+    if not world then return nil end
+    local targets = NPC_NAMES[questId] or {"Quest Giver","NPC"}
+    local function searchIn(folder)
+        for _, obj in ipairs(folder:GetChildren()) do
+            for _, name in ipairs(targets) do
+                if obj.Name:lower():find(name:lower()) then return obj end
+            end
+            if obj:IsA("Folder") or obj:IsA("Model") then
+                local found = searchIn(obj)
+                if found then return found end
+            end
+        end
+        return nil
+    end
+    return searchIn(world)
+end
+
+local function goToNPCAndClaim(questId)
+    local npc = findQuestNPC(questId)
+    if npc then
+        local char = player.Character
+        local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local cf
+            if npc:IsA("Model") then
+                if npc.PrimaryPart then cf = npc.PrimaryPart.CFrame
+                else pcall(function() cf = npc:GetPivot() end) end
+            elseif npc:IsA("BasePart") then cf = npc.CFrame end
+            if cf then
+                hrp.CFrame = cf * CFrame.new(0, 0, 3)
+                hrp.AssemblyLinearVelocity = Vector3.zero
+                task.wait(0.5)
+            end
+        end
+    end
+    task.wait(0.3)
+    local ok = pcall(function() return Remote.QuestClaim:InvokeServer(questId) end)
+    if not ok then pcall(function() Remote.QuestClaim:FireServer(questId) end) end
+    task.wait(1)
+end
+
+-- ============================================================
+--  WORLD DATA
+-- ============================================================
+pcall(function()
+    local mod = require(RS:WaitForChild("src"):WaitForChild("common")
+        :WaitForChild("content"):WaitForChild("world"):WaitForChild("worlds"))
+    if mod and mod.worldsContent then Data.WorldsData = mod.worldsContent end
+end)
+
+if next(Data.WorldsData) == nil then
+    Data.WorldsData = {
+        ["Planet Nemak"] = { displayName="Planet Nemak", order=1,
+            eggs={"Nemak"}, raids={"Destroyed Nemak"},
+            enemies={normal={"Dodo","Carbon","Barta","Jays"}, miniBoss={"Genyu"}, boss={"Freeze"}} },
+        ["Future City"]  = { displayName="Future City",  order=2,
+            eggs={"Corps"}, raids={"Red Ribbon Base"},
+            enemies={normal={"Cel Jr.","Android 19","Android 20","Android 18"}, miniBoss={"Android 17"}, boss={"Cel (Prime)"}} },
+        ["Sand Village"] = { displayName="Sand Village", order=3,
+            eggs={"Ninja"}, raids={"Clan Hideout"},
+            enemies={normal={"Sand Ninja","Sand Elder","Puppeteer","Temmuri"}, miniBoss={"Gurra"}, boss={"Orochi (Disguised)"}} },
+        ["Sky Island"]   = { displayName="Sky Island",   order=4,
+            eggs={"Sky"},   raids={"Desert Kingdom"},
+            enemies={normal={"Sky Guard","Saturn","Geda","Shuri"}, miniBoss={"Ohem"}, boss={"Enil"}} },
+        ["Summer Isles"] = { displayName="Summer Isles", order=6,
+            eggs={}, raids={"Sunshine Raid"},
+            enemies={
+                normal   = {"Kisamy (Summer)","Ranji (Summer)"},
+                miniBoss = {},
+                boss     = {"Pride (Summer)","Pride V2 (Summer)","Pride V3 (The One)"},
+            }
+        },
+    }
+end
+
+local function getWorldNames()
+    local t = {}
+    for name, d in pairs(Data.WorldsData) do
+        table.insert(t, {name=d.displayName or name, order=d.order or 999})
+    end
+    table.sort(t, function(a,b) return a.order < b.order end)
+    local r = {}
+    for _, e in ipairs(t) do table.insert(r, e.name) end
+    return r
+end
+
+-- ============================================================
+--  ESCORT / TIER
+-- ============================================================
+pcall(function()
+    local mod = require(RS:WaitForChild("src"):WaitForChild("common")
+        :WaitForChild("content"):WaitForChild("gamemodes"):WaitForChild("escorts"))
+    local content = mod and (mod.escortsContent or mod)
+    if content then
+        for name, d in pairs(content) do
+            if type(name) == "string" and type(d) == "table" then
+                Data.EscortConfig[name] = d
+                table.insert(Data.EscortNamesList, name)
+            end
+        end
+    end
+end)
+table.sort(Data.EscortNamesList)
+if #Data.EscortNamesList == 0 then Data.EscortNamesList = {"Journeys End"} end
+if not table.find(Data.EscortNamesList, State.selectedEscortMap) then
+    State.selectedEscortMap = Data.EscortNamesList[1]
+end
+
+-- ============================================================
+--  RAID DATA
+-- ============================================================
+local function loadRaidModule()
+    local newCfg, newNames, newNoPortal = {}, {}, {}
+    local ok, mod = pcall(function()
+        return require(RS:WaitForChild("src"):WaitForChild("common")
+            :WaitForChild("content"):WaitForChild("gamemodes"):WaitForChild("raids"))
+    end)
+    if ok and mod and mod.raidsContent then
+        for rn, d in pairs(mod.raidsContent) do
+            local cfg = d.config or {}
+            newCfg[rn] = {light=cfg.lightEnemy or {}, tank=cfg.tankEnemy, boss=cfg.bossEnemy}
+            if d.noPortal then newNoPortal[rn] = true end
+            table.insert(newNames, rn)
+        end
+    end
+    local fallback = {
+        ["Destroyed Nemak"] = {light={"Barta","Jays"},         tank=nil, boss=nil},
+        ["Red Ribbon Base"]  = {light={"Plasma"},               tank=nil, boss=nil},
+        ["Clan Hideout"]     = {light={"Itochi (Crow)"},        tank=nil, boss=nil},
+        ["Desert Kingdom"]   = {light={"Matsui","Ibiboro"},     tank="Water Tank", boss=nil},
+        ["Sunshine Raid"]    = {light={"Kisamy (Summer)","Ranji (Summer)"}, tank=nil, boss=nil},
+    }
+    local fallbackNoPortal = { ["Sunshine Raid"] = true }
+    for name, cfg in pairs(fallback) do
+        if not newCfg[name] then
+            newCfg[name] = cfg
+            table.insert(newNames, name)
+        end
+    end
+    for name, v in pairs(fallbackNoPortal) do
+        if newNoPortal[name] == nil then newNoPortal[name] = v end
+    end
+    table.sort(newNames)
+    Data.RaidConfig    = newCfg
+    Data.RaidNamesList = newNames
+    Data.RaidNoPortal  = newNoPortal
+end
+loadRaidModule()
+
+local function ensureRaidConfig(raidName)
+    if not Data.RaidConfig[raidName] then
+        Data.RaidConfig[raidName] = {light={}, tank=nil, boss=nil}
+    end
+end
+
+-- ============================================================
+--  INFILTRATION DATA
+-- ============================================================
+pcall(function()
+    local mod = require(RS:WaitForChild("src"):WaitForChild("common")
+        :WaitForChild("content"):WaitForChild("gamemodes"):WaitForChild("infiltration"))
+    Data.InfiltrationContent = mod.infiltrationContent or {}
+end)
+
+if not Data.InfiltrationContent["Rain Village"] then
+    Data.InfiltrationContent["Rain Village"] = {
+        sections = {
+            {waveEnemies={light={"Abusu","Hecate","Gunna"}, heavy={"Demon"}}, miniboss={id="Deva"}},
+            {waveEnemies={light={"Spirit","Instinct","Enlightenment"}, heavy={"Deva"}}, miniboss={id="Demon"}},
+            {waveEnemies={"Instinct","Enlightenment","Demon"}, miniboss={id="Demon"}},
+            {waveEnemies={"Instinct","Enlightenment","Demon"}},
+        },
+        boss = {config={lightEnemy={"Instinct","Enlightenment","Demon"}}},
+        paths = {
+            I   = {keyId="Demonic Key", keyAmount=1, killDropMultiplier=1,  completionDropMultiplier=1},
+            II  = {keyId="Demonic Key", keyAmount=3, killDropMultiplier=2,  completionDropMultiplier=2},
+            III = {keyId="Demonic Key", keyAmount=5, killDropMultiplier=3,  completionDropMultiplier=3},
+        }
+    }
+end
+
+-- ============================================================
+--  GAUNTLET DATA
+-- ============================================================
+pcall(function()
+    local mod = require(RS:WaitForChild("src"):WaitForChild("common")
+        :WaitForChild("content"):WaitForChild("gamemodes"):WaitForChild("gauntlet"))
+    local pool = mod and mod.gauntletContent and mod.gauntletContent["Normal"] and mod.gauntletContent["Normal"].cardsPool
+    if pool then
+        local seen = {}
+        for name, w in pairs(pool) do
+            local base = name:gsub("%s+[IVX]+$","")
+            if not seen[base] then
+                seen[base] = true
+                table.insert(Data.ALL_CARDS, base)
+                Data.CARD_WEIGHTS[base] = w
+            end
+        end
+        table.sort(Data.ALL_CARDS)
+    end
+end)
+
+if #Data.ALL_CARDS == 0 then
+    Data.ALL_CARDS = {
+        "All or Nothing","Battle Momentum","Boss Killer","Cursed Greed",
+        "Elite Calling","Endless Horde","Fate Rewrite","Glass Cannon",
+        "Kingslayer","Lucky Blessing","Overflowing Wealth","Path of the Conqueror",
+        "Reinforcements","Sacrificial Offering","Time Rush","Warrior Blessing",
+    }
+end
+
+-- ============================================================
+--  RAID PORTAL HELPERS
+-- ============================================================
+local function getRaidPortalLabel(raidName)
+    local parts = CONST.RAID_PORTAL_PATHS[raidName]
+    if not parts then return nil end
+    local map = WS:WaitForChild("World",3):FindFirstChild("Map")
+    if not map then return nil end
+    local node = map
+    for _, p in ipairs(parts) do
+        node = node:FindFirstChild(p)
+        if not node then return nil end
+    end
+    return node
+end
+
+local function getRaidPortalCFrame(raidName)
+    local parts = CONST.RAID_PORTAL_PATHS[raidName]
+    if not parts then return nil end
+    local map = WS:WaitForChild("World", 3):FindFirstChild("Map")
+    if not map then return nil end
+    local node = map
+    for i = 1, math.min(4, #parts) do
+        node = node:FindFirstChild(parts[i])
+        if not node then node = nil break end
+    end
+    local cf = node and getInstanceCFrame(node)
+    if cf then return cf end
+    node = map
+    for i = 1, math.min(3, #parts) do
+        node = node:FindFirstChild(parts[i])
+        if not node then node = nil break end
+    end
+    cf = node and getInstanceCFrame(node)
+    if cf then return cf end
+    local worldName = parts[1]
+    local locations = WS:FindFirstChild("World")
+        and WS.World:FindFirstChild("Teleports")
+        and WS.World.Teleports:FindFirstChild("Locations")
+    local worldLocation = locations and worldName and locations:FindFirstChild(worldName)
+    cf = worldLocation and getInstanceCFrame(worldLocation)
+    if cf then return cf end
+    local labelNode = getRaidPortalLabel(raidName)
+    while labelNode do
+        cf = getInstanceCFrame(labelNode)
+        if cf then return cf end
+        labelNode = labelNode.Parent
+    end
+    return nil
+end
+
+local function teleportToRaidPortal(raidName)
+    local cf = getRaidPortalCFrame(raidName)
+    if not cf then return false end
+    local char = player.Character or player.CharacterAdded:Wait()
+    local hrp  = char and char:WaitForChild("HumanoidRootPart", 3)
+    if not hrp then return false end
+    local targetPos = cf.Position + Vector3.new(0, 5, 8)
+    hrp.CFrame = CFrame.lookAt(targetPos, cf.Position)
+    hrp.AssemblyLinearVelocity  = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
+    return true
+end
+
+local function getRaidStatusFromPortal(raidName)
+    local node = getRaidPortalLabel(raidName)
+    if not node then return nil end
+    local text = (node.Text or ""):gsub("<[^>]+>",""):gsub("^%s+",""):gsub("%s+$","")
+    return text:match("[^\n]+$") or text
+end
+
+local function getRaidCDFromStatus(status)
+    if type(status) ~= "string" then return nil end
+    local low = status:lower()
+    if not low:find("open in") then return nil end
+    local m, s = low:match("(%d+)%s*:%s*(%d+)")
+    if m and s then return (tonumber(m) or 0)*60 + (tonumber(s) or 0) end
+    local sec = low:match("open in:%s*(%d+)")
+    if sec then return tonumber(sec) end
+    return nil
+end
+
+local function isRaidOpen(raidName)
+    if not CONST.RAID_PORTAL_PATHS[raidName] then return true end
+    local ok, res = pcall(function()
+        local plain = getRaidStatusFromPortal(raidName)
+        if not plain then return nil end
+        if plain:lower():find("open in") then return false end
+        return plain:match("%f[%a]Open%f[%A]") ~= nil
+    end)
+    if ok and res ~= nil then return res end
+    return false
+end
+
+local function checkRaidOpenAtPortal(raidName)
+    if Data.RaidNoPortal[raidName] then
+        WindUI:Notify({
+            Title   = string.format("[%s] No Portal", raidName),
+            Content = "noPortal raid — joining directly!",
+            Duration = 3,
+        })
+        return true, "Open", nil, true
+    end
+    local teleported = false
+    pcall(function() teleported = teleportToRaidPortal(raidName) end)
+    task.wait(0.75)
+    local status, open = "?", false
+    for _ = 1, 8 do
+        status = getRaidStatusFromPortal(raidName) or "?"
+        open   = isRaidOpen(raidName)
+        if open or status ~= "?" then break end
+        task.wait(0.5)
+    end
+    return open, status, getRaidCDFromStatus(status), teleported
+end
+
+local function isRaidContinueVisible()
+    for _, rg in ipairs({PlayerGui, Svc.CoreGui}) do
+        for _, g in ipairs(rg:GetDescendants()) do
+            if (g:IsA("TextLabel") or g:IsA("TextButton")) and g.Visible and isGuiActuallyVisible(g) then
+                if tostring(g.Text or ""):lower():find("continue",1,true) then return true end
+            end
+        end
+    end
+    return false
+end
+
+-- ============================================================
+--  RAID ENEMY HELPERS
+-- ============================================================
+local function getAllRaidEnemies()
+    local res = {}
+    local char = player.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+    local myPos = hrp and hrp.Position or Vector3.zero
+    local wf = WS:FindFirstChild("World") and WS.World:FindFirstChild("Enemies")
+    if wf then
+        for _, e in ipairs(wf:GetChildren()) do
+            if not isEnemyAlive(e) then continue end
+            local cf = getEnemyCFrame(e)
+            if cf then
+                local d = (cf.Position - myPos).Magnitude
+                if d <= CONST.RAID_MAX_RANGE then
+                    table.insert(res, {obj=e, dist=d, realName=getEnemyRealName(e)})
+                end
+            end
+        end
+    end
+    table.sort(res, function(a,b) return a.dist < b.dist end)
+    return res
+end
+
+local function findRaidEnemyByName(name)
+    local wf = WS:FindFirstChild("World") and WS.World:FindFirstChild("Enemies")
+    if not wf then return nil end
+    local char = player.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+    local myPos = hrp and hrp.Position or Vector3.zero
+    local nl = name:lower()
+    local best, bestDist = nil, math.huge
+    for _, e in ipairs(wf:GetChildren()) do
+        if not isEnemyAlive(e) then continue end
+        local cf = getEnemyCFrame(e)
+        if not cf then continue end
+        local d = (cf.Position - myPos).Magnitude
+        if d > CONST.RAID_MAX_RANGE then continue end
+        local rn = getEnemyRealName(e):lower()
+        if rn:find(nl,1,true) or nl:find(rn,1,true) then
+            if d < bestDist then bestDist = d best = e end
+        end
+    end
+    return best
+end
+
+local function pickRaidTarget(raidName)
+    ensureRaidConfig(raidName)
+    local cfg = Data.RaidConfig[raidName]
+    local all = getAllRaidEnemies()
+    local function findByName(n)
+        local nl = n:lower()
+        for _, e in ipairs(all) do
+            if e.realName:lower():find(nl,1,true) or nl:find(e.realName:lower(),1,true) then
+                return e.obj
+            end
+        end
+        return nil
+    end
+    for _, ln in ipairs(cfg.light) do
+        local e = findByName(ln)
+        if e then return e, "light" end
+    end
+    if cfg.tank then
+        local e = findByName(cfg.tank)
+        if e then return e, "tank" end
+    end
+    if cfg.boss then
+        local e = findByName(cfg.boss)
+        if e then return e, "boss" end
+    end
+    if all[1] then return all[1].obj, "boss" end
+    return nil, nil
+end
+
+-- ============================================================
+--  RAID RUNNER
+-- ============================================================
+local function runSingleRaid(raidName, isActiveFunc)
+    ensureRaidConfig(raidName)
+    local cfg       = Data.RaidConfig[raidName]
+    local raidStart = tick()
+    local noETimer  = 0
+    local lastPhase = nil
+    local phaseDesc = #cfg.light > 0 and ("Light: "..table.concat(cfg.light,", ")) or ""
+    if cfg.tank then phaseDesc = phaseDesc..(phaseDesc~=""and" → "or"").."Tank: "..cfg.tank end
+    phaseDesc = phaseDesc..(phaseDesc~=""and" → "or"").."Boss"
+    WindUI:Notify({Title=string.format("[%s] Started",raidName), Content=phaseDesc, Duration=4})
+
+    while isActiveFunc() do
+        if State.pauseForGauntlet then
+            break
+        end
+        if isRaidContinueVisible() then
+            break
+        end
+        if tick()-raidStart > 900 then
+            break
+        end
+        local target, tType = pickRaidTarget(raidName)
+        if not target then
+            noETimer += 0.3
+            if noETimer >= 5 then
+                break
+            end
+            task.wait(0.3) continue
+        end
+        noETimer = 0
+        if tType ~= lastPhase then
+            lastPhase = tType
+            local msgs = {light="Clearing light...", tank="Attacking tank...", boss="Engaging boss!"}
+        end
+        local timeout   = tType=="light" and 5 or tType=="tank" and 8 or 20
+        local tStart    = tick()
+        local lastATick = 0
+        while isActiveFunc() do
+            if State.pauseForGauntlet then break end
+            if isRaidContinueVisible() then break end
+            if tick()-tStart > timeout then break end
+            if not target or not target.Parent then break end
+            if target:GetAttribute("dead") == true then break end
+            if tType ~= "light" and #cfg.light > 0 then
+                local hasLight = false
+                for _, ln in ipairs(cfg.light) do
+                    if findRaidEnemyByName(ln) then hasLight=true break end
+                end
+                if hasLight then break end
+            end
+            if tType == "boss" and cfg.tank and findRaidEnemyByName(cfg.tank) then break end
+            local char  = player.Character
+            local hrp   = char and char:FindFirstChild("HumanoidRootPart")
+            local units = getMyUnits()
+            local tPos  = getEnemyCFrame(target)
+            if tPos and hrp then
+                local dist = (hrp.Position - tPos.Position).Magnitude
+                if dist <= CONST.RAID_MAX_RANGE then
+                    if dist > 20 then
+                        hrp.CFrame = tPos * CFrame.new(0,5,0)
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                    end
+                    if tick()-lastATick >= 0.15 then
+                        lastATick = tick()
+                        teleportUnitsTo(tPos)
+                        pcall(function() Remote.SendUnit:FireServer(target.Name, units) end)
+                    end
+                end
+            end
+            task.wait(0.08)
+        end
+    end
+end
+
+-- ============================================================
+--  RAID QUEUE HELPERS
+-- ============================================================
+local function getActiveRaids()
+    local active = {}
+    for name, en in pairs(Data.RaidStates) do
+        if en then table.insert(active, name) end
+    end
+    table.sort(active)
+    return active
+end
+
+local function pickNextRaid()
+    local active = getActiveRaids()
+    local now    = tick()
+    local best, bestWait = nil, math.huge
+    for _, name in ipairs(active) do
+        local cdEnd = Data.RaidCooldowns[name]
+        if not cdEnd or now >= cdEnd then return name, 0 end
+        local w = cdEnd - now
+        if w < bestWait then bestWait=w best=name end
+    end
+    return best, bestWait
+end
+
+local updateRaidStatus
+
+local function spawnFarmLoops()
+    local returnCF = getBestReturnCFrame()
+    if returnCF then
+        local char = player.Character or player.CharacterAdded:Wait()
+        local hrp  = char and char:WaitForChild("HumanoidRootPart",5)
+        if hrp then
+            hrp.CFrame = returnCF
+            hrp.AssemblyLinearVelocity  = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        end
+    end
+    task.spawn(function()
+        while State.isAutoFarm do
+            if State.pauseForGauntlet or State.isAutoSnipeBoss then task.wait(1) continue end
+            if #State.selectedEnemyNames == 0 then task.wait(1) continue end
+            local t = findEnemyMulti(State.selectedEnemyNames)
+            if t then
+                attackTarget(t, function() return State.selectedEnemyNames end, 25)
+            else
+                task.wait(0.1)
+            end
+        end
+        if not State.isAutoSnipeBoss then
+            pcall(function()
+                Remote.SetState:FireServer("attack",false)
+                Remote.SetState:FireServer("clicker",false)
+            end)
+        end
+    end)
+    task.spawn(function()
+        while State.isAutoSnipeBoss do
+            if State.pauseForGauntlet then task.wait(1) continue end
+            if #State.selectedBossNames == 0 then task.wait(1) continue end
+            local myPos = (player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                and player.Character.HumanoidRootPart.Position) or Vector3.zero
+            local best, bestD = nil, math.huge
+            for _, bn in ipairs(State.selectedBossNames) do
+                local t = getTargetEnemy(bn)
+                if t then
+                    local cf = getEnemyCFrame(t)
+                    if cf then
+                        local d = (cf.Position - myPos).Magnitude
+                        if d < bestD then bestD=d best=t end
+                    end
+                end
+            end
+            if best then
+                attackTarget(best, function() return State.selectedBossNames end, 60)
+            else
+                task.wait(1)
+            end
+        end
+        if not State.isAutoFarm then
+            pcall(function()
+                Remote.SetState:FireServer("attack",false)
+                Remote.SetState:FireServer("clicker",false)
+            end)
+        end
+    end)
+end
+
+local function stopQueueRunner()
+    State.isQueueRunning = false
+    if Thread.queueRunner then
+        pcall(function() task.cancel(Thread.queueRunner) end)
+        Thread.queueRunner = nil
+    end
+end
+
+local function startQueueRunner()
+    if State.isQueueRunning then return end
+    if not State.isAutoRaidEnabled then return end
+    State.isQueueRunning = true
+    Thread.queueRunner = task.spawn(function()
+        while true do
+            if not State.isAutoRaidEnabled then State.isQueueRunning=false Thread.queueRunner=nil return end
+            if #getActiveRaids() == 0 then State.isQueueRunning=false Thread.queueRunner=nil return end
+            if State.pauseForGauntlet then
+                while State.pauseForGauntlet do task.wait(1) end
+            end
+            local raidName, waitSec = pickNextRaid()
+            if not raidName then task.wait(5) continue end
+            if waitSec > 0 then
+                local mins = math.floor(waitSec/60)
+                local secs = math.floor(waitSec%60)
+                WindUI:Notify({
+                    Title   = "All Raids on Cooldown",
+                    Content = string.format("Next: [%s] in %02d:%02d", raidName, mins, secs),
+                    Duration = 6,
+                })
+                local waited, target2 = 0, waitSec + 2
+                while waited < target2 do
+                    task.wait(5) waited += 5
+                    pcall(updateRaidStatus)
+                    if not State.isAutoRaidEnabled then State.isQueueRunning=false Thread.queueRunner=nil return end
+                    if State.pauseForGauntlet then while State.pauseForGauntlet do task.wait(1) end end
+                    local nr, nw = pickNextRaid()
+                    if nw == 0 then raidName = nr break end
+                    if #getActiveRaids() == 0 then State.isQueueRunning=false Thread.queueRunner=nil return end
+                end
+                if Data.RaidCooldowns[raidName] and tick() >= Data.RaidCooldowns[raidName] then
+                    Data.RaidCooldowns[raidName] = nil
+                end
+            end
+            if not Data.RaidStates[raidName] then continue end
+            if not State.isAutoRaidEnabled then continue end
+            local wasFarming = State.isAutoFarm or State.isAutoSnipeBoss
+            if wasFarming then
+                updateLastFarmPosition()
+                State.isAutoFarm      = false
+                State.isAutoSnipeBoss = false
+                pcall(function()
+                    Remote.SetState:FireServer("attack",false)
+                    Remote.SetState:FireServer("clicker",false)
+                end)
+                task.wait(0.5)
+            end
+            local function resumeFarm()
+                if not wasFarming then return end
+                State.isAutoFarm      = true
+                State.isAutoSnipeBoss = true
+                pcall(function()
+                    Remote.SetState:FireServer("attack",true)
+                    Remote.SetState:FireServer("clicker",true)
+                end)
+                spawnFarmLoops()
+            end
+            task.wait(1)
+            local raidOpen, raidStatus, cdLeft, teleported = checkRaidOpenAtPortal(raidName)
+            pcall(updateRaidStatus)
+            if not teleported and not Data.RaidNoPortal[raidName] then
+                WindUI:Notify({Title=string.format("[%s] Portal Not Found",raidName), Content="Skipping...", Duration=4})
+                Data.RaidCooldowns[raidName] = tick() + 20
+                resumeFarm() continue
+            end
+            if not raidOpen then
+                local waitP = cdLeft or 120
+                if waitP <= 90 then
+                    WindUI:Notify({Title=string.format("[%s] Opening Soon",raidName),
+                        Content=string.format("Waiting %ds...",math.max(1,waitP)), Duration=4})
+                    local w = 0
+                    while w < waitP+3 and Data.RaidStates[raidName] and State.isAutoRaidEnabled do
+                        task.wait(1) w += 1
+                        if State.pauseForGauntlet then break end
+                    end
+                    raidOpen, raidStatus, cdLeft = checkRaidOpenAtPortal(raidName)
+                end
+                if not raidOpen then
+                    local store = cdLeft and math.max(cdLeft,30) or 60
+                    Data.RaidCooldowns[raidName] = tick() + store
+                    WindUI:Notify({Title=string.format("[%s] Closed",raidName),
+                        Content=string.format("Status: %s", raidStatus or "?"), Duration=3})
+                    pcall(updateRaidStatus) resumeFarm() continue
+                end
+            end
+            if not Data.RaidStates[raidName] or not State.isAutoRaidEnabled or State.pauseForGauntlet then continue end
+            WindUI:Notify({Title=string.format("[%s] Raid Open!",raidName), Content="Loading team...", Duration=3})
+            loadTeam(State.raidTeamSlot) task.wait(1)
+            loadTeam(State.raidTeamSlot) task.wait(2)
+            pcall(function()
+                Remote.BossRaidCreate:InvokeServer(raidName, {friendsOnly=false, spawnNormal=false})
+            end)
+            task.wait(2)
+            pcall(function() Remote.LobbiesStart:FireServer() end)
+            task.wait(3)
+            pcall(function()
+                Remote.SetState:FireServer("attack",true)
+                Remote.SetState:FireServer("clicker",true)
+            end)
+            runSingleRaid(raidName, function()
+                return Data.RaidStates[raidName] and State.isAutoRaidEnabled and not State.pauseForGauntlet
+            end)
+            pcall(function()
+                Remote.SetState:FireServer("attack",false)
+                Remote.SetState:FireServer("clicker",false)
+            end)
+            pcall(function() Remote.BossRaidLeave:FireServer() end)
+            WindUI:Notify({Title=string.format("[%s] Done!",raidName), Content="Waiting 60s...", Duration=5})
+            if wasFarming then
+                task.wait(2)
+                State.isAutoFarm      = true
+                State.isAutoSnipeBoss = true
+                pcall(function()
+                    Remote.SetState:FireServer("attack",true)
+                    Remote.SetState:FireServer("clicker",true)
+                end)
+                spawnFarmLoops()
+            end
+            task.wait(58)
+            Data.RaidCooldowns[raidName] = tick() + CONST.RAID_COOLDOWN_SEC
+            pcall(updateRaidStatus)
+            WindUI:Notify({Title=string.format("[%s] CD 20min",raidName), Content="Next raid...", Duration=3})
+        end
+    end)
+end
+
+-- ============================================================
+--  ESCORT HELPERS
+-- ============================================================
+local function findEscortCart()
+    local map = WS:FindFirstChild("World") and WS.World:FindFirstChild("Map")
+    if not map then return nil end
+    for _, child in ipairs(map:GetChildren()) do
+        if child.Name:sub(1,7) == "escort-" then
+            local cart = child:FindFirstChild("Cart",true)
+            if cart then
+                local root = cart:FindFirstChild("root")
+                if root and root:IsA("BasePart") then return root end
+                if cart:IsA("BasePart") then return cart end
+                if cart.PrimaryPart then return cart.PrimaryPart end
+                for _, p in ipairs(cart:GetDescendants()) do
+                    if p:IsA("BasePart") then return p end
+                end
+            end
+            local root = child:FindFirstChild("root",true)
+            if root and root:IsA("BasePart") then return root end
+        end
+    end
+    return nil
+end
+
+-- ============================================================
+--  AUTO JOIN ESCORT
+-- ============================================================
+local LobbiesStore = nil
+pcall(function()
+    local mod = require(RS
+        :WaitForChild("src")
+        :WaitForChild("common")
+        :WaitForChild("store")
+        :WaitForChild("gamemodes")
+        :WaitForChild("lobbies"))
+    if type(mod) == "table" and type(mod.lobbiesStore) == "function" then
+        LobbiesStore = mod.lobbiesStore
+    end
+end)
+
+local function getLobbiesState()
+    if not LobbiesStore then return nil end
+    local ok, state = pcall(LobbiesStore)
+    if ok and type(state) == "table" then return state end
+    return nil
+end
+
+local function findOpenEscortLobbyId()
+    local state = getLobbiesState()
+    if not state then return nil end
+    for lobbyId, lobby in pairs(state) do
+        if type(lobby) == "table" and lobby.type == "escort" then
+            local players = lobby.players or {}
+            local maxP    = lobby.maxPlayers or 4
+            if #players < maxP then return lobby.id or lobbyId end
+        end
+    end
+    return nil
+end
+
+-- ============================================================
+--  AUTO JOIN INVASION
+-- ============================================================
+local function findOpenInvasionLobbyId()
+    local state = getLobbiesState()
+    if not state then return nil end
+    for lobbyId, lobby in pairs(state) do
+        if type(lobby) == "table" then
+            local lobbyType = (lobby.type or ""):lower()
+            local lobbyName = (lobby.name or ""):lower()
+            if lobbyType:find("invasion") or lobbyName:find("invasion") or lobbyName:find("dark matter") then
+                local players = lobby.players or {}
+                local maxP    = lobby.maxPlayers or 4
+                if #players < maxP then
+                    local rawId = lobby.id or lobbyId
+                    local uuid  = tostring(rawId):gsub("^invasion%-", "")
+                    return uuid
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function startAutoJoinInvasion()
+    if Thread.invasionJoin then
+        pcall(function() task.cancel(Thread.invasionJoin) end)
+        Thread.invasionJoin = nil
+    end
+    Thread.invasionJoin = task.spawn(function()
+        while State.isAutoJoinInvasion and isRunning() do
+            local lobbyId = findOpenInvasionLobbyId()
+            if lobbyId then
+                pcall(function() Remote.LobbiesJoin:InvokeServer(lobbyId) end)
+                task.wait(5)
+            else
+                task.wait(1)
+            end
+        end
+    end)
+end
+
+local function stopAutoJoinInvasion()
+    State.isAutoJoinInvasion = false
+    if Thread.invasionJoin then
+        pcall(function() task.cancel(Thread.invasionJoin) end)
+        Thread.invasionJoin = nil
+    end
+end
+
+-- ============================================================
+--  INVASION HELPERS
+-- ============================================================
+local function isInInvasion()
+    local world = WS:FindFirstChild("World")
+    if not world then return false end
+    local map = world:FindFirstChild("Map")
+    if map then
+        for _, child in ipairs(map:GetChildren()) do
+            if child.Name:lower():find("invasion") then return true end
+        end
+    end
+    for _, g in ipairs(PlayerGui:GetDescendants()) do
+        if (g:IsA("ScreenGui") or g:IsA("Frame")) then
+            local n = g.Name:lower()
+            if n:find("invasion") then return true end
+        end
+    end
+    return false
+end
+
+local function isInvasionVictoryVisible()
+    for _, rg in ipairs({PlayerGui, Svc.CoreGui}) do
+        for _, g in ipairs(rg:GetDescendants()) do
+            if (g:IsA("TextLabel") or g:IsA("TextButton")) and g.Visible and isGuiActuallyVisible(g) then
+                local parentGui = g:FindFirstAncestorOfClass("ScreenGui")
+                if parentGui and (parentGui.Name:find("Wind") or parentGui.Name:find("wind")) then
+                    continue
+                end
+                local t = tostring(g.Text or ""):lower()
+                if (t:find("victory") or t:find("invasion complete") or t:find("invasion won"))
+                   and not t:find("restarting") then return true end
+            end
+        end
+    end
+    return false
+end
+
+local function pickBestInvasionCard(available)
+    for _, pri in ipairs(State.invasionCardPriority) do
+        if pri and pri ~= "" then
+            for _, card in ipairs(available) do
+                local bn = card.baseName or card.fullName or ""
+                if bn == pri or bn:sub(1,#pri) == pri or pri:sub(1,#bn) == bn then
+                    return card.fullName
+                end
+            end
+        end
+    end
+    return available[1] and available[1].fullName or nil
+end
+
+local function doInvasionCardSelection()
+    if State.isInvasionCardSel then return end
+    State.isInvasionCardSel = true
+
+    local function getBaseName(t)
+        return (t:gsub("%s+[IVX]+$",""):match("^%s*(.-)%s*$"))
+    end
+
+    local function getTierLevel(t)
+        if t:match("%s+III$") then return 3
+        elseif t:match("%s+II$") then return 2
+        elseif t:match("%s+I$") then return 1
+        else return 0 end
+    end
+
+    pcall(function()
+        if Remote.InvasionCards then Remote.InvasionCards:FireServer() end
+    end)
+    task.wait(1.5)
+
+    local function scanForCards()
+        local found, seenFull = {}, {}
+        local app = PlayerGui:FindFirstChild("app")
+        if not app then return found end
+        for _, lbl in ipairs(app:GetDescendants()) do
+            if lbl:IsA("TextLabel") and lbl.Visible then
+                local t = (lbl.Text or ""):match("^%s*(.-)%s*$")
+                if t ~= "" and not seenFull[t] then
+                    local base = getBaseName(t)
+                    for _, cn in ipairs(Data.INVASION_CARDS) do
+                        if base == getBaseName(cn) then
+                            seenFull[t] = true
+                            table.insert(found, {
+                                fullName = t,
+                                baseName = getBaseName(cn),
+                                tier     = getTierLevel(t),
+                                obj      = lbl.Parent,
+                            })
+                            break
+                        end
+                    end
+                end
+            end
+        end
+        return found
+    end
+
+    local shown = {}
+    local scanEnd = tick() + 8
+    while tick() < scanEnd do
+        shown = scanForCards()
+        if #shown > 0 then break end
+        pcall(function()
+            if Remote.InvasionCards then Remote.InvasionCards:FireServer() end
+        end)
+        task.wait(0.5)
+    end
+
+    if #shown == 0 then
+        State.isInvasionCardSel = false
+        return
+    end
+
+    local function pickBestWithTier(available)
+        for _, pri in ipairs(State.invasionCardPriority) do
+            if pri and pri ~= "" then
+                local matches = {}
+                for _, card in ipairs(available) do
+                    if card.baseName == pri then
+                        table.insert(matches, card)
+                    end
+                end
+                if #matches > 0 then
+                    table.sort(matches, function(a, b) return a.tier > b.tier end)
+                    return matches[1]
+                end
+            end
+        end
+        table.sort(available, function(a, b) return a.tier > b.tier end)
+        return available[1]
+    end
+
+    local chosen = pickBestWithTier(shown)
+    if chosen and chosen.obj then
+        pcall(function() clickObject(chosen.obj) end)
+        task.wait(0.15)
+        pcall(function() clickObject(chosen.obj) end)
+        WindUI:Notify({
+            Title   = "[Invasion] Card Selected",
+            Content = "Selected: " .. chosen.fullName,
+            Duration = 3,
+        })
+    end
+
+    task.wait(0.5)
+    State.isInvasionCardSel = false
+end
+
+local function getInvasionMainBaseCFrame()
+    local map = WS:FindFirstChild("World") and WS.World:FindFirstChild("Map")
+    if not map then return nil end
+    for _, child in ipairs(map:GetChildren()) do
+        if child.Name:sub(1, 9) == "invasion-" then
+            local turret = child:FindFirstChild("Barricade", true)
+            if turret then
+                local cf = getInstanceCFrame(turret)
+                if cf then return cf * CFrame.new(0, 0, 0) end
+            end
+        end
+    end
+    return nil
+end
+
+local function startStandAtBarricade()
+    if Thread.standBarricade then
+        pcall(function() task.cancel(Thread.standBarricade) end)
+        Thread.standBarricade = nil
+    end
+    Thread.standBarricade = task.spawn(function()
+        local notified = false
+        while State.isStandingBarricade do
+            local baseCF = getInvasionMainBaseCFrame()
+            if baseCF then
+                local char = player.Character
+                local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    hrp.CFrame = baseCF
+                    hrp.AssemblyLinearVelocity  = Vector3.zero
+                    hrp.AssemblyAngularVelocity = Vector3.zero
+                end
+                if not notified then
+                    notified = true
+                    WindUI:Notify({Title="[Invasion] Standing at Barricade", Duration=3})
+                end
+            else
+                notified = false
+            end
+            task.wait(0.1)
+        end
+    end)
+end
+
+local function stopStandAtBarricade()
+    State.isStandingBarricade = false
+    if Thread.standBarricade then
+        pcall(function() task.cancel(Thread.standBarricade) end)
+        Thread.standBarricade = nil
+    end
+end
+
+local function farmInvasionEnemies(isActiveFunc)
+    local lastATick   = 0
+    local lastCardChk = 0
+    pcall(function()
+        Remote.SetState:FireServer("attack", true)
+        Remote.SetState:FireServer("clicker", true)
+    end)
+
+    if State.isAutoInvasionCard then
+        task.spawn(doInvasionCardSelection)
+        lastCardChk = tick()
+    end
+
+    while isActiveFunc() do
+        if isInvasionVictoryVisible() then break end
+
+        if State.isAutoInvasionCard and tick() - lastCardChk >= 5 then
+            -- ป้องกัน spawn ซ้ำ: เช็ค isInvasionCardSel ก่อน
+            if not State.isInvasionCardSel then
+                lastCardChk = tick()
+                task.spawn(doInvasionCardSelection)
+            end
+        end
+
+        local target = findNearestAnyEnemy()
+        local char   = player.Character
+        local hrp    = char and char:FindFirstChild("HumanoidRootPart")
+
+        -- ถ้า isStandingBarricade ให้ standBarricade thread จัดการ hrp เอง
+        -- farmInvasionEnemies จัดการแค่ส่ง unit
+        if State.isStandingBarricade then
+            if target then
+                local tPos = getEnemyCFrame(target)
+                if tPos and tick() - lastATick >= 0.15 then
+                    lastATick = tick()
+                    local units = getMyUnits()
+                    teleportUnitsTo(tPos)
+                    pcall(function() Remote.SendUnit:FireServer(target.Name, units) end)
+                end
+            end
+        else
+            if not target then
+                task.wait(0.2)
+                continue
+            end
+            local tPos = getEnemyCFrame(target)
+            if tPos and hrp then
+                if (hrp.Position - tPos.Position).Magnitude > 3000 then
+                    task.wait(0.2) continue
+                end
+                hrp.CFrame = tPos * CFrame.new(0, 5, 0)
+                hrp.AssemblyLinearVelocity  = Vector3.zero
+                hrp.AssemblyAngularVelocity = Vector3.zero
+                if tick() - lastATick >= 0.15 then
+                    lastATick = tick()
+                    local units = getMyUnits()
+                    teleportUnitsTo(tPos)
+                    pcall(function() Remote.SendUnit:FireServer(target.Name, units) end)
+                end
+            end
+        end
+
+        task.wait(0.1)
+    end
+
+    pcall(function()
+        Remote.SetState:FireServer("attack", false)
+        Remote.SetState:FireServer("clicker", false)
+    end)
+end
+
+local function runOneInvasionRound(isActiveFunc)
+    WindUI:Notify({
+        Title   = "[Invasion] Dark Matter Invasion",
+        Content = "Farming enemies...",
+        Duration = 3,
+    })
+
+    local waited = 0
+    while not isInInvasion() and waited < 30 and isActiveFunc() do
+        task.wait(1) waited += 1
+    end
+
+    if not isInInvasion() then
+        task.wait(5)
+        return
+    end
+
+    local roundStart = tick()
+    farmInvasionEnemies(function()
+        return isActiveFunc()
+            and tick()-roundStart < 30*60
+            and not isInvasionVictoryVisible()
+    end)
+
+    if isInvasionVictoryVisible() then
+        task.wait(5)
+    end
+    task.wait(3)
+end
+
+local function startInvasionLoop()
+    if Thread.invasion then
+        pcall(function() task.cancel(Thread.invasion) end)
+        Thread.invasion = nil
+    end
+    Thread.invasion = task.spawn(function()
+        while State.isAutoInvasion and isRunning() do
+            runOneInvasionRound(function()
+                return State.isAutoInvasion and isRunning()
+            end)
+            if State.isAutoInvasion and isRunning() then task.wait(5) end
+        end
+        WindUI:Notify({Title="[Invasion] Stopped", Content="Auto Invasion disabled.", Duration=3})
+    end)
+end
+
+local function stopInvasionLoop()
+    State.isAutoInvasion = false
+    if Thread.invasion then
+        pcall(function() task.cancel(Thread.invasion) end)
+        Thread.invasion = nil
+    end
+    pcall(function()
+        Remote.SetState:FireServer("attack",false)
+        Remote.SetState:FireServer("clicker",false)
+    end)
+end
+
+-- ============================================================
+--  ESCORT THREAD HELPERS
+-- ============================================================
+local function startAutoJoinEscort()
+    if Thread.escortJoin then
+        pcall(function() task.cancel(Thread.escortJoin) end)
+        Thread.escortJoin = nil
+    end
+    Thread.escortJoin = task.spawn(function()
+        while State.isAutoJoinEscort do
+            local lobbyId = findOpenEscortLobbyId()
+            if lobbyId then
+                local ok = pcall(function() Remote.LobbiesJoin:InvokeServer(lobbyId) end)
+                if not ok then pcall(function() Remote.LobbiesJoin:FireServer(lobbyId) end) end
+                task.wait(5)
+            else
+                task.wait(1)
+            end
+        end
+    end)
+end
+
+local function stopAutoJoinEscort()
+    State.isAutoJoinEscort = false
+    if Thread.escortJoin then
+        pcall(function() task.cancel(Thread.escortJoin) end)
+        Thread.escortJoin = nil
+    end
+end
+
+local function startFollowCart()
+    if Thread.cartFollow then
+        pcall(function() task.cancel(Thread.cartFollow) end)
+        Thread.cartFollow = nil
+    end
+    Thread.cartFollow = task.spawn(function()
+        local lastATick = 0
+        local RANGE     = 150
+        while State.isFollowingCart do
+            local cartRoot = findEscortCart()
+            if cartRoot then
+                local char = player.Character
+                local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    local cartPos = cartRoot.Position
+                    local nearest, nearestD = nil, math.huge
+                    local wf = WS:FindFirstChild("World") and WS.World:FindFirstChild("Enemies")
+                    if wf then
+                        for _, e in ipairs(wf:GetChildren()) do
+                            if not isEnemyAlive(e) then continue end
+                            local cf = getEnemyCFrame(e)
+                            if cf then
+                                local d = (cf.Position - cartPos).Magnitude
+                                if d <= RANGE and d < nearestD then nearestD=d nearest=e end
+                            end
+                        end
+                    end
+                    if nearest then
+                        local eCF = getEnemyCFrame(nearest)
+                        if eCF then
+                            hrp.CFrame = eCF * CFrame.new(0,3,0)
+                            hrp.AssemblyLinearVelocity  = Vector3.zero
+                            hrp.AssemblyAngularVelocity = Vector3.zero
+                        end
+                        if tick()-lastATick >= 0.2 then
+                            lastATick = tick()
+                            local units = getMyUnits()
+                            local cf2 = getEnemyCFrame(nearest)
+                            if cf2 then
+                                teleportUnitsTo(cf2)
+                                pcall(function() Remote.SendUnit:FireServer(nearest.Name, units) end)
+                            end
+                        end
+                    else
+                        hrp.CFrame = CFrame.new(cartPos + Vector3.new(0,20,0))
+                        hrp.AssemblyLinearVelocity  = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                    end
+                end
+            else
+                task.wait(2)
+            end
+            task.wait(0.1)
+        end
+    end)
+end
+
+local function startAutoEscortStart()
+    if Thread.escortStart then pcall(function() task.cancel(Thread.escortStart) end) Thread.escortStart=nil end
+    Thread.escortStart = task.spawn(function()
+        while State.isAutoEscortStart do
+            pcall(function() Remote.LobbiesStart:FireServer() end)
+            task.wait(20)
+        end
+    end)
+end
+
+local function startAutoEscortReplay()
+    if Thread.escortReplay then pcall(function() task.cancel(Thread.escortReplay) end) Thread.escortReplay=nil end
+    Thread.escortReplay = task.spawn(function()
+        while State.isAutoEscortReplay do
+            local tierStr = getTierString(State.selectedReplayTier)
+            pcall(function() Remote.EscortReplay:InvokeServer(tierStr) end)
+            task.wait(20)
+        end
+    end)
+end
+
+local function startAutoEscortAccept()
+    if Thread.escortAccept then pcall(function() task.cancel(Thread.escortAccept) end) Thread.escortAccept=nil end
+    Thread.escortAccept = task.spawn(function()
+        while State.isAutoEscortAccept do
+            local btn = findJoinButton()
+            if btn then clickObject(btn) task.wait(2)
+            else task.wait(0.5) end
+        end
+    end)
+end
+
+-- ============================================================
+--  GAUNTLET HELPERS
+-- ============================================================
+local function getCurrentFloor()
+    for _, v in ipairs(game:GetDescendants()) do
+        if v:IsA("TextLabel") then
+            local floor = tostring(v.Text or ""):match("Floor%s*(%d+)")
+            if floor then return tonumber(floor) end
+        end
+    end
+    return 0
+end
+
+local function leaveGauntlet()
+    if Remote.GauntletLeave then
+        pcall(function() Remote.GauntletLeave:FireServer() end)
+        task.wait(0.5)
+    end
+    for _, gui in ipairs(PlayerGui:GetChildren()) do
+        for _, btn in ipairs(gui:GetDescendants()) do
+            if btn:IsA("GuiButton") then
+                local t = (btn.Text or ""):lower()
+                if t == "quit" or t == "leave" or t == "exit" then
+                    pcall(function() btn.Activated:Fire() end)
+                    pcall(function() btn:Activate() end)
+                    task.wait(0.5) return
+                end
+            end
+        end
+    end
+    pcall(function()
+        local lr = RemoContainer:FindFirstChild("lobbies.leave")
+        if lr then lr:FireServer() end
+    end)
+end
+
+local function findGauntletCardsObject()
+    local map = WS:FindFirstChild("World") and WS.World:FindFirstChild("Map")
+    if not map then return nil end
+    local bestFloor, bestCards = -1, nil
+    for _, mc in ipairs(map:GetChildren()) do
+        if mc.Name:sub(1,9) == "gauntlet-" then
+            for _, fc in ipairs(mc:GetChildren()) do
+                local n = fc.Name:match("^floor%-(%d+)$")
+                if n then
+                    local cards = fc:FindFirstChild("GauntletCards")
+                    if cards then
+                        local fn = tonumber(n)
+                        if fn > bestFloor then bestFloor=fn bestCards=cards end
+                    end
+                end
+            end
+        end
+    end
+    return bestCards
+end
+
+local function teleportAndInteractCards(cardsObj)
+    if not cardsObj then return end
+    local char = player.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local cf
+    if cardsObj:IsA("Model") then
+        if cardsObj.PrimaryPart then cf = cardsObj.PrimaryPart.CFrame
+        else pcall(function() cf = cardsObj:GetPivot() end) end
+    elseif cardsObj:IsA("BasePart") then
+        cf = cardsObj.CFrame
+    else
+        for _, c in ipairs(cardsObj:GetDescendants()) do
+            if c:IsA("BasePart") then cf = c.CFrame break end
+        end
+    end
+    if cf then
+        hrp.CFrame = cf * CFrame.new(0,4,3)
+        hrp.AssemblyLinearVelocity  = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        task.wait(0.4)
+    end
+    for _, c in ipairs(cardsObj:GetDescendants()) do
+        if c:IsA("BasePart") then
+            pcall(function() local cd = c:FindFirstChildOfClass("ClickDetector") if cd then fireclickdetector(cd) end end)
+            pcall(function() local pp = c:FindFirstChildOfClass("ProximityPrompt") if pp then fireproximityprompt(pp) end end)
+            pcall(function()
+                local hrp2 = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                if hrp2 then c.Touched:Fire(hrp2) end
+            end)
+        end
+    end
+end
+
+local function pickBestCard(available)
+    for _, pri in ipairs(State.cardPriorityList) do
+        if pri and pri ~= "" then
+            for _, card in ipairs(available) do
+                if card.baseName == pri
+                or card.baseName:sub(1,#pri) == pri
+                or pri:sub(1,#card.baseName) == card.baseName then
+                    return card.fullName
+                end
+            end
+        end
+    end
+    return available[1] and available[1].fullName or nil
+end
+
+local function doCardSelection()
+    if State.isCardSelecting then return end
+    State.isCardSelecting = true
+    local cardsObj = findGauntletCardsObject()
+    if cardsObj then teleportAndInteractCards(cardsObj) task.wait(0.5) end
+    pcall(function() Remote.GauntletCards:FireServer() end)
+    task.wait(1.5)
+    local function getBaseName(t) return (t:gsub("%s+[IVX]+$","")) end
+    local function scanForCards()
+        local found, seenFull = {}, {}
+        for _, gui in ipairs(PlayerGui:GetChildren()) do
+            for _, lbl in ipairs(gui:GetDescendants()) do
+                if lbl:IsA("TextLabel") or lbl:IsA("TextButton") then
+                    local t = (lbl.Text or ""):match("^%s*(.-)%s*$")
+                    if t ~= "" and not seenFull[t] then
+                        local base = getBaseName(t)
+                        for _, cn in ipairs(Data.ALL_CARDS) do
+                            if base == cn then
+                                seenFull[t] = true
+                                table.insert(found, {fullName=t, baseName=base})
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        return found
+    end
+    local shown = {}
+    local scanEnd = tick() + 8
+    while tick() < scanEnd do
+        shown = scanForCards()
+        if #shown > 0 then break end
+        if cardsObj then teleportAndInteractCards(cardsObj) end
+        pcall(function() Remote.GauntletCards:FireServer() end)
+        task.wait(0.5)
+    end
+    if #shown == 0 then
+        for _, cn in ipairs(Data.ALL_CARDS) do
+            table.insert(shown, {fullName=cn, baseName=cn})
+        end
+    end
+    local chosen = pickBestCard(shown)
+    if chosen then
+        pcall(function() Remote.GauntletVote:FireServer(chosen) end)
+        task.wait(0.3)
+        WindUI:Notify({Title="Card Selected", Content="Selected: "..chosen, Duration=3})
+    end
+    pcall(function() Remote.GauntletClear:FireServer() end)
+    task.wait(0.5)
+    State.isCardSelecting = false
+end
+
+local function attackNearestEnemyOnce()
+    local best = findNearestAnyEnemy()
+    if not best then return end
+    local char  = player.Character
+    local hrp   = char and char:FindFirstChild("HumanoidRootPart")
+    local units = getMyUnits()
+    local tPos  = getEnemyCFrame(best)
+    if tPos then
+        if hrp then hrp.CFrame = tPos * CFrame.new(0,5,0) hrp.AssemblyLinearVelocity = Vector3.zero end
+        teleportUnitsTo(tPos)
+        pcall(function() Remote.SendUnit:FireServer(best.Name, units) end)
+    end
+end
+
+local function runOneGauntletRound()
+    loadTeam(State.gauntletTeamSlot) task.wait(1)
+    loadTeam(State.gauntletTeamSlot) task.wait(2)
+    pcall(function() Remote.GauntletCreate:InvokeServer("Normal", {friendsOnly=false}) end)
+    task.wait(1.5)
+    pcall(function() Remote.LobbiesStart:FireServer() end)
+    task.wait(2)
+    pcall(function()
+        Remote.SetState:FireServer("attack",true)
+        Remote.SetState:FireServer("clicker",true)
+    end)
+    task.wait(3)
+    local lastCardFloor, attackTick = -1, 0
+    while State.isGauntletFarm do
+        local floor = getCurrentFloor()
+        if State.isGauntletAutoLeave and floor > 0 and floor >= State.gauntletMaxFloor then
+            pcall(function()
+                Remote.SetState:FireServer("attack",false)
+                Remote.SetState:FireServer("clicker",false)
+            end)
+            WindUI:Notify({Title="Auto Leave",
+                Content=string.format("Floor %d / %d — leaving!",floor,State.gauntletMaxFloor), Duration=5})
+            task.wait(5) leaveGauntlet() task.wait(3) break
+        end
+        if State.isGauntletAutoCard and floor > 0 and floor%5==0 and floor~=lastCardFloor then
+            lastCardFloor = floor
+            task.spawn(doCardSelection)
+        end
+        if tick()-attackTick >= 0.15 then
+            attackTick = tick()
+            pcall(attackNearestEnemyOnce)
+        end
+        task.wait(0.05)
+    end
+    pcall(function()
+        Remote.SetState:FireServer("attack",false)
+        Remote.SetState:FireServer("clicker",false)
+    end)
+end
+
+-- ============================================================
+--  INFILTRATION HELPERS
+-- ============================================================
+local function isInfiltVictoryVisible()
+    for _, rg in ipairs({PlayerGui, Svc.CoreGui}) do
+        for _, g in ipairs(rg:GetDescendants()) do
+            if (g:IsA("TextLabel") or g:IsA("TextButton")) and g.Visible and isGuiActuallyVisible(g) then
+                local t = tostring(g.Text or ""):lower()
+                if (t:find("victory") or t:find("infiltration complete"))
+                   and not t:find("restarting") then return true end
+            end
+        end
+    end
+    return false
+end
+
+local function runOneInfiltrationRound(name, path, isActiveFunc)
+    WindUI:Notify({
+        Title    = string.format("[Infiltration] %s — Path %s", name, path),
+        Content  = "Loading team & entering...",
+        Duration = 4,
+    })
+    loadTeam(State.infiltTeamSlot) task.wait(1)
+    loadTeam(State.infiltTeamSlot) task.wait(2)
+    local ok = pcall(function()
+        Remote.InfiltCreate:InvokeServer(name, path, {friendsOnly=false})
+    end)
+    if not ok then pcall(function() Remote.InfiltCreate:FireServer(name, path, {friendsOnly=false}) end) end
+    task.wait(2)
+    pcall(function() Remote.LobbiesStart:FireServer() end)
+    task.wait(3)
+    pcall(function()
+        Remote.SetState:FireServer("attack",true)
+        Remote.SetState:FireServer("clicker",true)
+    end)
+
+    local roundStart = tick()
+    local noETimer   = 0
+    local lastATick  = 0
+    local RANGE      = CONST.INFILT_ENEMY_RANGE
+
+    WindUI:Notify({
+        Title    = string.format("[%s] Path %s — Farming!", name, path),
+        Content  = string.format("Attacking enemies in %d studs range...", RANGE),
+        Duration = 4,
+    })
+
+    while isActiveFunc() do
+        if tick()-roundStart > 25*60 then
+            WindUI:Notify({Title="[Infiltration] Timed Out", Content="25 min limit.", Duration=4})
+            break
+        end
+        if isInfiltVictoryVisible() then
+            WindUI:Notify({
+                Title   = string.format("[%s] Path %s — Victory!", name, path),
+                Content = "Round complete! Restarting...",
+                Duration = 4,
+            })
+            task.wait(5)
+            break
+        end
+        if State.pauseForGauntlet then
+            WindUI:Notify({Title="[Infiltration] Paused", Content="Gauntlet priority!", Duration=3})
+            while State.pauseForGauntlet and isActiveFunc() do task.wait(1) end
+            WindUI:Notify({Title="[Infiltration] Resumed", Content="Continuing...", Duration=3})
+        end
+
+        local target = findNearestEnemyInRange(RANGE)
+        if not target then
+            noETimer += 0.2
+            if noETimer >= 8 then
+                noETimer = 0
+                WindUI:Notify({Title="[Infiltration] Waiting...", Content="No enemies nearby — next wave?", Duration=3})
+            end
+            task.wait(0.2)
+            continue
+        end
+        noETimer = 0
+
+        while isActiveFunc() do
+            if State.pauseForGauntlet then break end
+            if isInfiltVictoryVisible() then break end
+            if not target or not target.Parent then break end
+
+            local h = target:FindFirstChildOfClass("Humanoid")
+            if target:GetAttribute("dead") == true or (h and h.Health <= 0) then
+                local nxt = findNearestEnemyInRange(RANGE)
+                if nxt then target = nxt else break end
+            end
+
+            local char  = player.Character
+            local hrp   = char and char:FindFirstChild("HumanoidRootPart")
+            local units = getMyUnits()
+            local tPos  = getEnemyCFrame(target)
+
+            if tPos and hrp then
+                if (hrp.Position - tPos.Position).Magnitude > RANGE then break end
+                hrp.CFrame = tPos * CFrame.new(0, 5, 0)
+                hrp.AssemblyLinearVelocity  = Vector3.zero
+                hrp.AssemblyAngularVelocity = Vector3.zero
+                if tick()-lastATick >= 0.15 then
+                    lastATick = tick()
+                    teleportUnitsTo(tPos)
+                    pcall(function() Remote.SendUnit:FireServer(target.Name, units) end)
+                end
+            end
+            task.wait(0.08)
+        end
+    end
+
+    pcall(function()
+        Remote.SetState:FireServer("attack",false)
+        Remote.SetState:FireServer("clicker",false)
+    end)
+    pcall(function()
+        local lr = RemoContainer:FindFirstChild("infiltration.leave")
+                or RemoContainer:FindFirstChild("lobbies.leave")
+        if lr then lr:FireServer() end
+    end)
+    task.wait(3)
+end
+
+local function startInfiltrationLoop()
+    if Thread.infiltration then
+        pcall(function() task.cancel(Thread.infiltration) end)
+        Thread.infiltration = nil
+    end
+    Thread.infiltration = task.spawn(function()
+        local round = 0
+        while State.isAutoInfiltration do
+            round += 1
+            WindUI:Notify({
+                Title   = string.format("[Infiltration] Round #%d", round),
+                Content = string.format("%s — Path %s", State.selectedInfiltName, State.selectedInfiltPath),
+                Duration = 3,
+            })
+            while State.pauseForGauntlet and State.isAutoInfiltration do task.wait(1) end
+            if not State.isAutoInfiltration then break end
+            runOneInfiltrationRound(
+                State.selectedInfiltName,
+                State.selectedInfiltPath,
+                function() return State.isAutoInfiltration and not State.pauseForGauntlet end
+            )
+            if State.isAutoInfiltration then task.wait(5) end
+        end
+        WindUI:Notify({Title="[Infiltration] Stopped", Content="Auto Infiltration disabled.", Duration=3})
+    end)
+end
+
+local function stopInfiltrationLoop()
+    State.isAutoInfiltration = false
+    if Thread.infiltration then
+        pcall(function() task.cancel(Thread.infiltration) end)
+        Thread.infiltration = nil
+    end
+    pcall(function()
+        Remote.SetState:FireServer("attack",false)
+        Remote.SetState:FireServer("clicker",false)
+    end)
+end
+
+-- ============================================================
+--  GAUNTLET SCHEDULER
+-- ============================================================
+task.spawn(function()
+    task.wait(5)
+    while isRunning() do
+        if not State.isGauntletFarm then task.wait(2) continue end
+        local now       = os.time()
+        local secInHour = now % 3600
+        local secToNext = 3600 - secInHour
+        local WINDOW    = 300
+        if secInHour <= WINDOW then
+            if State.isGauntletFarm then
+                savePositionBeforeGauntlet()
+                if State.preGauntletCFrame then State.savedFarmCFrame = State.preGauntletCFrame end
+            end
+            WindUI:Notify({Title="Gauntlet Window Open!",
+                Content=string.format("Window open — %ds remaining!", WINDOW-secInHour), Duration=5})
+        elseif secToNext > 10 then
+            local waitTime = secToNext - 10
+            WindUI:Notify({Title="Gauntlet Scheduler",
+                Content=string.format("Next Gauntlet in %02d:%02d",
+                    math.floor(waitTime/60), waitTime%60),
+                Duration=math.min(waitTime,8)})
+            task.wait(waitTime)
+            if State.isGauntletFarm then
+                savePositionBeforeGauntlet()
+                if State.preGauntletCFrame then State.savedFarmCFrame = State.preGauntletCFrame end
+            end
+        end
+        if not State.isGauntletFarm then continue end
+        State.pauseForGauntlet = true
+        State.gauntletRunning  = true
+        WindUI:Notify({Title="Gauntlet Time!", Content="Pausing Raid & AutoEgg!", Duration=5})
+        task.wait(5)
+        pcall(runOneGauntletRound)
+        State.gauntletRunning  = false
+        task.wait(1)
+        restorePositionAfterGauntlet()
+        State.pauseForGauntlet = false
+        WindUI:Notify({Title="Gauntlet Done", Content="Resuming!", Duration=4})
+        State.preGauntletCFrame = nil
+        task.wait(65)
+    end
+end)
+
+-- ============================================================
+--  updateRaidStatus
+-- ============================================================
+local raidStatusLabel
+updateRaidStatus = function()
+    local lines = {}
+    for _, raidName in ipairs(Data.RaidNamesList) do
+        if Data.RaidStates[raidName] then
+            local now   = tick()
+            local cdEnd = Data.RaidCooldowns[raidName]
+            local cfg   = Data.RaidConfig[raidName] or {}
+            local portalTag = Data.RaidNoPortal[raidName] and " [NP]" or ""
+            local hint  = (cfg.light and #cfg.light > 0) and (" [L→"..(cfg.tank and "T→" or "").."B]") or ""
+            local line
+            if cdEnd and now < cdEnd then
+                local rem = math.ceil(cdEnd-now)
+                line = string.format("[CD] %s%s%s — %02d:%02d", raidName, portalTag, hint, math.floor(rem/60), rem%60)
+            elseif State.pauseForGauntlet then
+                line = string.format("[PAUSED] %s%s%s", raidName, portalTag, hint)
+            elseif not State.isAutoRaidEnabled then
+                line = string.format("[OFF] %s%s%s", raidName, portalTag, hint)
+            else
+                line = string.format("[QUEUED] %s%s%s", raidName, portalTag, hint)
+            end
+            table.insert(lines, line)
+        end
+    end
+    if raidStatusLabel then
+        if #lines == 0 then
+            raidStatusLabel:SetTitle("Select raids in dropdown below")
+        else
+            raidStatusLabel:SetTitle(table.concat(lines, "\n"))
+        end
+    end
+end
+
+task.spawn(function()
+    while isRunning() do task.wait(5) pcall(updateRaidStatus) end
+end)
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
+local Camera      = Workspace.CurrentCamera
+
+local FreeVersion    = "Free Version"
+local PremiumVersion = "Premium Version"
+
+local function checkVersion(playerName)
+    local url = "https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/listpremium.lua"
+    local success, response = pcall(function() return game:HttpGet(url) end)
+    if not success then return FreeVersion end
+    local func = loadstring(response)
+    if not func then return FreeVersion end
+    local ok, premiumData = pcall(func)
+    if not ok then return FreeVersion end
+    return premiumData and premiumData[playerName] and PremiumVersion or FreeVersion
+end
+
+local userversion = checkVersion(LocalPlayer.Name)
+local isPremium   = (userversion == PremiumVersion)
+
+local Window = WindUI:CreateWindow({
+    Title                       = "DYHUB",
+    Icon                        = "rbxassetid://104487529937663",
+    Author                      = "Anime Warriors III | " .. userversion,
+    Folder                      = "DYHUB/AW3",
+    Size       = UDim2.fromOffset(500, 450),
+    IconThemed = true,
+    Transparent = true,
+    Theme      = "Dark",
+    BackgroundImageTransparency = 0.8,
+    HasOutline = false,
+    HideSearchBar    = true,
+    ScrollBarEnabled = true,
+    User = { Enabled = true, Anonymous = false },
+})
+getgenv().DYHUBAAS_Window = Window
+pcall(function() Window:Tag({ Title = "BETA", Color = Color3.fromHex("#db7093") }) end)
+Window:EditOpenButton({
+    Title           = "DYHUB - Open",
+    Icon            = "monitor",
+    CornerRadius    = UDim.new(0, 6),
+    StrokeThickness = 2,
+    Color           = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255)),
+    Draggable       = true,
+})
+getgenv().DYHUBAW3_Window = Window
+Window:SetToggleKey(Enum.KeyCode[Options.ToggleUIKey] or Enum.KeyCode.K)
+
+-- ============================================================
+--  TABS
+-- ============================================================
+local Tab = {
+    Farm     = Window:Tab({Title="Farming",      Icon="crosshair"}),
+    Event    = Window:Tab({Title="Event",         Icon="citrus"}),
+    Invasion = Window:Tab({Title="Invasion",      Icon="zap-off"}),
+    Raid     = Window:Tab({Title="Raid",          Icon="shield-alert"}),
+    Gauntlet = Window:Tab({Title="Gauntlet",      Icon="zap"}),
+    Infilt   = Window:Tab({Title="Infiltration",  Icon="shield"}),
+    Summon   = Window:Tab({Title="Summon",        Icon="star"}),
+    Units    = Window:Tab({Title="Units",         Icon="users"}),
+    World    = Window:Tab({Title="Teleport",      Icon="navigation"}),
+    Quest    = Window:Tab({Title="Quest",         Icon="scroll"}),
+    Settings = Window:Tab({Title="Settings",      Icon="cog"}),
+}
+
+-- ============================================================
+--  FARMING TAB
+-- ============================================================
+Tab.Farm:Section({Title="Farming MOB"})
+
+local EnemyDropdown = Tab.Farm:Dropdown({
+    Title    = "Select Monster",
+    Icon     = "target",
+    Values   = getAvailableEnemyNames(),
+    Value    = State.selectedEnemyNames,
+    Multi    = true,
+    Callback = function(v)
+        State.selectedEnemyNames   = type(v)=="table" and v or (v~=""and{v}or{})
+        Options.SelectedEnemyNames = State.selectedEnemyNames
+        SaveConfig()
+    end
+})
+
+Tab.Farm:Button({
+    Title    = "Refresh Monsters",
+    Icon     = "refresh-cw",
+    Callback = function() EnemyDropdown:Refresh(getAvailableEnemyNames()) end
+})
+
+Tab.Farm:Toggle({
+    Title    = "Auto Equip Weapon",
+    Icon     = "sword",
+    Type     = "Checkbox",
+    Value    = Options.AutoWeapon or false,
+    Callback = function(v)
+        State.isAutoWeapon = v
+        Options.AutoWeapon = v
+        SaveConfig()
+        if v then
+            task.spawn(function()
+                while State.isAutoWeapon do
+                    pcall(function() Remote.ToolbarEquip:FireServer("weapon") end)
+                    task.wait(15)
+                end
+            end)
+        end
+    end
+})
+
+Tab.Farm:Toggle({
+    Title    = "Auto Farm",
+    Icon     = "play",
+    Type     = "Checkbox",
+    Value    = Options.AutoFarm or false,
+    Callback = function(v)
+        State.isAutoFarm = v
+        Options.AutoFarm = v
+        SaveConfig()
+        if v then
+            pcall(function()
+                Remote.SetState:FireServer("attack",true)
+                Remote.SetState:FireServer("clicker",true)
+            end)
+            task.spawn(function()
+                while State.isAutoFarm do
+                    if State.pauseForGauntlet or State.isAutoSnipeBoss then task.wait(1) continue end
+                    if #State.selectedEnemyNames == 0 then task.wait(1) continue end
+                    local t = findEnemyMulti(State.selectedEnemyNames)
+                    if t then
+                        attackTarget(t, function() return State.selectedEnemyNames end, 25)
+                    else
+                        task.wait(0.1)
+                    end
+                end
+                if not State.isAutoSnipeBoss then
+                    pcall(function()
+                        Remote.SetState:FireServer("attack",false)
+                        Remote.SetState:FireServer("clicker",false)
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+Tab.Farm:Divider()
+Tab.Farm:Section({Title="Farming Boss"})
+
+Tab.Farm:Dropdown({
+    Title    = "Select Boss",
+    Icon     = "skull",
+    Values   = CONST.BOSS_LIST,
+    Value    = State.selectedBossNames,
+    Multi    = true,
+    Callback = function(v)
+        State.selectedBossNames   = type(v)=="table" and v or (v~=""and{v}or{})
+        Options.SelectedBossNames = State.selectedBossNames
+        SaveConfig()
+    end
+})
+
+Tab.Farm:Toggle({
+    Title    = "Auto Farm Boss",
+    Icon     = "crosshair",
+    Type     = "Checkbox",
+    Value    = Options.AutoFarmBoss or false,
+    Callback = function(v)
+        State.isAutoSnipeBoss = v
+        Options.AutoFarmBoss  = v
+        SaveConfig()
+        if v then
+            pcall(function()
+                Remote.SetState:FireServer("attack",true)
+                Remote.SetState:FireServer("clicker",true)
+            end)
+            task.spawn(function()
+                while State.isAutoSnipeBoss do
+                    if State.pauseForGauntlet then task.wait(1) continue end
+                    if #State.selectedBossNames == 0 then task.wait(1) continue end
+                    local myPos = (player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                        and player.Character.HumanoidRootPart.Position) or Vector3.zero
+                    local best, bestD = nil, math.huge
+                    for _, bn in ipairs(State.selectedBossNames) do
+                        local t = getTargetEnemy(bn)
+                        if t then
+                            local cf = getEnemyCFrame(t)
+                            if cf then
+                                local d = (cf.Position-myPos).Magnitude
+                                if d < bestD then bestD=d best=t end
+                            end
+                        end
+                    end
+                    if best then
+                        attackTarget(best, function() return State.selectedBossNames end, 60)
+                    else
+                        task.wait(1)
+                    end
+                end
+                if not State.isAutoFarm then
+                    pcall(function()
+                        Remote.SetState:FireServer("attack",false)
+                        Remote.SetState:FireServer("clicker",false)
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+-- ============================================================
+--  EVENT TAB
+-- ============================================================
+Tab.Event:Section({Title="Escort Cart"})
+
+Tab.Event:Toggle({
+    Title    = "Auto Follow Cart",
+    Icon     = "crosshair",
+    Type     = "Checkbox",
+    Value    = Options.AutoFollowCart or false,
+    Callback = function(v)
+        State.isFollowingCart  = v
+        Options.AutoFollowCart = v
+        SaveConfig()
+        if v then startFollowCart()
+        else
+            State.isFollowingCart = false
+            if Thread.cartFollow then
+                pcall(function() task.cancel(Thread.cartFollow) end)
+                Thread.cartFollow = nil
+            end
+        end
+    end
+})
+
+Tab.Event:Toggle({
+    Title    = "Auto Dig Summer",
+    Icon     = "shovel",
+    Desc     = "",
+    Type     = "Checkbox",
+    Value    = Options.AutoDigSummer or false,
+    Callback = function(v)
+        State.isAutoDigSummer = v
+        Options.AutoDigSummer = v
+        SaveConfig()
+        if v then
+            startAutoDigSummer()
+        else
+            stopAutoDigSummer()
+        end
+    end
+})
+Tab.Event:Divider()
+Tab.Event:Section({Title="Create Escort"})
+
+local escortMapList = #Data.EscortNamesList > 0 and Data.EscortNamesList or {"Journeys End"}
+if not table.find(escortMapList, State.selectedEscortMap) then
+    State.selectedEscortMap = escortMapList[1]
+end
+
+Tab.Event:Dropdown({
+    Title    = "Select Map",
+    Icon     = "map",
+    Values   = escortMapList,
+    Value    = State.selectedEscortMap,
+    Multi    = false,
+    Callback = function(v)
+        if v and v ~= "" then
+            State.selectedEscortMap   = v
+            Options.SelectedEscortMap = v
+            SaveConfig()
+        end
+    end
+})
+
+Tab.Event:Dropdown({
+    Title    = "Select Tier",
+    Icon     = "star",
+    Values   = CONST.TIER_LABELS,
+    Value    = State.selectedReplayTier,
+    Multi    = false,
+    Callback = function(v)
+        if v and v ~= "" then
+            State.selectedReplayTier = v
+            Options.ReplayTier       = v
+            SaveConfig()
+        end
+    end
+})
+
+Tab.Event:Button({
+    Title    = "Create Escort",
+    Icon     = "plus-circle",
+    Desc     = "Create new Escort room",
+    Callback = function()
+        local tierStr = getTierString(State.selectedReplayTier)
+        local ok = pcall(function()
+            Remote.EscortCreate:InvokeServer(State.selectedEscortMap, {friendsOnly=false, tier=tierStr})
+        end)
+        WindUI:Notify({
+            Title   = ok and "[Escort] Created!" or "[Escort] Failed",
+            Content = ok and string.format("Map: %s | Tier: %s", State.selectedEscortMap, tierStr) or "Failed — try again.",
+            Duration = 3,
+        })
+    end
+})
+
+Tab.Event:Divider()
+Tab.Event:Section({Title="Auto Escort"})
+
+Tab.Event:Toggle({
+    Title    = "Auto Start",
+    Icon     = "play",
+    Type     = "Checkbox",
+    Value    = Options.AutoEscortStart or false,
+    Callback = function(v)
+        State.isAutoEscortStart = v Options.AutoEscortStart = v SaveConfig()
+        if v then startAutoEscortStart()
+        elseif Thread.escortStart then
+            pcall(function() task.cancel(Thread.escortStart) end) Thread.escortStart = nil
+        end
+    end
+})
+
+Tab.Event:Toggle({
+    Title    = "Auto Replay",
+    Icon     = "repeat",
+    Type     = "Checkbox",
+    Value    = Options.AutoEscortReplay or false,
+    Callback = function(v)
+        State.isAutoEscortReplay = v Options.AutoEscortReplay = v SaveConfig()
+        if v then startAutoEscortReplay()
+        elseif Thread.escortReplay then
+            pcall(function() task.cancel(Thread.escortReplay) end) Thread.escortReplay = nil
+        end
+    end
+})
+
+Tab.Event:Toggle({
+    Title    = "Auto Accept Replay/Join",
+    Icon     = "check-square",
+    Type     = "Checkbox",
+    Value    = Options.AutoEscortAccept or false,
+    Callback = function(v)
+        State.isAutoEscortAccept = v Options.AutoEscortAccept = v SaveConfig()
+        if v then startAutoEscortAccept()
+        elseif Thread.escortAccept then
+            pcall(function() task.cancel(Thread.escortAccept) end) Thread.escortAccept = nil
+        end
+    end
+})
+
+Tab.Event:Toggle({
+    Title    = "Auto Join Other Escort",
+    Icon     = "user-plus",
+    Type     = "Checkbox",
+    Value    = Options.AutoJoinEscort or false,
+    Callback = function(v)
+        State.isAutoJoinEscort = v Options.AutoJoinEscort = v SaveConfig()
+        if v then startAutoJoinEscort() else stopAutoJoinEscort() end
+    end
+})
+
+-- ============================================================
+--  INVASION TAB
+-- ============================================================
+Tab.Invasion:Section({Title="Dark Matter Invasion"})
+
+Tab.Invasion:Section({Title="Card Priority"})
+
+for i = 1, 5 do
+    local idx = i
+    Tab.Invasion:Dropdown({
+        Title    = "Card Priority "..i,
+        Icon     = "star",
+        Values   = Data.INVASION_CARDS,
+        Value    = State.invasionCardPriority[i] or "",
+        Multi    = false,
+        Callback = function(v)
+            State.invasionCardPriority[idx]   = (v and v~="") and v or nil
+            Options.InvasionCardPriority[idx] = State.invasionCardPriority[idx]
+            SaveConfig()
+        end
+    })
+end
+
+Tab.Invasion:Divider()
+Tab.Invasion:Section({Title="Team & Controls"})
+
+Tab.Invasion:Dropdown({
+    Title    = "Team Slot",
+    Icon     = "users",
+    Desc     = "Load this team when entering Invasion",
+    Values   = CONST.TEAM_SLOTS,
+    Value    = State.invasionTeamSlot,
+    Multi    = false,
+    Callback = function(v)
+        if v and v ~= "" then
+            State.invasionTeamSlot   = v
+            Options.InvasionTeamSlot = v
+            SaveConfig()
+        end
+    end
+})
+
+Tab.Invasion:Button({
+    Title    = "Create Invasion Room",
+    Icon     = "plus-circle",
+    Desc     = "Manually create Dark Matter Invasion",
+    Callback = function()
+        loadTeam(State.invasionTeamSlot) task.wait(1)
+        local ok = pcall(function()
+            if Remote.InvasionCreate then
+                Remote.InvasionCreate:InvokeServer(Data.INVASION_NAME, {friendsOnly=false})
+            end
+        end)
+        if not ok then
+            pcall(function()
+                if Remote.InvasionCreate then
+                    Remote.InvasionCreate:FireServer(Data.INVASION_NAME, {friendsOnly=false})
+                end
+            end)
+        end
+        WindUI:Notify({Title="[Invasion] Room Created", Content=Data.INVASION_NAME, Duration=3})
+    end
+})
+
+Tab.Invasion:Button({
+    Title    = "Start Room",
+    Icon     = "play",
+    Callback = function()
+        pcall(function() Remote.LobbiesStart:FireServer() end)
+        WindUI:Notify({Title="[Invasion] Started", Content="Room started!", Duration=3})
+    end
+})
+
+Tab.Invasion:Button({
+    Title    = "Leave Invasion",
+    Icon     = "log-out",
+    Callback = function()
+        pcall(function()
+            if Remote.InvasionLeave then Remote.InvasionLeave:FireServer() end
+        end)
+        WindUI:Notify({Title="[Invasion] Left", Content="Left room.", Duration=3})
+    end
+})
+
+Tab.Invasion:Divider()
+Tab.Invasion:Section({Title="Auto Invasion"})
+
+Tab.Invasion:Toggle({
+    Title    = "Auto Select Card",
+    Icon     = "layers",
+    Desc     = "Auto vote card based on priority list above",
+    Type     = "Checkbox",
+    Value    = Options.AutoInvasionCard or false,
+    Callback = function(v)
+        State.isAutoInvasionCard = v
+        Options.AutoInvasionCard = v
+        SaveConfig()
+        if v then
+            task.spawn(function()
+                while State.isAutoInvasionCard and isRunning() do
+                    task.spawn(doInvasionCardSelection)
+                    task.wait(5)
+                end
+            end)
+        end
+    end
+})
+
+Tab.Invasion:Toggle({
+    Title    = "Auto Join Other Invasion",
+    Icon     = "user-plus",
+    Desc     = "Auto join open Invasion lobbies",
+    Type     = "Checkbox",
+    Value    = Options.AutoJoinInvasion or false,
+    Callback = function(v)
+        State.isAutoJoinInvasion = v
+        Options.AutoJoinInvasion = v
+        SaveConfig()
+        if v then startAutoJoinInvasion() else stopAutoJoinInvasion() end
+    end
+})
+
+-- [NEW] Auto Accept Invasion Toggle
+Tab.Invasion:Toggle({
+    Title    = "Auto Accept Invasion",
+    Icon     = "check-square",
+    Desc     = "Auto click Join/Accept button in Invasion lobby",
+    Type     = "Checkbox",
+    Value    = Options.AutoAcceptInvasion or false,
+    Callback = function(v)
+        State.isAutoAcceptInvasion = v
+        Options.AutoAcceptInvasion = v
+        SaveConfig()
+        if v then
+            startAutoAcceptInvasion()
+        else
+            stopAutoAcceptInvasion()
+        end
+    end
+})
+
+Tab.Invasion:Toggle({
+    Title    = "Auto Replay Invasion",
+    Icon     = "repeat",
+    Desc     = "Auto replay invasion every 20s",
+    Type     = "Checkbox",
+    Value    = Options.AutoInvasionReplay or false,
+    Callback = function(v)
+        State.isAutoInvasionReplay = v
+        Options.AutoInvasionReplay = v
+        SaveConfig()
+        if v then
+            startAutoInvasionReplay()
+        else
+            stopAutoInvasionReplay()
+        end
+    end
+})
+
+Tab.Invasion:Toggle({
+    Title    = "Auto Stand at Barricade",
+    Icon     = "map-pin",
+    Desc     = "",
+    Type     = "Checkbox",
+    Value    = Options.AutoStandBarricade or false,
+    Callback = function(v)
+        State.isStandingBarricade  = v
+        Options.AutoStandBarricade = v
+        SaveConfig()
+        if v then startStandAtBarricade() else stopStandAtBarricade() end
+    end
+})
+
+Tab.Invasion:Toggle({
+    Title    = "Auto Invasion",
+    Icon     = "zap-off",
+    Desc     = "Auto farm Invasion",
+    Type     = "Checkbox",
+    Value    = Options.AutoInvasion or false,
+    Callback = function(v)
+        Options.AutoInvasion = v
+        SaveConfig()
+        if v then
+            State.isAutoInvasion = true
+            startInvasionLoop()
+        else
+            stopInvasionLoop()
+        end
+    end
+})
+
+-- ============================================================
+--  RAID TAB
+-- ============================================================
+Tab.Raid:Section({Title="Raid Status"})
+raidStatusLabel = Tab.Raid:Section({Title="Select raids in dropdown below"})
+
+Tab.Raid:Section({Title="Auto Raid"})
+
+Tab.Raid:Toggle({
+    Title    = "Auto Raid",
+    Icon     = "play",
+    Desc     = "Master switch — select raids below first",
+    Type     = "Checkbox",
+    Value    = Options.AutoRaid or false,
+    Callback = function(v)
+        State.isAutoRaidEnabled = v
+        Options.AutoRaid        = v
+        SaveConfig()
+        if v then
+            if #getActiveRaids() > 0 then
+                startQueueRunner()
+                WindUI:Notify({Title="Auto Raid ON",
+                    Content=string.format("Queue started — %d raid(s).", #getActiveRaids()), Duration=3})
+            else
+                WindUI:Notify({Title="Auto Raid ON", Content="No raids selected.", Duration=4})
+            end
+        else
+            stopQueueRunner()
+            WindUI:Notify({Title="Auto Raid OFF", Content="Queue stopped.", Duration=3})
+        end
+        pcall(updateRaidStatus)
+    end
+})
+
+local savedActiveRaids = Options.ActiveRaids or {}
+local RaidDropdown = Tab.Raid:Dropdown({
+    Title    = "Select Raids to Run",
+    Icon     = "shield-alert",
+    Desc     = "Multi-select — enable Auto Raid to start",
+    Values   = Data.RaidNamesList,
+    Value    = savedActiveRaids,
+    Multi    = true,
+    Callback = function(v)
+        local sel = type(v)=="table" and v or (v~=""and{v}or{})
+        for name in pairs(Data.RaidStates) do Data.RaidStates[name]=false end
+        for _, name in ipairs(sel) do Data.RaidStates[name]=true end
+        Options.ActiveRaids = sel
+        SaveConfig()
+        if State.isAutoRaidEnabled then
+            if #sel > 0 then startQueueRunner()
+            elseif #getActiveRaids() == 0 then stopQueueRunner() end
+        end
+        pcall(updateRaidStatus)
+    end
+})
+
+Tab.Raid:Button({
+    Title    = "Refresh Raid List",
+    Icon     = "refresh-cw",
+    Callback = function()
+        task.spawn(function()
+            loadRaidModule()
+            RaidDropdown:Refresh(Data.RaidNamesList)
+            WindUI:Notify({Title="Raid List Updated",
+                Content=string.format("Found %d raids.", #Data.RaidNamesList), Duration=3})
+        end)
+    end
+})
+
+Tab.Raid:Button({
+    Title    = "Show Phase Info",
+    Icon     = "info",
+    Callback = function()
+        local active = getActiveRaids()
+        if #active == 0 then
+            WindUI:Notify({Title="Phase Info", Content="No raids selected.", Duration=3}) return
+        end
+        for _, rn in ipairs(active) do
+            local cfg  = Data.RaidConfig[rn] or {}
+            local info = rn.."\n"
+            if Data.RaidNoPortal[rn] then info = info.."  [No Portal — Direct Join]\n" end
+            info = info.."  Light: "..(cfg.light and #cfg.light>0 and table.concat(cfg.light,", ") or "(none)").."\n"
+            if cfg.tank then info = info.."  Tank: "..cfg.tank.."\n" end
+            info = info.."  Boss: "..(cfg.boss or "auto-detect")
+            WindUI:Notify({Title="Phase Order", Content=info, Duration=6})
+            task.wait(0.5)
+        end
+    end
+})
+
+Tab.Raid:Button({
+    Title    = "Refresh Status",
+    Icon     = "refresh-cw",
+    Callback = function()
+        pcall(updateRaidStatus)
+        WindUI:Notify({Title="Raid Status", Content="Refreshed!", Duration=2})
+    end
+})
+
+if #savedActiveRaids > 0 then
+    task.spawn(function()
+        task.wait(1)
+        for name in pairs(Data.RaidStates) do Data.RaidStates[name]=false end
+        for _, name in ipairs(savedActiveRaids) do Data.RaidStates[name]=true end
+        if State.isAutoRaidEnabled then startQueueRunner() end
+        pcall(updateRaidStatus)
+    end)
+end
+
+-- ============================================================
+--  GAUNTLET TAB
+-- ============================================================
+Tab.Gauntlet:Section({Title="Card Priority"})
+
+for i = 1, 5 do
+    local idx = i
+    Tab.Gauntlet:Dropdown({
+        Title    = "Priority "..i,
+        Icon     = "star",
+        Values   = Data.ALL_CARDS,
+        Value    = State.cardPriorityList[i] or "",
+        Multi    = false,
+        Callback = function(v)
+            State.cardPriorityList[idx]   = (v and v~="") and v or nil
+            Options.CardPriorityList[idx] = State.cardPriorityList[idx]
+            SaveConfig()
+        end
+    })
+end
+
+Tab.Gauntlet:Divider()
+
+Tab.Gauntlet:Slider({
+    Title    = "Leave at Floor",
+    Icon     = "log-out",
+    Step     = 1,
+    Value    = {Min=1, Max=50, Default=Options.GauntletMaxFloor or 6},
+    Callback = function(v)
+        State.gauntletMaxFloor   = math.floor(v)
+        Options.GauntletMaxFloor = State.gauntletMaxFloor
+        SaveConfig()
+    end
+})
+
+Tab.Gauntlet:Toggle({
+    Title    = "Auto Leave",
+    Icon     = "log-out",
+    Type     = "Checkbox",
+    Value    = Options.AutoLeaveGauntlet or false,
+    Callback = function(v)
+        State.isGauntletAutoLeave = v Options.AutoLeaveGauntlet = v SaveConfig()
+    end
+})
+
+Tab.Gauntlet:Divider()
+Tab.Gauntlet:Section({Title="Controls"})
+
+Tab.Gauntlet:Toggle({
+    Title    = "Auto Select Card",
+    Icon     = "layers",
+    Type     = "Checkbox",
+    Value    = Options.AutoSelectCard or false,
+    Callback = function(v)
+        State.isGauntletAutoCard = v Options.AutoSelectCard = v SaveConfig()
+    end
+})
+
+Tab.Gauntlet:Toggle({
+    Title    = "Auto Farm Gauntlet",
+    Icon     = "zap",
+    Desc     = "Enters Gauntlet at xx:00 every hour — 5 min window",
+    Type     = "Checkbox",
+    Value    = Options.AutoGauntlet or false,
+    Callback = function(v)
+        State.isGauntletFarm = v Options.AutoGauntlet = v SaveConfig()
+        if v then
+        else
+            if State.pauseForGauntlet then
+                State.pauseForGauntlet = false
+                State.gauntletRunning  = false
+            end
+        end
+    end
+})
+
+-- ============================================================
+--  INFILTRATION TAB
+-- ============================================================
+Tab.Infilt:Section({Title="Infiltration Settings"})
+
+local infiltNames = {}
+for name in pairs(Data.InfiltrationContent) do table.insert(infiltNames, name) end
+table.sort(infiltNames)
+if #infiltNames == 0 then infiltNames = {"Rain Village"} end
+
+Tab.Infilt:Dropdown({
+    Title    = "Select Infiltration",
+    Icon     = "map",
+    Values   = infiltNames,
+    Value    = State.selectedInfiltName,
+    Multi    = false,
+    Callback = function(v)
+        if v and v ~= "" then State.selectedInfiltName = v Options.InfiltName = v SaveConfig() end
+    end
+})
+
+Tab.Infilt:Dropdown({
+    Title    = "Select Path",
+    Icon     = "git-branch",
+    Desc     = "I = 1 key  |  II = 3 keys (x2 drop)  |  III = 5 keys (x3 drop)",
+    Values   = CONST.INFILT_PATHS,
+    Value    = State.selectedInfiltPath,
+    Multi    = false,
+    Callback = function(v)
+        if v and v ~= "" then State.selectedInfiltPath = v Options.InfiltPath = v SaveConfig() end
+    end
+})
+
+Tab.Infilt:Dropdown({
+    Title    = "Team Slot",
+    Icon     = "users",
+    Desc     = "Load this team when entering Infiltration",
+    Values   = CONST.TEAM_SLOTS,
+    Value    = State.infiltTeamSlot,
+    Multi    = false,
+    Callback = function(v)
+        if v and v ~= "" then State.infiltTeamSlot = v Options.InfiltTeamSlot = v SaveConfig() end
+    end
+})
+
+Tab.Infilt:Divider()
+Tab.Infilt:Section({Title="Manual Controls"})
+
+Tab.Infilt:Button({
+    Title    = "Create Infiltration",
+    Icon     = "plus-circle",
+    Callback = function()
+        loadTeam(State.infiltTeamSlot) task.wait(1)
+        local ok = pcall(function()
+            Remote.InfiltCreate:InvokeServer(State.selectedInfiltName, State.selectedInfiltPath, {friendsOnly=false})
+        end)
+        if not ok then
+            pcall(function()
+                Remote.InfiltCreate:FireServer(State.selectedInfiltName, State.selectedInfiltPath, {friendsOnly=false})
+            end)
+        end
+        WindUI:Notify({Title="[Infiltration] Created",
+            Content=string.format("%s — Path %s", State.selectedInfiltName, State.selectedInfiltPath), Duration=3})
+    end
+})
+
+Tab.Infilt:Button({
+    Title    = "Start Room",
+    Icon     = "play",
+    Callback = function()
+        pcall(function() Remote.LobbiesStart:FireServer() end)
+        WindUI:Notify({Title="[Infiltration] Started", Content="Room started!", Duration=3})
+    end
+})
+
+Tab.Infilt:Button({
+    Title    = "Leave Infiltration",
+    Icon     = "log-out",
+    Callback = function()
+        pcall(function()
+            local lr = RemoContainer:FindFirstChild("infiltration.leave")
+                    or RemoContainer:FindFirstChild("lobbies.leave")
+            if lr then lr:FireServer() end
+        end)
+        WindUI:Notify({Title="[Infiltration] Left", Content="Left room.", Duration=3})
+    end
+})
+
+Tab.Infilt:Divider()
+Tab.Infilt:Section({Title="Auto Infiltration"})
+
+Tab.Infilt:Toggle({
+    Title    = "Auto Infiltration",
+    Icon     = "zap",
+    Desc     = "Auto create → start → farm → repeat",
+    Type     = "Checkbox",
+    Value    = Options.AutoInfiltration or false,
+    Callback = function(v)
+        Options.AutoInfiltration = v SaveConfig()
+        if v then
+            State.isAutoInfiltration = true
+            startInfiltrationLoop()
+            WindUI:Notify({Title="[Infiltration] Auto ON",
+                Content=string.format("%s — Path %s", State.selectedInfiltName, State.selectedInfiltPath), Duration=4})
+        else
+            stopInfiltrationLoop()
+        end
+    end
+})
+
+-- ============================================================
+--  SUMMON TAB
+-- ============================================================
+Tab.Summon:Section({Title="Summon EGG"})
+
+local eggNames = getEggNames()
+if #eggNames == 0 then eggNames = {"(No eggs found)"} end
+if not table.find(eggNames, State.selectedEggName) then State.selectedEggName = eggNames[1] or "Nemak" end
+
+local EggDropdown = Tab.Summon:Dropdown({
+    Title    = "Select Egg",
+    Icon     = "package",
+    Values   = eggNames,
+    Value    = State.selectedEggName,
+    Multi    = false,
+    Callback = function(v)
+        if v and v ~= "" and v ~= "(No eggs found)" then
+            State.selectedEggName = v Options.SelectedEggName = v SaveConfig()
+        end
+    end
+})
+
+Tab.Summon:Button({
+    Title    = "Refresh Egg List",
+    Icon     = "refresh-cw",
+    Callback = function()
+        local n = getEggNames()
+        if #n == 0 then n = {"(No eggs found)"} end
+        EggDropdown:Refresh(n)
+    end
+})
+
+Tab.Summon:Divider()
+
+Tab.Summon:Button({
+    Title    = "Save Position",
+    Icon     = "map-pin",
+    Desc     = "",
+    Callback = function()
+        local char = player.Character
+        local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            State.savedFarmCFrame = hrp.CFrame
+            State.lastFarmCFrame  = hrp.CFrame
+            WindUI:Notify({Title="Saved!",
+                Content=string.format("(%.0f, %.0f, %.0f)", hrp.Position.X, hrp.Position.Y, hrp.Position.Z),
+                Duration=3})
+        end
+    end
+})
+
+Tab.Summon:Divider()
+Tab.Summon:Section({Title="Auto Summon"})
+
+Tab.Summon:Toggle({
+    Title    = "Auto Open Egg",
+    Icon     = "package",
+    Type     = "Checkbox",
+    Value    = Options.AutoEgg or false,
+    Callback = function(v)
+        State.isAutoEgg = v Options.AutoEgg = v SaveConfig()
+        if State.isAutoEgg then
+            task.spawn(function()
+                local eggCF = getEggCFrame(State.selectedEggName)
+                local char  = player.Character
+                local hrp   = char and char:FindFirstChild("HumanoidRootPart")
+                if hrp and eggCF then
+                    local ep = eggCF.Position
+                    hrp.CFrame = CFrame.lookAt(ep+Vector3.new(0,10,3), Vector3.new(ep.X,ep.Y+10,ep.Z))
+                    hrp.AssemblyLinearVelocity  = Vector3.zero
+                    hrp.AssemblyAngularVelocity = Vector3.zero
+                end
+                task.wait(0.5)
+                while State.isAutoEgg do
+                    if State.pauseForGauntlet then task.wait(1) continue end
+                    local returnCF = getBestReturnCFrame()
+                    if (State.isAutoFarm or State.isAutoSnipeBoss) and returnCF then
+                        char = player.Character
+                        hrp  = char and char:FindFirstChild("HumanoidRootPart")
+                        if hrp then
+                            hrp.CFrame = returnCF
+                            hrp.AssemblyLinearVelocity  = Vector3.zero
+                            hrp.AssemblyAngularVelocity = Vector3.zero
+                        end
+                        local farmEnd = tick()+3
+                        while tick()<farmEnd and State.isAutoEgg and not State.pauseForGauntlet do task.wait(0.05) end
+                        if not State.isAutoEgg or State.pauseForGauntlet then continue end
+                        State.isDoingEgg = true
+                        task.wait(0.15)
+                        eggCF = getEggCFrame(State.selectedEggName)
+                        char  = player.Character
+                        hrp   = char and char:FindFirstChild("HumanoidRootPart")
+                        if hrp and eggCF then
+                            local ep = eggCF.Position
+                            hrp.CFrame = CFrame.lookAt(ep+Vector3.new(0,10,3), Vector3.new(ep.X,ep.Y+10,ep.Z))
+                            hrp.AssemblyLinearVelocity  = Vector3.zero
+                            hrp.AssemblyAngularVelocity = Vector3.zero
+                        end
+                        task.wait(1.5)
+                        pcall(function() Remote.OpenEgg:FireServer(State.selectedEggName,true) end)
+                        task.wait(1.5)
+                        char = player.Character
+                        hrp  = char and char:FindFirstChild("HumanoidRootPart")
+                        if hrp then
+                            hrp.CFrame = returnCF
+                            hrp.AssemblyLinearVelocity  = Vector3.zero
+                            hrp.AssemblyAngularVelocity = Vector3.zero
+                        end
+                        State.isDoingEgg = false
+                    else
+                        eggCF = getEggCFrame(State.selectedEggName)
+                        char  = player.Character
+                        hrp   = char and char:FindFirstChild("HumanoidRootPart")
+                        if hrp and eggCF then
+                            local ep    = eggCF.Position
+                            local myPos = hrp.Position
+                            if (Vector3.new(myPos.X,0,myPos.Z)-Vector3.new(ep.X,0,ep.Z)).Magnitude > 10 then
+                                hrp.CFrame = CFrame.lookAt(ep+Vector3.new(0,10,3), Vector3.new(ep.X,ep.Y+10,ep.Z))
+                                hrp.AssemblyLinearVelocity  = Vector3.zero
+                                hrp.AssemblyAngularVelocity = Vector3.zero
+                                task.wait(1.5)
+                            end
+                        end
+                        pcall(function() Remote.OpenEgg:FireServer(State.selectedEggName,true) end)
+                        task.wait(0.5)
+                    end
+                end
+                State.isDoingEgg = false
+            end)
+        else
+            State.isDoingEgg = false
+        end
+    end
+})
+
+-- ============================================================
+--  UNITS TAB
+-- ============================================================
+Tab.Units:Section({Title="Unit Settings"})
+
+Tab.Units:Toggle({
+    Title    = "Send All Units",
+    Icon     = "users",
+    Type     = "Checkbox",
+    Value    = Options.SendAllUnits or false,
+    Callback = function(v)
+        Options.SendAllUnits = v SaveConfig()
+        pcall(function() Remote.SettingsSet:FireServer("send_all",v) end)
+    end
+})
+
+Tab.Units:Toggle({
+    Title    = "No Retreat",
+    Icon     = "shield",
+    Type     = "Checkbox",
+    Value    = Options.NoRetreat or false,
+    Callback = function(v)
+        Options.NoRetreat = v SaveConfig()
+        pcall(function() Remote.SettingsSet:FireServer("no_retreat",v) end)
+    end
+})
+
+Tab.Units:Toggle({
+    Title    = "Auto Equip Best",
+    Icon     = "user-check",
+    Type     = "Checkbox",
+    Value    = Options.AutoEquip or false,
+    Callback = function(v)
+        State.isAutoEquip = v Options.AutoEquip = v SaveConfig()
+        if v then
+            task.spawn(function()
+                while State.isAutoEquip do
+                    pcall(function()
+                        Remote.UnequipAll:FireServer()
+                        task.wait(0.5)
+                        Remote.EquipBest:FireServer()
+                    end)
+                    task.wait(60)
+                end
+            end)
+        end
+    end
+})
+
+Tab.Units:Divider()
+Tab.Units:Section({Title="Team Slots"})
+
+Tab.Units:Dropdown({
+    Title    = "Gauntlet Team Slot",
+    Icon     = "layers",
+    Desc     = "Load when entering Gauntlet",
+    Values   = CONST.TEAM_SLOTS,
+    Value    = State.gauntletTeamSlot,
+    Multi    = false,
+    Callback = function(v)
+        if v and v ~= "" then State.gauntletTeamSlot = v Options.GauntletTeamSlot = v SaveConfig() end
+    end
+})
+
+Tab.Units:Button({
+    Title    = "Load Gauntlet Team Now",
+    Icon     = "zap",
+    Callback = function()
+        loadTeam(State.gauntletTeamSlot)
+        WindUI:Notify({Title="Team Loaded", Content="Gauntlet Slot "..State.gauntletTeamSlot.." loaded!", Duration=3})
+    end
+})
+
+Tab.Units:Divider()
+
+Tab.Units:Dropdown({
+    Title    = "Raid Team Slot",
+    Icon     = "shield-alert",
+    Desc     = "Load when entering Raid",
+    Values   = CONST.TEAM_SLOTS,
+    Value    = State.raidTeamSlot,
+    Multi    = false,
+    Callback = function(v)
+        if v and v ~= "" then State.raidTeamSlot = v Options.RaidTeamSlot = v SaveConfig() end
+    end
+})
+
+Tab.Units:Button({
+    Title    = "Load Raid Team Now",
+    Icon     = "shield",
+    Callback = function()
+        loadTeam(State.raidTeamSlot)
+        WindUI:Notify({Title="Team Loaded", Content="Raid Slot "..State.raidTeamSlot.." loaded!", Duration=3})
+    end
+})
+
+Tab.Units:Divider()
+
+local manualSlot = "1"
+Tab.Units:Dropdown({
+    Title    = "Manual Load Any Slot",
+    Icon     = "refresh-cw",
+    Values   = CONST.TEAM_SLOTS,
+    Value    = "1",
+    Multi    = false,
+    Callback = function(v) if v and v ~= "" then manualSlot=v end end
+})
+
+Tab.Units:Button({
+    Title    = "Load Selected Slot",
+    Icon     = "play",
+    Callback = function()
+        loadTeam(manualSlot)
+        WindUI:Notify({Title="Team Loaded", Content="Slot "..manualSlot.." loaded!", Duration=3})
+    end
+})
+
+-- ============================================================
+--  QUEST TAB
+-- ============================================================
+Tab.Quest:Section({Title="Quest Settings"})
+
+local questList = getQuestList()
+if not table.find(questList, State.selectedQuestId) then State.selectedQuestId = questList[1] or "" end
+
+local QuestDropdown = Tab.Quest:Dropdown({
+    Title    = "Select Quest Part",
+    Icon     = "scroll",
+    Values   = questList,
+    Value    = State.selectedQuestId,
+    Multi    = false,
+    Callback = function(v)
+        if v and v ~= "" and v ~= "(No quests found)" then
+            State.selectedQuestId = v Options.SelectedQuestId = v SaveConfig()
+        end
+    end
+})
+
+Tab.Quest:Button({
+    Title    = "Refresh Quest List",
+    Icon     = "refresh-cw",
+    Callback = function()
+        task.spawn(function()
+            local ok, mod = pcall(function()
+                return require(RS:WaitForChild("src"):WaitForChild("common")
+                    :WaitForChild("content"):WaitForChild("world"):WaitForChild("quests"))
+            end)
+            if ok and mod and mod.questsContent then
+                Data.QuestData = mod.questsContent
+                buildQuestLabelMap()
+            end
+            QuestDropdown:Refresh(getQuestList())
+        end)
+    end
+})
+
+Tab.Quest:Toggle({
+    Title    = "Auto Quest",
+    Icon     = "check-square",
+    Type     = "Checkbox",
+    Value    = Options.AutoQuest or false,
+    Callback = function(v)
+        State.isAutoQuest = v Options.AutoQuest = v SaveConfig()
+        if v then
+            task.spawn(function()
+                while State.isAutoQuest do
+                    if State.selectedQuestId=="" or State.selectedQuestId=="(No quests found)" then task.wait(1) continue end
+                    local questId, _, tasks = getQuestInfoFromLabel(State.selectedQuestId)
+                    if not questId then task.wait(1) continue end
+                    WindUI:Notify({Title="Auto Quest",
+                        Content=string.format("Starting: %s (%d tasks)", State.selectedQuestId, #tasks), Duration=4})
+                    local allDone = true
+                    for ti, taskInfo in ipairs(tasks) do
+                        if not State.isAutoQuest then allDone=false break end
+                        local enem     = taskInfo.enemy
+                        local required = taskInfo.required
+                        local kills    = 0
+                        WindUI:Notify({Title=string.format("Task %d/%d",ti,#tasks),
+                            Content=string.format("Target: [%s]  Need: %d", enem, required), Duration=4})
+                        while State.isAutoQuest and kills < required do
+                            local target = getTargetEnemy(enem)
+                            if not target then task.wait(0.5) continue end
+                            local char  = player.Character
+                            local hrp   = char and char:FindFirstChild("HumanoidRootPart")
+                            local units = getMyUnits()
+                            local tPos  = getEnemyCFrame(target)
+                            if tPos then
+                                if hrp then hrp.CFrame = tPos * CFrame.new(0,5,0) hrp.AssemblyLinearVelocity = Vector3.zero end
+                                teleportUnitsTo(tPos)
+                                pcall(function() Remote.SendUnit:FireServer(target.Name, units) end)
+                            end
+                            while State.isAutoQuest and target and target.Parent do
+                                if target:GetAttribute("dead") == true then
+                                    kills += 1
+                                    WindUI:Notify({Title=string.format("Kill %d/%d",kills,required),
+                                        Content=string.format("[%s] Killed!",enem), Duration=2})
+                                    break
+                                end
+                                local cur = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                                if cur then
+                                    local cp = getEnemyCFrame(target)
+                                    if cp and (cur.Position-cp.Position).Magnitude > 8 then
+                                        cur.CFrame = cp * CFrame.new(0,5,0)
+                                        cur.AssemblyLinearVelocity = Vector3.zero
+                                        teleportUnitsTo(cp)
+                                        pcall(function() Remote.SendUnit:FireServer(target.Name, getMyUnits()) end)
+                                    end
+                                end
+                                task.wait(0.2)
+                            end
+                        end
+                        WindUI:Notify({Title=string.format("Task %d/%d Done",ti,#tasks),
+                            Content=string.format("[%s] x%d Complete!",enem,required), Duration=3})
+                    end
+                    if State.isAutoQuest and allDone then
+                        WindUI:Notify({Title="Going to NPC",
+                            Content=string.format("Claiming [%s]...", State.selectedQuestId), Duration=3})
+                        task.wait(0.5)
+                        goToNPCAndClaim(questId)
+                        WindUI:Notify({Title="Reward Claimed!",
+                            Content=string.format("[%s] collected!", State.selectedQuestId), Duration=4})
+                    end
+                    task.wait(2)
+                end
+            end)
+        end
+    end
+})
+
+-- ============================================================
+--  WORLD / TELEPORT TAB
+-- ============================================================
+Tab.World:Section({Title="World"})
+
+local worldNames    = getWorldNames()
+if #worldNames == 0 then worldNames = {"(No worlds found)"} end
+local selectedWorld = worldNames[1] or ""
+
+local WorldDropdown = Tab.World:Dropdown({
+    Title    = "Select World",
+    Icon     = "globe",
+    Values   = worldNames,
+    Value    = selectedWorld,
+    Multi    = false,
+    Callback = function(v)
+        if v and v ~= "" and v ~= "(No worlds found)" then selectedWorld=v end
+    end
+})
+
+Tab.World:Button({Title="Refresh", Icon="refresh-cw",
+    Callback=function()
+        worldNames = getWorldNames()
+        if #worldNames==0 then worldNames={"(No worlds found)"} end
+        WorldDropdown:Refresh(worldNames)
+    end
+})
+
+Tab.World:Button({
+    Title    = "Teleport",
+    Icon     = "navigation",
+    Callback = function()
+        if selectedWorld=="" or selectedWorld=="(No worlds found)" then
+            WindUI:Notify({Title="World", Content="No world selected!", Duration=3}) return
+        end
+        local ok2 = false
+        pcall(function()
+            local locs = WS:FindFirstChild("World") and WS.World:FindFirstChild("Teleports")
+                and WS.World.Teleports:FindFirstChild("Locations")
+            if not locs then return end
+            local function norm(s) return s:lower():gsub("[%-%_ ]","") end
+            local loc = locs:FindFirstChild(selectedWorld)
+            if not loc then
+                local tn = norm(selectedWorld)
+                for _, c in ipairs(locs:GetChildren()) do
+                    if norm(c.Name)==tn then loc=c break end
+                end
+            end
+            if loc then
+                local cf
+                if loc:IsA("Model") then
+                    if loc.PrimaryPart then cf=loc.PrimaryPart.CFrame
+                    else pcall(function() cf=loc:GetPivot() end) end
+                elseif loc:IsA("BasePart") then cf=loc.CFrame end
+                if cf then
+                    local char = player.Character
+                    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        hrp.CFrame = cf * CFrame.new(0,5,0)
+                        hrp.AssemblyLinearVelocity  = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                        ok2 = true
+                    end
+                end
+            end
+        end)
+        WindUI:Notify({Title="World",
+            Content=ok2 and ("Teleported to "..selectedWorld) or ("Not found: "..selectedWorld), Duration=3})
+    end
+})
+
+Tab.World:Divider()
+Tab.World:Section({Title="Locations"})
+
+local function getLocationNames()
+    local names = {}
+    pcall(function()
+        local locs = WS:FindFirstChild("World") and WS.World:FindFirstChild("Teleports")
+            and WS.World.Teleports:FindFirstChild("Locations")
+        if locs then
+            local function norm(s) return s:lower():gsub("[%-%_ ]","") end
+            local wn = {}
+            for _, n in ipairs(worldNames) do wn[norm(n)]=true end
+            for _, l in ipairs(locs:GetChildren()) do
+                if not wn[norm(l.Name)] then table.insert(names, l.Name) end
+            end
+            table.sort(names)
+        end
+    end)
+    if #names==0 then names={"(No extra locations)"} end
+    return names
+end
+
+local locNames    = getLocationNames()
+local selectedLoc = locNames[1] or ""
+
+local LocDropdown = Tab.World:Dropdown({
+    Title    = "Select Location",
+    Icon     = "map-pin",
+    Values   = locNames,
+    Value    = selectedLoc,
+    Multi    = false,
+    Callback = function(v)
+        if v and v ~= "" and v ~= "(No extra locations)" then selectedLoc=v end
+    end
+})
+
+Tab.World:Button({Title="Refresh", Icon="refresh-cw",
+    Callback=function()
+        locNames = getLocationNames()
+        LocDropdown:Refresh(locNames)
+    end
+})
+
+Tab.World:Button({
+    Title    = "Teleport",
+    Icon     = "navigation",
+    Callback = function()
+        if selectedLoc=="" or selectedLoc=="(No extra locations)" then
+            WindUI:Notify({Title="Location", Content="No location selected!", Duration=3}) return
+        end
+        local ok2 = false
+        pcall(function()
+            local locs = WS:FindFirstChild("World") and WS.World:FindFirstChild("Teleports")
+                and WS.World.Teleports:FindFirstChild("Locations")
+            if locs then
+                local l = locs:FindFirstChild(selectedLoc)
+                if l then
+                    local cf
+                    if l:IsA("Model") then
+                        if l.PrimaryPart then cf=l.PrimaryPart.CFrame
+                        else pcall(function() cf=l:GetPivot() end) end
+                    elseif l:IsA("BasePart") then cf=l.CFrame end
+                    if cf then
+                        local char = player.Character
+                        local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+                        if hrp then
+                            hrp.CFrame = cf * CFrame.new(0,5,0)
+                            hrp.AssemblyLinearVelocity  = Vector3.zero
+                            hrp.AssemblyAngularVelocity = Vector3.zero
+                            ok2 = true
+                        end
+                    end
+                end
+            end
+        end)
+        WindUI:Notify({Title="Location",
+            Content=ok2 and ("Teleported to "..selectedLoc) or ("Not found: "..selectedLoc), Duration=3})
+    end
+})
+
+-- ============================================================
+--  SETTINGS TAB
+-- ============================================================
+Tab.Settings:Section({Title="General"})
+
+Tab.Settings:Keybind({
+    Title    = "Toggle UI Key",
+    Desc     = "Show/hide the window",
+    Value    = Options.ToggleUIKey or "K",
+    Callback = function(v)
+        Options.ToggleUIKey = tostring(v)
+        SaveConfig()
+        local key = typeof(v)=="EnumItem" and v or Enum.KeyCode[v]
+        Window:SetToggleKey(key)
+    end
+})
+
+Tab.Settings:Toggle({
+    Title    = "Anti AFK",
+    Icon     = "shield",
+    Type     = "Checkbox",
+    Value    = Options.AntiAFK or false,
+    Callback = function(v) Options.AntiAFK=v SaveConfig() end
+})
+
+Tab.Settings:Toggle({
+    Title    = "Auto Rejoin",
+    Icon     = "plug",
+    Desc     = "Reconnect on disconnect",
+    Type     = "Checkbox",
+    Value    = Options.AutoRejoin or false,
+    Callback = function(v)
+        Options.AutoRejoin = v SaveConfig()
+        if v then
+            task.spawn(function()
+                local overlay = Svc.CoreGui:WaitForChild("RobloxPromptGui"):WaitForChild("promptOverlay")
+                if not getgenv().RejoinConnection then
+                    getgenv().RejoinConnection = overlay.ChildAdded:Connect(function(child)
+                        if Options.AutoRejoin and child.Name=="ErrorPrompt" then
+                            task.wait(5)
+                            Svc.TeleportService:Teleport(game.PlaceId, player)
+                        end
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+-- ============================================================
+--  ANTI AFK LOOP
+-- ============================================================
+task.spawn(function()
+    while isRunning() do
+        task.wait(120)
+        if Options.AntiAFK then
+            pcall(function()
+                Svc.VirtualUser:CaptureController()
+                Svc.VirtualUser:ClickButton2(Vector2.new())
+            end)
+            pcall(function()
+                Svc.VirtualInputManager:SendKeyEvent(true,  Enum.KeyCode.Space, false, game)
+                task.wait(0.1)
+                Svc.VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+            end)
+        end
+    end
+end)
+
+Tab.Farm:Select()
