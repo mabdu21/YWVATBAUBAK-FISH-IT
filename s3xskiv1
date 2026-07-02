@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v012.35"
+local ver     = "v012.27"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -270,7 +270,29 @@ end
 -- =====================================================================
 -- SHARED STATE
 -- =====================================================================
-local TargetMaterials      = settings.TargetMaterials or {}
+-- [FIX] Normalizer: WindUI's Multi-Dropdown can hand back either
+-- an array of selected names {"Wood","Metal"} or a set {Wood=true,...}
+-- depending on version/state. TargetMaterials is always read as
+-- TargetMaterials[resType], so it MUST be a set. Without this, a
+-- selection made while on an array-shaped table (or vice-versa)
+-- silently stops matching anything -> "dropdown ignored" symptom.
+local function NormalizeTargetMaterials(tbl)
+    local normalized = {}
+    if type(tbl) == "table" then
+        for k, v in pairs(tbl) do
+            if type(k) == "number" and type(v) == "string" then
+                -- array style: { [1]="Wood", [2]="Metal" }
+                normalized[v] = true
+            else
+                -- set style: { Wood = true, Metal = false }
+                normalized[k] = v
+            end
+        end
+    end
+    return normalized
+end
+
+local TargetMaterials      = NormalizeTargetMaterials(settings.TargetMaterials)
 local AutoGrinderEnabled   = settings.AutoGrinder
 local AutoCampfireEnabled  = settings.AutoCampfire
 local AutoPickEnabled      = settings.AutoPick
@@ -325,7 +347,6 @@ local function StartAutoGrinder()
                     local part = fo:FindFirstChildWhichIsA("BasePart") or fo:FindFirstChildWhichIsA("MeshPart")
                     if not resType and part then resType = part:GetAttribute("Resource") or part:GetAttribute("Item") end
                     if resType and TargetMaterials[resType] and part then
-                        if fo:GetAttribute("RZY_PendingPick") then continue end
                         local excluded = false
                         for attrName, attrValue in pairs(fo:GetAttributes()) do
                             local lN = string.lower(attrName)
@@ -376,7 +397,6 @@ local function StartAutoCampfire()
                         local part = fo:FindFirstChildWhichIsA("BasePart") or fo:FindFirstChildWhichIsA("MeshPart")
                         if not resType and part then resType = part:GetAttribute("Resource") or part:GetAttribute("Item") end
                         if resType and TargetMaterials[resType] and validFuels[resType] and part then
-                            if fo:GetAttribute("RZY_PendingPick") then continue end
                             local excluded = false
                             for attrName, attrValue in pairs(fo:GetAttributes()) do
                                 local lN = string.lower(attrName)
@@ -636,7 +656,6 @@ end
 -- AUTO PICK
 local function IsItemValidToPick(fo, part)
     if fo:GetAttribute("RZY_Processed") then return false end
-    if fo:GetAttribute("RZY_PendingPick") then return false end
     if fo:GetAttribute("Grabbed") or part:GetAttribute("Grabbed") then return false end
     local resType = fo:GetAttribute("Resource") or fo:GetAttribute("Item")
     if not resType then resType = part:GetAttribute("Resource") or part:GetAttribute("Item") end
@@ -665,15 +684,12 @@ local function StartAutoPick()
                     if not AutoPickEnabled then break end
                     local part = fo:FindFirstChildWhichIsA("BasePart") or fo:FindFirstChildWhichIsA("MeshPart")
                     if part and IsItemValidToPick(fo, part) then
-                        fo:SetAttribute("RZY_PendingPick", true)
                         task.spawn(function()
                             pcall(function()
                                 local pos    = part.Position
                                 local vecStr = string.format("~v%.4f,%.4f,%.4f", pos.X,pos.Y,pos.Z)
                                 SafeRemoteFunction("ToolReplicator","~s"..pullTool,"~sGrab",fo,vecStr)
                             end)
-                            task.wait(0.5)
-                            if fo and fo.Parent then fo:SetAttribute("RZY_PendingPick", nil) end
                         end)
                         task.wait(0.1)
                     end
@@ -1114,9 +1130,11 @@ MainTab:Dropdown({
     Multi    = true,
     Value    = settings.TargetMaterials,
     Callback = function(selectedTable)
-        TargetMaterials = selectedTable
-        settings.TargetMaterials = selectedTable
-        Config:Set("TargetMaterials", selectedTable); Config:Save()
+        -- [FIX] Always normalize before storing, see NormalizeTargetMaterials above.
+        local normalized = NormalizeTargetMaterials(selectedTable)
+        TargetMaterials = normalized
+        settings.TargetMaterials = normalized
+        Config:Set("TargetMaterials", normalized); Config:Save()
     end
 })
 
