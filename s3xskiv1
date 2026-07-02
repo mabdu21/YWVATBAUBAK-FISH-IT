@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v012.27"
+local ver     = "v012.28"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -1152,7 +1152,7 @@ GrinderToggle = MainTab:Toggle({
             if AutoCampfireEnabled then AutoCampfireEnabled=false; CampfireToggle:Set(false) end
             StartAutoGrinder()
         end
-        WindUI:Notify({ Title="Auto Grinder", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Auto Grinder", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1167,7 +1167,7 @@ CampfireToggle = MainTab:Toggle({
             if AutoGrinderEnabled then AutoGrinderEnabled=false; GrinderToggle:Set(false) end
             StartAutoCampfire()
         end
-        WindUI:Notify({ Title="Auto Campfire", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Auto Campfire", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1179,7 +1179,7 @@ MainTab:Toggle({
         AutoPickEnabled = v; settings.AutoPick = v
         Config:Set("AutoPick", v); Config:Save()
         if v then StartAutoPick() end
-        WindUI:Notify({ Title="Auto Pick", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Auto Pick", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1191,7 +1191,7 @@ MainTab:Toggle({
         AutoStoreEnabled = v; settings.AutoStore = v
         Config:Set("AutoStore", v); Config:Save()
         if v then RunAutoStore() end
-        WindUI:Notify({ Title="Auto Store", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Auto Store", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1203,7 +1203,7 @@ MainTab:Toggle({
         AutoDismantleEnabled = v; settings.AutoDismantle = v
         Config:Set("AutoDismantle", v); Config:Save()
         if v then RunAutoDismantle() end
-        WindUI:Notify({ Title="Auto Dismantle", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Auto Dismantle", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1245,7 +1245,7 @@ CombatTab:Toggle({
         AutoAttackEnabled = v; settings.AutoAttack = v
         Config:Set("AutoAttack", v); Config:Save()
         if v then RunAutoAttack() end
-        WindUI:Notify({ Title="Auto Attack", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Auto Attack", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1273,7 +1273,7 @@ CombatTab:Toggle({
         AutoEatEnabled = v; settings.AutoEatEnabled = v
         Config:Set("AutoEatEnabled", v); Config:Save()
         if v then RunAutoEat() end
-        WindUI:Notify({ Title="Auto Eat", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Auto Eat", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1285,7 +1285,7 @@ CombatTab:Toggle({
         AutoHealEnabled = v; settings.AutoHeal = v
         Config:Set("AutoHeal", v); Config:Save()
         if v then RunAutoHeal() end
-        WindUI:Notify({ Title="Auto Heal", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Auto Heal", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1303,7 +1303,7 @@ CollectTab:Toggle({
         AutoDoubloonEnabled = v; settings.AutoCollect = v
         Config:Set("AutoCollect", v); Config:Save()
         if v then RunAutoCollect() end
-        WindUI:Notify({ Title="Auto Collect", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Auto Collect", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1315,7 +1315,7 @@ CollectTab:Toggle({
         AutoChestEnabled = v; settings.AutoChest = v
         Config:Set("AutoChest", v); Config:Save()
         if v then RunAutoChest() end
-        WindUI:Notify({ Title="Auto Chest", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Auto Chest", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1327,7 +1327,7 @@ CollectTab:Toggle({
         AutoFishingEnabled = v; settings.AutoFishing = v
         Config:Set("AutoFishing", v); Config:Save()
         if v then RunAutoFishing() end
-        WindUI:Notify({ Title="Auto Fishing", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Auto Fishing", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1339,7 +1339,7 @@ CollectTab:Toggle({
         AutoClaimEnabled = v; settings.AutoClaimEffects = v
         Config:Set("AutoClaimEffects", v); Config:Save()
         if v then RunAutoClaimEffects() end
-        WindUI:Notify({ Title="Auto Claim Effects", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Auto Claim Effects", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1368,7 +1368,7 @@ WorldTab:Toggle({
         UniversalFlyEnabled = v; settings.FlyEnabled = v
         Config:Set("FlyEnabled", v); Config:Save()
         if v then StartUniversalFly() else StopUniversalFly() end
-        WindUI:Notify({ Title="Universal Fly", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Universal Fly", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1380,7 +1380,7 @@ WorldTab:Toggle({
         AutoDiscoverEnabled = v; settings.AutoDiscover = v
         Config:Set("AutoDiscover", v); Config:Save()
         if v then StartAutoDiscover() end
-        WindUI:Notify({ Title="Auto Discover", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Auto Discover", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1403,7 +1403,7 @@ WorldTab:Toggle({
                 Lighting.GlobalShadows=true
             end)
         end
-        WindUI:Notify({ Title="Soft Anti-Lag", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Soft Anti-Lag", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1415,7 +1415,7 @@ WorldTab:Toggle({
         AutoNoFogEnabled = v; settings.AutoNoFog = v
         Config:Set("AutoNoFog", v); Config:Save()
         if v then RunAutoNoFog() end
-        WindUI:Notify({ Title="No-Fog", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="No-Fog", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1433,7 +1433,7 @@ EspTab:Toggle({
         IslandESPEnabled = v; settings.IslandESP = v
         Config:Set("IslandESP", v); Config:Save()
         if v then StartIslandScanner() else CleanAllIslandESP() end
-        WindUI:Notify({ Title="Island ESP", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+        WindUI:Notify({ Title="Island ESP", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
     end
 })
 
@@ -1549,7 +1549,7 @@ do
             PlayerESPEnabled = v
             Config:Set("PlayerESP", v); Config:Save()
             if v then StartPlayerESPScanner() else CleanPlayerESP() end
-            WindUI:Notify({ Title="Player ESP", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+            WindUI:Notify({ Title="Player ESP", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
         end
     })
 
@@ -1561,7 +1561,7 @@ do
             MonsterESPEnabled = v
             Config:Set("MonsterESP", v); Config:Save()
             if v then StartMonsterESPScanner() else CleanMonsterESP() end
-            WindUI:Notify({ Title="Monster ESP", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "check-circle" or "x-circle" })
+            WindUI:Notify({ Title="Monster ESP", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "circle-check" or "circle-x" })
         end
     })
 
@@ -1580,16 +1580,18 @@ InfoTab:Divider()
 InfoTab:Paragraph({
     Title = "Update: 07/02/2026 | CL: " .. ver,
     Desc  = [[• [ Added ] Auto Grinder / Auto Campfire
-• [ Added ] Auto Attack — Nearest & Brutal All Target
+• [ Added ] Auto Attack (Nearest & Brutal All Target)
 • [ Added ] Auto Heal, Auto Eat (Normal & Brutal)
 • [ Added ] Auto Collect, Auto Pick, Auto Store
 • [ Added ] Auto Fishing, Auto Chest, Auto Dismantle
-• [ Added ] Universal Fly + NoClip
-• [ Added ] Island & Rig ESP
+• [ Added ] Fly, Set Fly Speed, Noclip
+• [ Added ] Island & Rig, Player, Monster ESP
 • [ Added ] Auto Discover Island
 • [ Added ] Auto No-Fog, Soft Anti-Lag
 • [ Added ] Auto Claim Effects
-• [ Fixed ] Config auto-save system]],
+• [ Fixed ] Config auto-save system
+• [ Fixed ] Auto Pick Material not refresh
+• [ Fixed ] Auto Camepfire, Auto Grinder bug issuse]],
 })
 InfoTab:Divider()
 
