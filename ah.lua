@@ -1,13 +1,4 @@
--- [[
 
-   UI Kit (WindUI) + Animal Hospital automation system merged.
-   Base UI/config/tab framework: original WindUI kit.
-   Feature logic (Auto Bed / Analyzer / Heal / Heart Scan / X-Ray / Trash /
-   StandIV / Button / Jumpscares / Sanity items / ESP): ported from the
-   Rayfield "BELLE.SG | Animal Hospital" script into WindUI components,
-   with config load/save wired through the kit's CustomConfig system.
-
--- ]]
 -- =========================
 local version = "BETA"
 local ver     = "v002.00"
