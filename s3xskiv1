@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v012.32"
+local ver     = "v012.35"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -325,6 +325,7 @@ local function StartAutoGrinder()
                     local part = fo:FindFirstChildWhichIsA("BasePart") or fo:FindFirstChildWhichIsA("MeshPart")
                     if not resType and part then resType = part:GetAttribute("Resource") or part:GetAttribute("Item") end
                     if resType and TargetMaterials[resType] and part then
+                        if fo:GetAttribute("RZY_PendingPick") then continue end
                         local excluded = false
                         for attrName, attrValue in pairs(fo:GetAttributes()) do
                             local lN = string.lower(attrName)
@@ -375,6 +376,7 @@ local function StartAutoCampfire()
                         local part = fo:FindFirstChildWhichIsA("BasePart") or fo:FindFirstChildWhichIsA("MeshPart")
                         if not resType and part then resType = part:GetAttribute("Resource") or part:GetAttribute("Item") end
                         if resType and TargetMaterials[resType] and validFuels[resType] and part then
+                            if fo:GetAttribute("RZY_PendingPick") then continue end
                             local excluded = false
                             for attrName, attrValue in pairs(fo:GetAttributes()) do
                                 local lN = string.lower(attrName)
@@ -634,6 +636,7 @@ end
 -- AUTO PICK
 local function IsItemValidToPick(fo, part)
     if fo:GetAttribute("RZY_Processed") then return false end
+    if fo:GetAttribute("RZY_PendingPick") then return false end
     if fo:GetAttribute("Grabbed") or part:GetAttribute("Grabbed") then return false end
     local resType = fo:GetAttribute("Resource") or fo:GetAttribute("Item")
     if not resType then resType = part:GetAttribute("Resource") or part:GetAttribute("Item") end
@@ -662,12 +665,15 @@ local function StartAutoPick()
                     if not AutoPickEnabled then break end
                     local part = fo:FindFirstChildWhichIsA("BasePart") or fo:FindFirstChildWhichIsA("MeshPart")
                     if part and IsItemValidToPick(fo, part) then
+                        fo:SetAttribute("RZY_PendingPick", true)
                         task.spawn(function()
                             pcall(function()
                                 local pos    = part.Position
                                 local vecStr = string.format("~v%.4f,%.4f,%.4f", pos.X,pos.Y,pos.Z)
                                 SafeRemoteFunction("ToolReplicator","~s"..pullTool,"~sGrab",fo,vecStr)
                             end)
+                            task.wait(0.5)
+                            if fo and fo.Parent then fo:SetAttribute("RZY_PendingPick", nil) end
                         end)
                         task.wait(0.1)
                     end
@@ -1560,10 +1566,10 @@ InfoTab:Paragraph({
 • [ Added ] Auto Heal, Auto Eat (Normal & Brutal)
 • [ Added ] Auto Collect, Auto Pick, Auto Store
 • [ Added ] Auto Fishing, Auto Chest, Auto Dismantle
-• [ Added ] Fly / Auto Attack
-• [ Added ] Island & Rig, Player, Monster ESP
+• [ Added ] Universal Fly + NoClip
+• [ Added ] Island & Rig ESP
 • [ Added ] Auto Discover Island
-• [ Added ] No-Fog, Soft Anti-Lag
+• [ Added ] Auto No-Fog, Soft Anti-Lag
 • [ Added ] Auto Claim Effects
 • [ Fixed ] Config auto-save system]],
 })
