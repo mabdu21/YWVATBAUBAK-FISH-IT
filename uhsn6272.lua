@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v001.00"
+local ver     = "v001.02"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -1101,7 +1101,7 @@ end)
 MainTab:Divider()
 MainTab:Section({ Title = "Materials", Icon = "box" })
 
-MainTab:MultiDropdown({
+MainTab:Dropdown({
     Title    = "Target Materials",
     Desc     = "วัสดุที่ต้องการใช้กับ Auto Grinder / Campfire / Pick",
     Values   = {"Wood","Metal","Goo","Small Gas Can","Big Gas Can","Gas Drum","Small Crate","Big Crate","Penguin"},
