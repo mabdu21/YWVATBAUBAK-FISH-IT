@@ -1,0 +1,1572 @@
+repeat task.wait() until game:IsLoaded()
+
+local RunService        = game:GetService("RunService")
+local Workspace         = game:GetService("Workspace")
+local Lighting          = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService  = game:GetService("UserInputService")
+local Players           = game:GetService("Players")
+local HttpService       = game:GetService("HttpService")
+local StarterGui        = game:GetService("StarterGui")
+local TeleportService   = game:GetService("TeleportService")
+local TweenService      = game:GetService("TweenService")
+local VirtualUser       = game:GetService("VirtualUser")
+local VIM               = game:GetService("VirtualInputManager")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
+local Camera      = Workspace.CurrentCamera
+
+if getgenv().DYHUBAAS_Running then
+    getgenv().DYHUBAAS_Running = false   
+end
+
+if getgenv().DYHUBAAS_Window then
+    pcall(function() getgenv().DYHUBAAS_Window:Destroy() end)
+    getgenv().DYHUBAAS_Window = nil
+end
+
+local Players_ = game:GetService("Players")
+local CoreGui_ = game:GetService("CoreGui")
+pcall(function()
+    local old = CoreGui_:FindFirstChild("AASToggleGui")
+    if old then old:Destroy() end
+end)
+pcall(function()
+    local old = Players_.LocalPlayer.PlayerGui:FindFirstChild("AASToggleGui")
+    if old then old:Destroy() end
+end)
+
+task.wait(0.2)
+
+getgenv().DYHUBAAS_Running = true
+
+local function isRunning()
+    return getgenv().DYHUBAAS_Running == true
+end
+
+if game.PlaceId ~= 113236157544232 then
+    warn("Failed to load: This script only supports Anime Astral Simulator")
+    return
+end
+
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+if not WindUI then
+    warn("Failed to load UI! Please check your internet or try restarting your Executor")
+    return
+end
+
+WindUI:SetNotificationLower(true)
+
+local FreeVersion    = "Free Version"
+local PremiumVersion = "Premium Version"
+
+local function checkVersion(playerName)
+    local url = "https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/listpremium.lua"
+    local success, response = pcall(function() return game:HttpGet(url) end)
+    if not success then return FreeVersion end
+    local func = loadstring(response)
+    if not func then return FreeVersion end
+    local ok, premiumData = pcall(func)
+    if not ok then return FreeVersion end
+    return premiumData and premiumData[playerName] and PremiumVersion or FreeVersion
+end
+
+local userversion = checkVersion(LocalPlayer.Name)
+local isPremium   = (userversion == PremiumVersion)
+
+local Window = WindUI:CreateWindow({
+    Title                       = "DYHUB",
+    Icon                        = "rbxassetid://104487529937663",
+    Author                      = "Anime Astral Simulator | " .. userversion,
+    Folder                      = "DYHUB/AAS",
+    Size       = UDim2.fromOffset(500, 450),
+    IconThemed = true,
+    Transparent = true,
+    Theme      = "Dark",
+    BackgroundImageTransparency = 0.8,
+    HasOutline = false,
+    HideSearchBar    = true,
+    ScrollBarEnabled = true,
+    User = { Enabled = true, Anonymous = false },
+})
+getgenv().DYHUBAAS_Window = Window
+pcall(function() Window:Tag({ Title = "BETA", Color = Color3.fromHex("#db7093") }) end)
+Window:EditOpenButton({
+    Title           = "DYHUB - Open",
+    Icon            = "monitor",
+    CornerRadius    = UDim.new(0, 6),
+    StrokeThickness = 2,
+    Color           = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255)),
+    Draggable       = true,
+})
+
+-- ============================================================
+--  SERVICES
+-- ============================================================
+local Players         = game:GetService("Players")
+local RS              = game:GetService("ReplicatedStorage")
+local player          = Players.LocalPlayer
+
+-- ============================================================
+--  REMOTE  (BridgeNet2)
+-- ============================================================
+local dataRemoteEvent = nil
+task.spawn(function()
+    dataRemoteEvent = RS:WaitForChild("BridgeNet2", 15)
+                       :WaitForChild("dataRemoteEvent", 15)
+end)
+
+local function fireRemote(args)
+    if dataRemoteEvent then
+        pcall(function()
+            dataRemoteEvent:FireServer(unpack(args))
+        end)
+    end
+end
+
+-- ============================================================
+--  CONFIG
+-- ============================================================
+local HttpService = game:GetService("HttpService")
+local Options     = {}
+
+local function GetConfigPath()
+    return "AAS_DH/" .. tostring(player.UserId) .. "_AAS.json"
+end
+
+local lastSave = 0
+local function SaveConfig()
+    lastSave = tick()
+    local snap = lastSave
+    task.delay(1, function()
+        if lastSave ~= snap then return end
+        if not (writefile and makefolder) then return end
+        local path   = GetConfigPath()
+        local folder = path:match("(.+)/")
+        if not isfolder(folder) then
+            local cur = ""
+            for _, p in ipairs(folder:split("/")) do
+                cur = cur .. p
+                if not isfolder(cur) then makefolder(cur) end
+                cur = cur .. "/"
+            end
+        end
+        writefile(path, HttpService:JSONEncode(Options))
+    end)
+end
+
+local function LoadConfig()
+    if not (readfile and isfile) then return end
+    local path = GetConfigPath()
+    if isfile(path) then
+        local ok, res = pcall(function()
+            return HttpService:JSONDecode(readfile(path))
+        end)
+        if ok and res then
+            for k, v in pairs(res) do Options[k] = v end
+        end
+    end
+end
+LoadConfig()
+
+-- ============================================================
+--  HELPERS
+-- ============================================================
+local function normalizeMultiValue(v)
+    local result = {}
+    if type(v) == "table" then
+        if #v > 0 then
+            for _, val in ipairs(v) do
+                if type(val) == "string" then table.insert(result, val) end
+            end
+        else
+            for k, val in pairs(v) do
+                if type(k) == "string" and val == true then table.insert(result, k) end
+            end
+        end
+    elseif type(v) == "string" and v ~= "" then
+        table.insert(result, v)
+    end
+    return result
+end
+
+local function getEnemyFolder(worldFolderName)
+    local worlds = workspace:FindFirstChild("Worlds")
+    if not worlds then return nil end
+    local wf = worlds:FindFirstChild(tostring(worldFolderName))
+    if not wf then return nil end
+    return wf:FindFirstChild("Enemies")
+end
+
+local function getEnemyNamesFromWorkspace(worldFolderName)
+    local folder = getEnemyFolder(worldFolderName)
+    if not folder then return {} end
+    local seen  = {}
+    local names = {}
+    for _, model in ipairs(folder:GetChildren()) do
+        local n = model.Name
+        if not seen[n] then
+            seen[n] = true
+            table.insert(names, n)
+        end
+    end
+    table.sort(names)
+    return names
+end
+
+local function isEnemyDead(model)
+    if not model or not model.Parent then return true end
+    if model:GetAttribute("EnemyDead") == true then return true end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    return not hum or hum.Health <= 0
+end
+
+local function findNearest(enemyFolder, allowSet)
+    local myPos = (player.Character
+        and player.Character:FindFirstChild("HumanoidRootPart")
+        and player.Character.HumanoidRootPart.Position) or Vector3.zero
+    local bestModel, bestDist = nil, math.huge
+    for _, model in ipairs(enemyFolder:GetChildren()) do
+        if allowSet and not allowSet[model.Name] then continue end
+        if isEnemyDead(model) then continue end
+        local tHRP = model:FindFirstChild("HumanoidRootPart")
+        if tHRP then
+            local d = (tHRP.Position - myPos).Magnitude
+            if d < bestDist then bestDist = d bestModel = model end
+        end
+    end
+    return bestModel
+end
+
+local function teleportTo(model)
+    local hrp  = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    local tHRP = model and model:FindFirstChild("HumanoidRootPart")
+    if hrp and tHRP then hrp.CFrame = tHRP.CFrame * CFrame.new(0, 3, 0) end
+end
+
+local function stayNear(model)
+    local hrp  = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    local tHRP = model and model:FindFirstChild("HumanoidRootPart")
+    if hrp and tHRP and (hrp.Position - tHRP.Position).Magnitude > 8 then
+        hrp.CFrame = tHRP.CFrame * CFrame.new(0, 3, 0)
+    end
+end
+
+-- ============================================================
+--  UI HELPER — Find & Click "Yes" Button
+-- ============================================================
+local function clickYesButton()
+    local function searchAndClick(parent)
+        if not parent then return false end
+        for _, obj in ipairs(parent:GetDescendants()) do
+            if obj:IsA("GuiButton") then
+                local text = (obj:FindFirstChild("TextLabel") and obj:FindFirstChild("TextLabel").Text or obj.Text or ""):lower()
+                if text == "yes" or text:find("^yes") then
+                    pcall(function() obj:Activate() end)
+                    task.wait(0.3)
+                    return true
+                end
+            end
+        end
+        return false
+    end
+    if searchAndClick(player.PlayerGui) then return true end
+    if searchAndClick(game:GetService("CoreGui")) then return true end
+    return false
+end
+
+-- ============================================================
+--  STATE FLAGS
+-- ============================================================
+local isAutoFarm          = false
+local isAutoTrial         = false
+local isAutoRaid          = false
+local isAutoTitanRaid     = false
+local isAutoGateRaid      = false
+local isAutoSlayer        = false
+local isAutoCenterRaid    = false
+local isAutoCenterGate    = false
+local isAutoCenterSlayer  = false
+local isAutoTimelessRaid  = false
+local isAutoCenterTimeless= false
+
+local selectedWorld   = Options.SelectedWorld or "1"
+local selectedEnemies = normalizeMultiValue(Options.SelectedEnemies or {})
+
+-- Cooldown sliders (seconds)
+local cooldownRaid        = Options.CooldownRaid        or 3
+local cooldownTitanRaid   = Options.CooldownTitanRaid   or 3
+local cooldownGateRaid    = Options.CooldownGateRaid    or 3
+local cooldownSlayer      = Options.CooldownSlayer      or 3
+local cooldownTimelessRaid= Options.CooldownTimelessRaid or 3
+
+-- Trial priority flag
+local prioritizeTrialAt   = Options.PrioritizeTrialAt   or 1  -- 1 = :00 and :30, 0 = disabled
+
+local currentActivity = nil
+
+local function tryAcquireActivity(name)
+    if currentActivity == nil or currentActivity == name then
+        currentActivity = name
+        return true
+    end
+    return false
+end
+
+local function releaseActivity(name)
+    if currentActivity == name then currentActivity = nil end
+end
+
+-- ============================================================
+--  TABS
+-- ============================================================
+local FarmTab     = Window:Tab({ Title = "Farming",  Icon = "swords"    })
+local GamemodeTab = Window:Tab({ Title = "Gamemode", Icon = "gamepad-2" })
+local MiscTab     = Window:Tab({ Title = "Misc",     Icon = "gift"      })
+local SettingTab  = Window:Tab({ Title = "Settings", Icon = "cog"       })
+
+task.spawn(function()
+    task.wait(1)
+    WindUI:Notify({ Title = "DYHUB | v045.61", Content = "Anime Astral Simulator loaded!", Duration = 4 })
+end)
+task.defer(function() Window:SetToggleKey(Enum.KeyCode.K) end)
+
+-- ============================================================
+--  TAB: FARMING
+-- ============================================================
+FarmTab:Section({ Title = "World & Enemy Selection" })
+
+local worldFolderNames = { "1", "2", "3", "4", "5", "6", "7" }
+local EnemyDropdown
+
+local function refreshEnemyDropdown()
+    local names = getEnemyNamesFromWorkspace(selectedWorld)
+    if EnemyDropdown then
+        EnemyDropdown:Refresh(names)
+        local nameSet = {}
+        for _, n in ipairs(names) do nameSet[n] = true end
+        local filtered = {}
+        for _, n in ipairs(selectedEnemies) do
+            if nameSet[n] then table.insert(filtered, n) end
+        end
+        selectedEnemies = filtered
+        Options.SelectedEnemies = selectedEnemies
+        SaveConfig()
+    end
+    return names
+end
+
+FarmTab:Dropdown({
+    Title    = "Select World",
+    Icon     = "globe",
+    Values   = worldFolderNames,
+    Value    = selectedWorld,
+    Callback = function(v)
+        selectedWorld = tostring(v)
+        Options.SelectedWorld = selectedWorld
+        SaveConfig()
+        selectedEnemies = {}
+        Options.SelectedEnemies = {}
+        SaveConfig()
+        refreshEnemyDropdown()
+    end
+})
+
+local initNames = getEnemyNamesFromWorkspace(selectedWorld)
+if #initNames == 0 then initNames = { "— Click Refresh —" } end
+
+EnemyDropdown = FarmTab:Dropdown({
+    Title     = "Select Enemies (optional)",
+    Icon      = "target",
+    Values    = initNames,
+    Value     = selectedEnemies,
+    Multi     = true,
+    AllowNone = true,
+    Callback  = function(v)
+        selectedEnemies = normalizeMultiValue(v)
+        Options.SelectedEnemies = selectedEnemies
+        SaveConfig()
+    end
+})
+
+FarmTab:Button({
+    Title    = "Refresh Enemy List",
+    Icon     = "refresh-cw",
+    Callback = function()
+        local names = refreshEnemyDropdown()
+        WindUI:Notify({
+            Title    = "Refresh",
+            Content  = string.format("World %s — found %d enemy types", selectedWorld, #names),
+            Duration = 3
+        })
+    end
+})
+
+FarmTab:Divider()
+FarmTab:Section({ Title = "Auto Actions" })
+
+FarmTab:Toggle({
+    Title    = "Auto Farm",
+    Icon     = "crosshair",
+    Desc     = "Farm only the enemies selected above",
+    Type     = "Checkbox",
+    Value    = Options.AutoFarm or false,
+    Callback = function(v)
+        if v and #selectedEnemies == 0 then
+            WindUI:Notify({ Title = "Auto Farm", Content = "Please select at least one enemy in the dropdown first!", Duration = 4 })
+            return
+        end
+        isAutoFarm = v
+        Options.AutoFarm = v
+        SaveConfig()
+        if not isAutoFarm then return end
+
+        task.spawn(function()
+            while isAutoFarm and isRunning() do
+                if #selectedEnemies == 0 then
+                    WindUI:Notify({ Title = "Auto Farm", Content = "No enemy selected — stopping Auto Farm.", Duration = 4 })
+                    isAutoFarm = false Options.AutoFarm = false SaveConfig()
+                    break
+                end
+                if not tryAcquireActivity("Farm") then task.wait(0.5) continue end
+                local enemyFolder = getEnemyFolder(selectedWorld)
+                if not enemyFolder then releaseActivity("Farm") task.wait(0.5) continue end
+                local allowSet = {}
+                for _, name in ipairs(selectedEnemies) do allowSet[name] = true end
+                local target = findNearest(enemyFolder, allowSet)
+                if not target then releaseActivity("Farm") task.wait(0.5) continue end
+                teleportTo(target)
+                while isAutoFarm and isRunning() do
+                    if isEnemyDead(target) then break end
+                    if currentActivity ~= "Farm" then break end
+                    stayNear(target)
+                    task.wait(0.1)
+                end
+                releaseActivity("Farm")
+                task.wait(0.05)
+            end
+            releaseActivity("Farm")
+        end)
+    end
+})
+
+-- ============================================================
+--  TAB: GAMEMODE — TIME TRIAL EASY
+-- ============================================================
+GamemodeTab:Section({ Title = "Time Trial Easy" })
+
+local function joinTrialEasy()
+    pcall(function()
+        local remote = RS:WaitForChild("BridgeNet2", 10):WaitForChild("dataRemoteEvent", 10)
+        local args = {
+            {
+                {
+                    __BridgeTuplePayload__ = true,
+                    Payload = { "Join", "Easy", n = 2 }
+                },
+                "\207"
+            }
+        }
+        remote:FireServer(unpack(args))
+    end)
+end
+
+local function leaveTrialRemote()
+    pcall(function()
+        RS:WaitForChild("BridgeNet2", 10):WaitForChild("dataRemoteEvent", 10)
+          :FireServer({ { [2] = "\208" } })
+    end)
+end
+
+local function getTrialEnemyFolder()
+    local ta = workspace:FindFirstChild("TimeTrialArenas")
+    if not ta then return nil end
+    local folder = ta:FindFirstChild("Easy")
+    if not folder then return nil end
+    return folder:FindFirstChild("Enemies")
+end
+
+local function secondsUntilNextTrial()
+    local sec = os.time() % 1800
+    return 1800 - sec
+end
+
+GamemodeTab:Toggle({
+    Title    = "Auto Trial Easy",
+    Icon     = "timer",
+    Desc     = "Join Trial Easy every xx:00 / xx:30 ",
+    Type     = "Checkbox",
+    Value    = Options.AutoTrial or false,
+    Callback = function(v)
+        isAutoTrial = v
+        Options.AutoTrial = v
+        SaveConfig()
+        if not isAutoTrial then return end
+
+        task.spawn(function()
+            while isAutoTrial and isRunning() do
+                local wait = secondsUntilNextTrial()
+                if wait < 5 then wait = wait + 1800 end
+
+                WindUI:Notify({
+                    Title    = "Auto Trial Easy",
+                    Content  = string.format("รออีก %d นาที %d วินาที", math.floor((wait-1)/60), (wait-1)%60),
+                    Duration = 5
+                })
+
+                task.wait(wait - 3)
+                if not isAutoTrial or not isRunning() then break end
+
+                while not tryAcquireActivity("Trial") and isAutoTrial and isRunning() do
+                    task.wait(0.5)
+                end
+                if not isAutoTrial or not isRunning() then break end
+
+                joinTrialEasy()
+                WindUI:Notify({ Title = "Auto Trial Easy", Content = "กำลัง Join Trial Easy...", Duration = 3 })
+
+                local trialEnemyFolder = nil
+                local waited = 0
+                repeat
+                    task.wait(1) waited = waited + 1
+                    trialEnemyFolder = getTrialEnemyFolder()
+                    if not trialEnemyFolder or #trialEnemyFolder:GetChildren() == 0 then
+                        local ta = workspace:FindFirstChild("TimeTrialArenas")
+                        if ta then
+                            for _, child in ipairs(ta:GetChildren()) do
+                                local ef = child:FindFirstChild("Enemies")
+                                if ef and #ef:GetChildren() > 0 then
+                                    trialEnemyFolder = ef
+                                    break
+                                end
+                            end
+                        end
+                    end
+                until (trialEnemyFolder and #trialEnemyFolder:GetChildren() > 0) or waited > 25
+
+                if not trialEnemyFolder or #trialEnemyFolder:GetChildren() == 0 then
+                    WindUI:Notify({ Title = "Auto Trial Easy", Content = "ไม่พบ enemy ใน Arena — ข้ามรอบนี้", Duration = 4 })
+                    leaveTrialRemote()
+                    releaseActivity("Trial")
+                    continue
+                end
+
+                WindUI:Notify({ Title = "Auto Trial Easy", Content = "กำลัง Farm Trial Easy จนจบ...", Duration = 3 })
+
+                while isAutoTrial and isRunning() do
+                    local ta = workspace:FindFirstChild("TimeTrialArenas")
+                    local arenaAlive = false
+                    if ta then
+                        for _, child in ipairs(ta:GetChildren()) do
+                            local ef = child:FindFirstChild("Enemies")
+                            if ef then arenaAlive = true break end
+                        end
+                    end
+                    if not arenaAlive then break end
+
+                    if not trialEnemyFolder or not trialEnemyFolder.Parent then
+                        if ta then
+                            for _, child in ipairs(ta:GetChildren()) do
+                                local ef = child:FindFirstChild("Enemies")
+                                if ef and #ef:GetChildren() > 0 then
+                                    trialEnemyFolder = ef break
+                                end
+                            end
+                        end
+                    end
+
+                    if not trialEnemyFolder then task.wait(0.3) continue end
+
+                    local target = findNearest(trialEnemyFolder, nil)
+                    if not target then
+                        task.wait(0.3) continue
+                    end
+                    teleportTo(target)
+                    while isAutoTrial and isRunning() do
+                        if isEnemyDead(target) then break end
+                        stayNear(target)
+                        task.wait(0.1)
+                    end
+                    task.wait(0.05)
+                end
+
+                leaveTrialRemote()
+                releaseActivity("Trial")
+                WindUI:Notify({ Title = "Auto Trial Easy", Content = "Trial Easy จบแล้ว! รอรอบถัดไป...", Duration = 5 })
+                task.wait(10)
+            end
+            releaseActivity("Trial")
+        end)
+    end
+})
+
+-- ============================================================
+--  TAB: GAMEMODE — TRIAL PRIORITY SCHEDULER
+-- ============================================================
+GamemodeTab:Divider()
+GamemodeTab:Section({ Title = "Trial Priority" })
+
+GamemodeTab:Toggle({
+    Title    = "Priority Trial at xx:00 & xx:30",
+    Icon     = "zap",
+    Desc     = "Pause other raids to do Trial at :00 and :30 minutes",
+    Type     = "Checkbox",
+    Value    = Options.PrioritizeTrialAt or false,
+    Callback = function(v)
+        prioritizeTrialAt = v and 1 or 0
+        Options.PrioritizeTrialAt = prioritizeTrialAt
+        SaveConfig()
+    end
+})
+
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if prioritizeTrialAt == 0 then continue end
+
+        local now = os.time()
+        local secondInMinute = now % 60
+        local minuteInHour = (now / 60) % 60
+
+        -- Check if we're at :00 or :30 minute mark (within 5 seconds window)
+        if secondInMinute < 5 then
+            if minuteInHour % 30 == 0 then
+                -- We're at :00 or :30
+                if isAutoTrial then
+                    -- Trial is already running, skip
+                    continue
+                end
+
+                -- Pause current activity and join Trial
+                if currentActivity then
+                    WindUI:Notify({
+                        Title = "Trial Priority",
+                        Content = "Pausing current activity for Trial...",
+                        Duration = 2
+                    })
+                    releaseActivity(currentActivity)
+                    task.wait(1)
+                end
+
+                -- Try to join trial
+                if tryAcquireActivity("TrialPriority") then
+                    joinTrialEasy()
+                    task.wait(0.5)
+
+                    local waitForTrial = 0
+                    repeat
+                        task.wait(1)
+                        waitForTrial = waitForTrial + 1
+                        local ta = workspace:FindFirstChild("TimeTrialArenas")
+                        if ta then break end
+                    until waitForTrial > 15
+
+                    if workspace:FindFirstChild("TimeTrialArenas") then
+                        local enemyFolder = getTrialEnemyFolder()
+                        local waited = 0
+                        repeat
+                            task.wait(1)
+                            waited = waited + 1
+                            enemyFolder = getTrialEnemyFolder()
+                        until (enemyFolder and #enemyFolder:GetChildren() > 0) or waited > 20
+
+                        if enemyFolder and #enemyFolder:GetChildren() > 0 then
+                            -- Farm trial
+                            while workspace:FindFirstChild("TimeTrialArenas") do
+                                local target = findNearest(enemyFolder, nil)
+                                if not target then task.wait(0.5) continue end
+                                teleportTo(target)
+                                while workspace:FindFirstChild("TimeTrialArenas") do
+                                    if isEnemyDead(target) then break end
+                                    stayNear(target)
+                                    task.wait(0.1)
+                                end
+                                task.wait(0.05)
+                            end
+
+                            -- Trial ended
+                            leaveTrialRemote()
+                        end
+                    end
+
+                    releaseActivity("TrialPriority")
+                    WindUI:Notify({
+                        Title = "Trial Priority",
+                        Content = "Trial done! Resuming other activities...",
+                        Duration = 3
+                    })
+                    task.wait(2)
+                end
+            end
+        end
+    end
+end)
+
+-- ============================================================
+--  TAB: GAMEMODE — NARUTO RAID  (World1)
+-- ============================================================
+GamemodeTab:Divider()
+GamemodeTab:Section({ Title = "Raid (World7)" })
+
+local RAID_WORLD = "World7"
+
+local RAID_CENTER_CFRAME = CFrame.new(
+    6008.14209, 360.990662, 178.649124,
+    0.537255049, 2.94911544e-08, 0.84341985,
+    -3.51858098e-08, 1, -1.25529409e-08,
+    -0.84341985, -2.29322801e-08, 0.537255049
+)
+
+local function fireJoinRaid()
+    pcall(function()
+        local remote = RS:WaitForChild("BridgeNet2", 10):WaitForChild("dataRemoteEvent", 10)
+        remote:FireServer({ { __BridgeTuplePayload__ = true, Payload = { "Create", RAID_WORLD, n = 2 } }, "\149" })
+    end)
+end
+
+local function getRaidEnemyFolder()
+    local arenas = workspace:FindFirstChild("RaidArenas")
+    if not arenas then return nil end
+    local wf = arenas:FindFirstChild(RAID_WORLD)
+    if not wf then return nil end
+    return wf:FindFirstChild("Enemies")
+end
+
+local function isInRaid()
+    local ok, result = pcall(function()
+        local gui = player.PlayerGui:FindFirstChild("RaidGui")
+        return gui ~= nil and gui.Enabled == true
+    end)
+    return ok and result
+end
+
+GamemodeTab:Slider({
+    Title    = "Rejoin Cooldown",
+    Icon     = "clock",
+    Desc     = "",
+    Value    = { Min = 1, Max = 60, Default = cooldownRaid },
+    Rounding = 0,
+    Callback = function(v)
+        cooldownRaid = v
+        Options.CooldownRaid = v
+        SaveConfig()
+    end
+})
+
+GamemodeTab:Toggle({
+    Title    = "Auto Raid (World7)",
+    Icon     = "sword",
+    Desc     = "Auto join and farm Raid until completion, then rejoin",
+    Type     = "Checkbox",
+    Value    = Options.AutoRaid or false,
+    Callback = function(v)
+        isAutoRaid = v
+        Options.AutoRaid = v
+        SaveConfig()
+        if not isAutoRaid then return end
+
+        task.spawn(function()
+            while isAutoRaid and isRunning() do
+                while not tryAcquireActivity("Raid") and isAutoRaid and isRunning() do task.wait(0.5) end
+                if not isAutoRaid or not isRunning() then break end
+
+                fireJoinRaid()
+
+                local joinWait = 0
+                repeat task.wait(1) joinWait = joinWait + 1 until isInRaid() or joinWait > 20
+
+                if not isInRaid() then
+                    releaseActivity("Raid") task.wait(5) continue
+                end
+
+                local raidEnemyFolder = nil
+                local waited = 0
+                repeat
+                    task.wait(1) waited = waited + 1
+                    raidEnemyFolder = getRaidEnemyFolder()
+                until (raidEnemyFolder and #raidEnemyFolder:GetChildren() > 0) or waited > 20
+
+                if not raidEnemyFolder or #raidEnemyFolder:GetChildren() == 0 then
+                    releaseActivity("Raid") task.wait(5) continue
+                end
+
+                while isAutoRaid and isRunning() do
+                    if not isInRaid() then break end
+
+                    if isAutoCenterRaid then
+                        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then hrp.CFrame = RAID_CENTER_CFRAME end
+                        task.wait(0.1)
+                    else
+                        local target = findNearest(raidEnemyFolder, nil)
+                        if not target then task.wait(0.3) continue end
+                        teleportTo(target)
+                        while isAutoRaid and isRunning() do
+                            if isEnemyDead(target) then break end
+                            if not isInRaid() then break end
+                            stayNear(target)
+                            task.wait(0.1)
+                        end
+                        task.wait(0.05)
+                    end
+                end
+
+                releaseActivity("Raid")
+                if isAutoRaid and isRunning() then task.wait(cooldownRaid) end
+            end
+            releaseActivity("Raid")
+        end)
+    end
+})
+
+GamemodeTab:Toggle({
+    Title    = "Auto Center Raid (World7)",
+    Icon     = "crosshair",
+    Desc     = "Stand in center",
+    Type     = "Checkbox",
+    Value    = Options.AutoCenterRaid or false,
+    Callback = function(v)
+        isAutoCenterRaid = v
+        Options.AutoCenterRaid = v
+        SaveConfig()
+        if v and not isAutoRaid then
+            WindUI:Notify({ Title = "Auto Center Raid", Content = "Please enable Auto Raid (World7) first!", Duration = 4 })
+        end
+    end
+})
+
+-- ============================================================
+--  TAB: GAMEMODE — AUTO TITAN RAID  (World4)
+-- ============================================================
+GamemodeTab:Divider()
+GamemodeTab:Section({ Title = "Titan Raid (World4)" })
+
+local TITAN_WORLD = "World4"
+
+local function fireJoinTitanRaid()
+    pcall(function()
+        local remote = RS:WaitForChild("BridgeNet2", 10):WaitForChild("dataRemoteEvent", 10)
+        remote:FireServer({ { __BridgeTuplePayload__ = true, Payload = { "Create", TITAN_WORLD, n = 2 } }, "+" })
+    end)
+end
+
+local function getTitanEnemyFolder()
+    local arenas = workspace:FindFirstChild("DefenseArenas")
+    if not arenas then return nil end
+    local wf = arenas:FindFirstChild(TITAN_WORLD)
+    if not wf then return nil end
+    return wf:FindFirstChild("Enemies")
+end
+
+local function isInTitanRaid()
+    local ok, result = pcall(function()
+        local gui = player.PlayerGui:FindFirstChild("DefenseGui")
+        return gui ~= nil and gui.Enabled == true
+    end)
+    return ok and result
+end
+
+GamemodeTab:Slider({
+    Title    = "Rejoin Cooldown",
+    Icon     = "clock",
+    Desc     = "Time to wait before rejoining Titan Raid",
+    Value    = { Min = 1, Max = 60, Default = cooldownTitanRaid },
+    Rounding = 0,
+    Callback = function(v)
+        cooldownTitanRaid = v
+        Options.CooldownTitanRaid = v
+        SaveConfig()
+    end
+})
+
+GamemodeTab:Toggle({
+    Title    = "Auto Titan Raid (World4)",
+    Icon     = "sword",
+    Desc     = "Auto join and farm Titan Raid until completion, then rejoin",
+    Type     = "Checkbox",
+    Value    = Options.AutoTitanRaid or false,
+    Callback = function(v)
+        isAutoTitanRaid = v
+        Options.AutoTitanRaid = v
+        SaveConfig()
+        if not isAutoTitanRaid then return end
+
+        task.spawn(function()
+            while isAutoTitanRaid and isRunning() do
+                while not tryAcquireActivity("TitanRaid") and isAutoTitanRaid and isRunning() do task.wait(0.5) end
+                if not isAutoTitanRaid or not isRunning() then break end
+
+                fireJoinTitanRaid()
+                WindUI:Notify({ Title = "Auto Titan Raid", Content = "Joining Titan Raid: " .. TITAN_WORLD .. "...", Duration = 3 })
+
+                local joinWait = 0
+                repeat task.wait(1) joinWait = joinWait + 1 until isInTitanRaid() or joinWait > 20
+
+                if not isInTitanRaid() then
+                    WindUI:Notify({ Title = "Auto Titan Raid", Content = "Failed to join Titan Raid — retrying...", Duration = 4 })
+                    releaseActivity("TitanRaid") task.wait(5) continue
+                end
+
+                local titanEnemyFolder = nil
+                local waited = 0
+                repeat
+                    task.wait(1) waited = waited + 1
+                    titanEnemyFolder = getTitanEnemyFolder()
+                until (titanEnemyFolder and #titanEnemyFolder:GetChildren() > 0) or waited > 20
+
+                if not titanEnemyFolder or #titanEnemyFolder:GetChildren() == 0 then
+                    releaseActivity("TitanRaid") task.wait(5) continue
+                end
+
+                WindUI:Notify({ Title = "Auto Titan Raid", Content = "Farming Titan Raid until completion...", Duration = 3 })
+
+                while isAutoTitanRaid and isRunning() do
+                    if not isInTitanRaid() then
+                        WindUI:Notify({ Title = "Auto Titan Raid", Content = "Titan Raid completed — rejoining...", Duration = 4 })
+                        break
+                    end
+                    local target = findNearest(titanEnemyFolder, nil)
+                    if not target then task.wait(0.3) continue end
+                    teleportTo(target)
+                    while isAutoTitanRaid and isRunning() do
+                        if isEnemyDead(target) then break end
+                        if not isInTitanRaid() then break end
+                        stayNear(target)
+                        task.wait(0.1)
+                    end
+                    task.wait(0.05)
+                end
+
+                releaseActivity("TitanRaid")
+                if isAutoTitanRaid and isRunning() then task.wait(cooldownTitanRaid) end
+            end
+            releaseActivity("TitanRaid")
+        end)
+    end
+})
+
+-- ============================================================
+--  TAB: GAMEMODE — AUTO GATE RAID  (World5)
+-- ============================================================
+GamemodeTab:Divider()
+GamemodeTab:Section({ Title = "Gate Raid (World5)" })
+
+local GATE_WORLD = "5"
+
+local GATE_CENTER_CFRAME = CFrame.new(
+    4084.46216, 342.200867, 835.592712,
+    0.894685626, -8.06546225e-08, -0.446696401,
+    7.42580681e-08, 1, -3.18269748e-08,
+    0.446696401, -4.6956754e-09, 0.894685626
+)
+
+local function getActiveGateModel()
+    local worlds = workspace:FindFirstChild("Worlds")
+    if not worlds then return nil end
+    local wf = worlds:FindFirstChild(GATE_WORLD)
+    if not wf then return nil end
+    local systems = wf:FindFirstChild("Systems")
+    if not systems then return nil end
+    local raidStation = systems:FindFirstChild("RaidStation")
+    if not raidStation then return nil end
+    return raidStation:FindFirstChild("ActiveGate")
+end
+
+local function teleportToGate()
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    local gate = getActiveGateModel()
+    if not gate then return false end
+    local gatePart = gate:IsA("BasePart") and gate or gate:FindFirstChildWhichIsA("BasePart", true)
+    if not gatePart then return false end
+    hrp.CFrame = gatePart.CFrame * CFrame.new(0, 3, 0)
+    return true
+end
+
+local function getGateRaidEnemyFolder()
+    local arenas = workspace:FindFirstChild("RaidArenas")
+    if not arenas then return nil end
+    local wf = arenas:FindFirstChild("World" .. GATE_WORLD)
+    if not wf then return nil end
+    return wf:FindFirstChild("Enemies")
+end
+
+local function isInGateRaid()
+    local ok, result = pcall(function()
+        local gui = player.PlayerGui:FindFirstChild("RaidGui")
+        return gui ~= nil and gui.Enabled == true
+    end)
+    return ok and result
+end
+
+GamemodeTab:Slider({
+    Title    = "Rejoin Cooldown",
+    Icon     = "clock",
+    Desc     = "Time to wait before rejoining Gate Raid",
+    Value    = { Min = 1, Max = 600, Default = cooldownGateRaid },
+    Rounding = 0,
+    Callback = function(v)
+        cooldownGateRaid = v
+        Options.CooldownGateRaid = v
+        SaveConfig()
+    end
+})
+
+GamemodeTab:Toggle({
+    Title    = "Auto Gate Raid (World5)",
+    Icon     = "door-open",
+    Desc     = "Auto join and farm Gate Raid until completion, then rejoin",
+    Type     = "Checkbox",
+    Value    = Options.AutoGateRaid or false,
+    Callback = function(v)
+        isAutoGateRaid = v
+        Options.AutoGateRaid = v
+        SaveConfig()
+        if not isAutoGateRaid then return end
+
+        task.spawn(function()
+            while isAutoGateRaid and isRunning() do
+                while not tryAcquireActivity("GateRaid") and isAutoGateRaid and isRunning() do task.wait(0.5) end
+                if not isAutoGateRaid or not isRunning() then break end
+
+                local gateOk = false
+                local gateTries = 0
+                repeat
+                    gateOk = teleportToGate()
+                    if not gateOk then task.wait(1) end
+                    gateTries = gateTries + 1
+                until gateOk or gateTries > 10
+
+                if not gateOk then
+                    WindUI:Notify({ Title = "Auto Gate Raid", Content = "Active Gate not found — retrying...", Duration = 4 })
+                    releaseActivity("GateRaid") task.wait(5) continue
+                end
+
+                WindUI:Notify({ Title = "Auto Gate Raid", Content = "Joining Gate Raid: World" .. GATE_WORLD .. "...", Duration = 3 })
+
+                local joinWait = 0
+                repeat task.wait(1) joinWait = joinWait + 1 until isInGateRaid() or joinWait > 20
+
+                if not isInGateRaid() then
+                    WindUI:Notify({ Title = "Auto Gate Raid", Content = "Failed to join Gate Raid — retrying...", Duration = 4 })
+                    releaseActivity("GateRaid") task.wait(5) continue
+                end
+
+                local gateEnemyFolder = nil
+                local waited = 0
+                repeat
+                    task.wait(1) waited = waited + 1
+                    gateEnemyFolder = getGateRaidEnemyFolder()
+                until (gateEnemyFolder and #gateEnemyFolder:GetChildren() > 0) or waited > 20
+
+                if not gateEnemyFolder or #gateEnemyFolder:GetChildren() == 0 then
+                    WindUI:Notify({ Title = "Auto Gate Raid", Content = "Enemy folder not found — retrying...", Duration = 4 })
+                    releaseActivity("GateRaid") task.wait(5) continue
+                end
+
+                WindUI:Notify({ Title = "Auto Gate Raid", Content = "Farming Gate Raid until completion...", Duration = 3 })
+
+                while isAutoGateRaid and isRunning() do
+                    if not isInGateRaid() then
+                        WindUI:Notify({ Title = "Auto Gate Raid", Content = "Gate Raid completed — rejoining...", Duration = 4 })
+                        break
+                    end
+
+                    if isAutoCenterGate then
+                        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then hrp.CFrame = GATE_CENTER_CFRAME end
+                        task.wait(0.1)
+                    else
+                        local target = findNearest(gateEnemyFolder, nil)
+                        if not target then task.wait(0.3) continue end
+                        teleportTo(target)
+                        while isAutoGateRaid and isRunning() do
+                            if isEnemyDead(target) then break end
+                            if not isInGateRaid() then break end
+                            stayNear(target)
+                            task.wait(0.1)
+                        end
+                        task.wait(0.05)
+                    end
+                end
+
+                releaseActivity("GateRaid")
+                if isAutoGateRaid and isRunning() then task.wait(cooldownGateRaid) end
+            end
+            releaseActivity("GateRaid")
+        end)
+    end
+})
+
+GamemodeTab:Toggle({
+    Title    = "Auto Center Gate Raid (World5)",
+    Icon     = "crosshair",
+    Desc     = "Stand at center",
+    Type     = "Checkbox",
+    Value    = Options.AutoCenterGate or false,
+    Callback = function(v)
+        isAutoCenterGate = v
+        Options.AutoCenterGate = v
+        SaveConfig()
+        if v and not isAutoGateRaid then
+            WindUI:Notify({ Title = "Auto Center Gate Raid", Content = "Please enable Auto Gate Raid first!", Duration = 4 })
+        end
+    end
+})
+
+-- ============================================================
+--  TAB: GAMEMODE — AUTO SLAYER TOWER  (World6)
+-- ============================================================
+GamemodeTab:Divider()
+GamemodeTab:Section({ Title = "Slayer Tower (World6)" })
+
+local SLAYER_WORLD = "World6"
+
+local SLAYER_CENTER_CFRAME = CFrame.new(
+    -413.824097, 418.170074, 1976.33276,
+    0.993276596, -5.19838466e-08, -0.115765452,
+    4.31224514e-08, 1, -7.90505723e-08,
+    0.115765452, 7.35269907e-08, 0.993276596
+)
+
+local function fireJoinSlayer()
+    pcall(function()
+        local remote = RS:WaitForChild("BridgeNet2", 10):WaitForChild("dataRemoteEvent", 10)
+        remote:FireServer({ { __BridgeTuplePayload__ = true, Payload = { "Create", SLAYER_WORLD, n = 2 } }, "\149" })
+    end)
+end
+
+local function getSlayerEnemyFolder()
+    local arenas = workspace:FindFirstChild("RaidArenas")
+    if not arenas then return nil end
+    local wf = arenas:FindFirstChild(SLAYER_WORLD)
+    if not wf then return nil end
+    return wf:FindFirstChild("Enemies")
+end
+
+local function isInSlayer()
+    local ok, result = pcall(function()
+        local gui = player.PlayerGui:FindFirstChild("RaidGui")
+        return gui ~= nil and gui.Enabled == true
+    end)
+    return ok and result
+end
+
+GamemodeTab:Slider({
+    Title    = "Rejoin Cooldown",
+    Icon     = "clock",
+    Desc     = "Time to wait before rejoining Slayer Tower",
+    Value    = { Min = 1, Max = 600, Default = cooldownSlayer },
+    Rounding = 0,
+    Callback = function(v)
+        cooldownSlayer = v
+        Options.CooldownSlayer = v
+        SaveConfig()
+    end
+})
+
+GamemodeTab:Toggle({
+    Title    = "Auto Slayer Tower (World6)",
+    Icon     = "sword",
+    Desc     = "Auto join and farm Slayer Tower until completion, then rejoin",
+    Type     = "Checkbox",
+    Value    = Options.AutoSlayerRaid or false,
+    Callback = function(v)
+        isAutoSlayer = v
+        Options.AutoSlayerRaid = v
+        SaveConfig()
+        if not isAutoSlayer then return end
+
+        task.spawn(function()
+            while isAutoSlayer and isRunning() do
+                while not tryAcquireActivity("Slayer") and isAutoSlayer and isRunning() do task.wait(0.5) end
+                if not isAutoSlayer or not isRunning() then break end
+
+                fireJoinSlayer()
+                WindUI:Notify({ Title = "Auto Slayer Tower", Content = "Joining Slayer Tower: " .. SLAYER_WORLD .. "...", Duration = 3 })
+
+                local joinWait = 0
+                repeat task.wait(1) joinWait = joinWait + 1 until isInSlayer() or joinWait > 20
+
+                if not isInSlayer() then
+                    WindUI:Notify({ Title = "Auto Slayer Tower", Content = "Failed to join Slayer Tower — retrying...", Duration = 4 })
+                    releaseActivity("Slayer") task.wait(5) continue
+                end
+
+                local slayerEnemyFolder = nil
+                local waited = 0
+                repeat
+                    task.wait(1) waited = waited + 1
+                    slayerEnemyFolder = getSlayerEnemyFolder()
+                until (slayerEnemyFolder and #slayerEnemyFolder:GetChildren() > 0) or waited > 20
+
+                if not slayerEnemyFolder or #slayerEnemyFolder:GetChildren() == 0 then
+                    WindUI:Notify({ Title = "Auto Slayer Tower", Content = "Enemy folder not found — retrying...", Duration = 4 })
+                    releaseActivity("Slayer") task.wait(5) continue
+                end
+
+                WindUI:Notify({ Title = "Auto Slayer Tower", Content = "Farming Slayer Tower until completion...", Duration = 3 })
+
+                while isAutoSlayer and isRunning() do
+                    if not isInSlayer() then
+                        WindUI:Notify({ Title = "Auto Slayer Tower", Content = "Slayer Tower completed — rejoining...", Duration = 4 })
+                        break
+                    end
+
+                    if isAutoCenterSlayer then
+                        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then hrp.CFrame = SLAYER_CENTER_CFRAME end
+                        task.wait(0.1)
+                    else
+                        local target = findNearest(slayerEnemyFolder, nil)
+                        if not target then task.wait(0.3) continue end
+                        teleportTo(target)
+                        while isAutoSlayer and isRunning() do
+                            if isEnemyDead(target) then break end
+                            if not isInSlayer() then break end
+                            stayNear(target)
+                            task.wait(0.1)
+                        end
+                        task.wait(0.05)
+                    end
+                end
+
+                releaseActivity("Slayer")
+                if isAutoSlayer and isRunning() then task.wait(cooldownSlayer) end
+            end
+            releaseActivity("Slayer")
+        end)
+    end
+})
+
+GamemodeTab:Toggle({
+    Title    = "Auto Center Slayer Tower (World6)",
+    Icon     = "crosshair",
+    Desc     = "Stand at center CFrame instead of chasing enemies",
+    Type     = "Checkbox",
+    Value    = Options.AutoCenterSlayer or false,
+    Callback = function(v)
+        isAutoCenterSlayer = v
+        Options.AutoCenterSlayer = v
+        SaveConfig()
+        if v and not isAutoSlayer then
+            WindUI:Notify({ Title = "Auto Center Slayer Tower", Content = "Please enable Auto Slayer Tower first!", Duration = 4 })
+        end
+    end
+})
+
+-- ============================================================
+--  TAB: GAMEMODE — AUTO TIMELESS RAID  (World0)
+-- ============================================================
+GamemodeTab:Divider()
+GamemodeTab:Section({ Title = "Timeless Raid (World0)" })
+
+local TIMELESS_WORLD = "World0"
+
+local TIMELESS_CENTER_CFRAME = CFrame.new(
+    6545.85352, 177.530304, 4915.30615,
+    0.999962986, 2.95401588e-08, 0.00860142801,
+    -2.92066176e-08, 1, -3.89029751e-08,
+    -0.00860142801, 3.86503167e-08, 0.999962986
+)
+
+local function fireJoinTimelessRaid()
+    pcall(function()
+        local remote = RS:WaitForChild("BridgeNet2", 10):WaitForChild("dataRemoteEvent", 10)
+        remote:FireServer({
+            {
+                __BridgeTuplePayload__ = true,
+                Payload = { "Create", TIMELESS_WORLD, n = 2 }
+            },
+            "\149"
+        })
+    end)
+end
+
+local function getTimelessEnemyFolder()
+    local arenas = workspace:FindFirstChild("RaidArenas")
+    if not arenas then return nil end
+    local wf = arenas:FindFirstChild(TIMELESS_WORLD)
+    if not wf then return nil end
+    return wf:FindFirstChild("Enemies")
+end
+
+local function isInTimelessRaid()
+    local ok, result = pcall(function()
+        local gui = player.PlayerGui:FindFirstChild("RaidGui")
+        return gui ~= nil and gui.Enabled == true
+    end)
+    return ok and result
+end
+
+GamemodeTab:Slider({
+    Title    = "Rejoin Cooldown",
+    Icon     = "clock",
+    Desc     = "Time to wait before rejoining Timeless Raid",
+    Value    = { Min = 1, Max = 60, Default = cooldownTimelessRaid },
+    Rounding = 0,
+    Callback = function(v)
+        cooldownTimelessRaid = v
+        Options.CooldownTimelessRaid = v
+        SaveConfig()
+    end
+})
+
+GamemodeTab:Toggle({
+    Title    = "Auto Timeless Raid (World0)",
+    Icon     = "sword",
+    Desc     = "Auto join and farm Timeless Raid until completion, then rejoin",
+    Type     = "Checkbox",
+    Value    = Options.AutoTimelessRaid or false,
+    Callback = function(v)
+        isAutoTimelessRaid = v
+        Options.AutoTimelessRaid = v
+        SaveConfig()
+        if not isAutoTimelessRaid then return end
+
+        task.spawn(function()
+            while isAutoTimelessRaid and isRunning() do
+                while not tryAcquireActivity("TimelessRaid") and isAutoTimelessRaid and isRunning() do
+                    task.wait(0.5)
+                end
+                if not isAutoTimelessRaid or not isRunning() then break end
+
+                fireJoinTimelessRaid()
+                WindUI:Notify({ Title = "Auto Timeless Raid", Content = "Joining Timeless Raid: " .. TIMELESS_WORLD .. "...", Duration = 3 })
+
+                local joinWait = 0
+                repeat task.wait(1) joinWait = joinWait + 1 until isInTimelessRaid() or joinWait > 20
+
+                if not isInTimelessRaid() then
+                    WindUI:Notify({ Title = "Auto Timeless Raid", Content = "Failed to join Timeless Raid — retrying...", Duration = 4 })
+                    releaseActivity("TimelessRaid") task.wait(5) continue
+                end
+
+                local timelessEnemyFolder = nil
+                local waited = 0
+                repeat
+                    task.wait(1) waited = waited + 1
+                    timelessEnemyFolder = getTimelessEnemyFolder()
+                until (timelessEnemyFolder and #timelessEnemyFolder:GetChildren() > 0) or waited > 20
+
+                if not timelessEnemyFolder or #timelessEnemyFolder:GetChildren() == 0 then
+                    WindUI:Notify({ Title = "Auto Timeless Raid", Content = "Enemy folder not found — retrying...", Duration = 4 })
+                    releaseActivity("TimelessRaid") task.wait(5) continue
+                end
+
+                WindUI:Notify({ Title = "Auto Timeless Raid", Content = "Farming Timeless Raid until completion...", Duration = 3 })
+
+                while isAutoTimelessRaid and isRunning() do
+                    if not isInTimelessRaid() then
+                        WindUI:Notify({ Title = "Auto Timeless Raid", Content = "Timeless Raid completed — rejoining...", Duration = 4 })
+                        break
+                    end
+
+                    if isAutoCenterTimeless then
+                        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then hrp.CFrame = TIMELESS_CENTER_CFRAME end
+                        task.wait(0.1)
+                    else
+                        local target = findNearest(timelessEnemyFolder, nil)
+                        if not target then task.wait(0.3) continue end
+                        teleportTo(target)
+                        while isAutoTimelessRaid and isRunning() do
+                            if isEnemyDead(target) then break end
+                            if not isInTimelessRaid() then break end
+                            stayNear(target)
+                            task.wait(0.1)
+                        end
+                        task.wait(0.05)
+                    end
+                end
+
+                releaseActivity("TimelessRaid")
+                if isAutoTimelessRaid and isRunning() then task.wait(cooldownTimelessRaid) end
+            end
+            releaseActivity("TimelessRaid")
+        end)
+    end
+})
+
+GamemodeTab:Toggle({
+    Title    = "Auto Center Timeless Raid",
+    Icon     = "crosshair",
+    Desc     = "Stand at center CFrame instead of chasing enemies",
+    Type     = "Checkbox",
+    Value    = Options.AutoCenterTimeless or false,
+    Callback = function(v)
+        isAutoCenterTimeless = v
+        Options.AutoCenterTimeless = v
+        SaveConfig()
+        if v and not isAutoTimelessRaid then
+            WindUI:Notify({ Title = "Auto Center Timeless Raid", Content = "Please enable Auto Timeless Raid first!", Duration = 4 })
+        end
+    end
+})
+
+-- ============================================================
+--  TAB: MISC — REWARDS
+-- ============================================================
+MiscTab:Section({ Title = "Rewards" })
+
+MiscTab:Toggle({
+    Title    = "Auto Claim Daily Reward",
+    Icon     = "calendar",
+    Desc     = "Automatically claims all 7 daily rewards every minute",
+    Type     = "Checkbox",
+    Value    = Options.AutoDailyReward or false,
+    Callback = function(v)
+        Options.AutoDailyReward = v
+        SaveConfig()
+        if not v then return end
+        task.spawn(function()
+            while Options.AutoDailyReward and isRunning() do
+                pcall(function()
+                    for i = 1, 7 do
+                        fireRemote({ { [2] = "\028", [1] = {"General","DailyRewards","Claim", i} } })
+                        task.wait(0.3)
+                    end
+                end)
+                task.wait(60)
+            end
+        end)
+    end
+})
+
+MiscTab:Divider()
+MiscTab:Section({ Title = "Character" })
+
+local savedWalkSpeed = Options.WalkSpeed or 16
+
+local function applyWalkSpeed(speed)
+    local char = player.Character
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then hum.WalkSpeed = speed end
+end
+
+MiscTab:Slider({
+    Title    = "WalkSpeed",
+    Icon     = "footprints",
+    Desc     = "Adjust your character's movement speed",
+    Value    = { Min = 16, Max = 200, Default = savedWalkSpeed },
+    Rounding = 0,
+    Callback = function(v)
+        savedWalkSpeed = v
+        Options.WalkSpeed = v
+        SaveConfig()
+        applyWalkSpeed(v)
+    end
+})
+
+player.CharacterAdded:Connect(function(char)
+    if not isRunning() then return end
+    local hum = char:WaitForChild("Humanoid", 10)
+    if hum then task.wait(0.2) hum.WalkSpeed = savedWalkSpeed end
+end)
+
+task.defer(function()
+    if player.Character then applyWalkSpeed(savedWalkSpeed) end
+end)
+
+MiscTab:Divider()
+MiscTab:Section({ Title = "Performance" })
+
+MiscTab:Toggle({
+    Title    = "Wipe VFX (Anti-Lag)",
+    Icon     = "eye-off",
+    Desc     = "Disables particles, trails, beams and other effects to reduce lag",
+    Type     = "Checkbox",
+    Value    = Options.WipeVFX or false,
+    Callback = function(v)
+        Options.WipeVFX = v
+        SaveConfig()
+        if not v then return end
+        task.spawn(function()
+            while Options.WipeVFX and isRunning() do
+                pcall(function()
+                    for _, obj in pairs(workspace:GetDescendants()) do
+                        if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam")
+                        or obj:IsA("Fire") or obj:IsA("Sparkles") or obj:IsA("Smoke") then
+                            obj.Enabled = false
+                        end
+                    end
+                end)
+                task.wait(30)
+            end
+        end)
+    end
+})
+
+-- ============================================================
+--  TAB: SETTINGS
+-- ============================================================
+SettingTab:Section({ Title = "General" })
+
+SettingTab:Keybind({
+    Title    = "Toggle UI Key",
+    Desc     = "Keybind to show/hide the window",
+    Value    = Options.ToggleUIKey or "K",
+    Callback = function(v)
+        Options.ToggleUIKey = tostring(v)
+        SaveConfig()
+        local key = typeof(v) == "EnumItem" and v or Enum.KeyCode[v]
+        Window:SetToggleKey(key)
+    end
+})
+
+SettingTab:Toggle({
+    Title    = "Anti AFK",
+    Icon     = "shield",
+    Desc     = "Prevents being kicked for being idle",
+    Type     = "Checkbox",
+    Value    = Options.AntiAFK or false,
+    Callback = function(v) Options.AntiAFK = v SaveConfig() end
+})
+
+SettingTab:Toggle({
+    Title    = "Auto Rejoin",
+    Icon     = "plug",
+    Desc     = "Automatically reconnects when disconnected from the server",
+    Type     = "Checkbox",
+    Value    = Options.AutoRejoin or false,
+    Callback = function(v)
+        Options.AutoRejoin = v
+        SaveConfig()
+        if not v then return end
+        task.spawn(function()
+            local CoreGui2        = game:GetService("CoreGui")
+            local TeleportService = game:GetService("TeleportService")
+            local promptOverlay   = CoreGui2:WaitForChild("RobloxPromptGui"):WaitForChild("promptOverlay")
+            if not getgenv().RejoinConnection then
+                getgenv().RejoinConnection = promptOverlay.ChildAdded:Connect(function(child)
+                    if Options.AutoRejoin and child.Name == "ErrorPrompt" then
+                        task.wait(5)
+                        TeleportService:Teleport(game.PlaceId, player)
+                    end
+                end)
+            end
+        end)
+    end
+})
+
+-- ============================================================
+--  ANTI-AFK BACKGROUND
+-- ============================================================
+task.spawn(function()
+    local VirtualUser = game:GetService("VirtualUser")
+    local VIM         = game:GetService("VirtualInputManager")
+    while isRunning() do
+        task.wait(120)
+        if Options.AntiAFK then
+            pcall(function() VirtualUser:CaptureController() VirtualUser:ClickButton2(Vector2.new()) end)
+            pcall(function()
+                VIM:SendKeyEvent(true,  Enum.KeyCode.Space, false, game)
+                task.wait(0.1)
+                VIM:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+            end)
+        end
+    end
+end)
+
+FarmTab:Select()
