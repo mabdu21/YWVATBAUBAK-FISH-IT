@@ -1,7 +1,7 @@
 -- v190 | [Local Register Fix]
 -- =========================
 version = "Rework"
-ver = "v023.91"
+ver = "v023.92"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -310,14 +310,11 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 06/02/2026 | CL: " .. ver,
-    Desc = [[• [ Added ] Reset Wave in Misc Farm.
-• [ Added ] Silder for Reset Wave under God Mode silder.
-• [ Fixed ] Reset Wave now holds reset point for delay and has priority over farm lock.
-• [ Fixed ] Reset Wave slider triggers immediately when current wave is already at above/under target.
-• [ Fixed ] Farm Astro Farm bug from timer wave run out.
-• [ Fixed ] Camera mode in settings not sync with farming.
-• [ Optimized ] Farming loop/hook descendant scan.]],
+    Title = "Update: 03/2/2026 | CL: " .. ver,
+    Desc = [[• [ Added ] Auto Farm support for zombie act 2
+• [ Added ] New Mode, New Item Collect
+• [ Fixed ] Auto Collect failed descendant scan.
+• [ Optimized ] Check list for collect descendant scan.]],
 })
 Info:Divider()
 Info:Section({ Title = "Discord Information", TextXAlignment = "Center", TextSize = 17 })
@@ -3432,7 +3429,7 @@ end
 CollectItems = {
     "Clock Spider", "X-18 Core", "Green Energy Core", "Weird Transmitter",
     "Astro Samples", "Weird Prism", "Key Card", "Zombie Core",
-    "Flash Drives", "Presents",
+    "Flash Drives", "Presents","Genesis Core",
 }
 
 CollectGroupMap = {
@@ -5432,7 +5429,7 @@ ESP = {
     _itemHighlights   = {},
     ItemList = {
         "Clock Spider","X-18 Core","Green Energy Core","Weird Transmitter",
-        "Presents","Weird Prism","Key Card","Zombie Core","Flash Drives","Astro Samples",
+        "Presents","Weird Prism","Key Card","Zombie Core","Flash Drives","Astro Samples","Genesis Core",
     },
 }
 
@@ -6290,7 +6287,7 @@ GlobalTables2 = {
     Votes2 = {
         "Normal", "VeryHard", "Hard", "Insane", "Nightmare", "BossRush",
         "DarkDimension", "Hell", "ThunderStorm", "Christmas", "Zombie",
-        "AstroV2", "Astro", "100MVisit"
+        "AstroV2", "Astro", "100MVisit","ZombieV2"
     }
 }
 
