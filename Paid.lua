@@ -310,7 +310,7 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Lasted Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 03/2/2026 | CL: " .. ver,
+    Title = "Update: 07/03/2026 | CL: " .. ver,
     Desc = [[• [ Added ] Auto Farm support for zombie act 2
 • [ Added ] New Mode, New Item Collect
 • [ Fixed ] Auto Collect failed descendant scan.
