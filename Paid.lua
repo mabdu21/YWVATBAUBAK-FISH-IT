@@ -1,4 +1,4 @@
--- v190 | [Local Register Fix]
+-- v191 | [Local Register Fix]
 -- =========================
 version = "Rework"
 ver = "v023.92"
@@ -3427,9 +3427,9 @@ end
 -- ============================================================
 
 CollectItems = {
-    "Clock Spider", "X-18 Core", "Green Energy Core", "Weird Transmitter",
+    "Clock Spider", "X-18 Core", "Weird Transmitter",
     "Astro Samples", "Weird Prism", "Key Card", "Zombie Core",
-    "Flash Drives", "Presents","Genesis Core",
+    "Flash Drives", "Presents","Genesis Core","Green Core Energy",
 }
 
 CollectGroupMap = {
@@ -5428,7 +5428,7 @@ ESP = {
     _playerHighlights = {},
     _itemHighlights   = {},
     ItemList = {
-        "Clock Spider","X-18 Core","Green Energy Core","Weird Transmitter",
+        "Clock Spider","X-18 Core","Green Core Energy","Weird Transmitter",
         "Presents","Weird Prism","Key Card","Zombie Core","Flash Drives","Astro Samples","Genesis Core",
     },
 }
