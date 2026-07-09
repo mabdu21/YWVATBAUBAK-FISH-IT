@@ -1,15 +1,6 @@
---[[
-
-   DYHUB - Animal Hospital
-   ระบบทั้งหมดจาก RZY_Library ถูกย้ายมาไว้ใน WindUI kit นี้แล้ว
-   - auto save config
-   - toggle, dropdown, slider, button
-   - tab window เรียงสวยงามพร้อมใช้งาน
-
-]]
 -- =========================
 local version = "BETA"
-local ver     = "v001.00"
+local ver     = "v013.21"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -77,7 +68,7 @@ local Window = WindUI:CreateWindow({
     IconThemed = true,
     Icon       = "rbxassetid://104487529937663",
     Author     = "Animal Hospital | " .. userversion,
-    Folder     = "DYHUB_AnimalHospital",
+    Folder     = "DYHUB_AH",
     Size       = UDim2.fromOffset(500, 400),
     Transparent = true,
     Theme      = "Dark",
@@ -100,14 +91,14 @@ Window:EditOpenButton({
 })
 
 -- ====================== CONFIG SYSTEM ======================
-local ConfigFolder = "DYHUB_AnimalHospital"
+local ConfigFolder = "DYHUB_AH"
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
 
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/animalhospital_config.json"
+    self.ConfigPath = ConfigFolder .. "/config_AH.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -285,7 +276,7 @@ do
     })
     MainTab:Toggle({
         Title    = "Auto Treating Patients",
-        Desc     = "You must be standing in the same room as the patient for a step to fire.",
+        Desc     = "You must be standing in the same room as the patient for a step to work.",
         Value    = settings.AutoTreat,
         Callback = function(v)
             settings.AutoTreat = v
