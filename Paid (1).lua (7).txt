@@ -158,7 +158,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/STBB_config.json"
+    self.ConfigPath = ConfigFolder .. "/STBB_kaitun_config.json"
     if isfolder and makefolder and not isfolder(ConfigFolder) then
         pcall(function() makefolder(ConfigFolder) end)
     end
@@ -236,9 +236,9 @@ Config = CustomConfig.new()
 -- ====================== WINDOW 2 ======================
 Players = game:GetService("Players")
 
-FreeVersion    = "Free Version"
-PremiumVersion = "Premium Version"
-ExtraVersion   = "Extra Version"
+FreeVersion    = "Kaitun Version"
+PremiumVersion = "Kaitun Version"
+ExtraVersion   = "Kaitun Version"
 
 function getData(url)
     local success, response = pcall(function() return game:HttpGet(url) end)
