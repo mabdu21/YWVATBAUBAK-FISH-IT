@@ -1,15 +1,6 @@
---[[
-
-   DYHUB - Animal Hospital
-   ระบบทั้งหมดจาก RZY_Library ถูกย้ายมาไว้ใน WindUI kit นี้แล้ว
-   - auto save config
-   - toggle, dropdown, slider, button
-   - tab window เรียงสวยงามพร้อมใช้งาน
-
-]]
 -- =========================
 local version = "BETA"
-local ver     = "v001.02"
+local ver     = "v014.22"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -100,14 +91,14 @@ Window:EditOpenButton({
 })
 
 -- ====================== CONFIG SYSTEM ======================
-local ConfigFolder = "DYHUB_AnimalHospital"
+local ConfigFolder = "DYHUB_AH"
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
 
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/animalhospital_config.json"
+    self.ConfigPath = ConfigFolder .. "/config_ah.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -279,13 +270,13 @@ do
     local ProcessedTreatment = {}
 
     MainTab:Paragraph({
-        Title = "Auto Treating Patients",
-        Desc  = "Runs the full treatment sequence per patient: DNA Sample → Analyzer → Monitor → fetch the reported item → Apply Treatment. Supports every Medical room automatically.",
+        Title = "Info: Treating Patients",
+        Desc  = "Runs the full treatment sequence per patient: \nDNA Sample → Analyzer → Monitor → fetch the reported item → Apply Treatment.",
         Image = "stethoscope", ImageSize = 30,
     })
     MainTab:Toggle({
         Title    = "Auto Treating Patients",
-        Desc     = "You must be standing in the same room as the patient for a step to fire.",
+        Desc     = "You must be standing in the same room as the patient for a step to treat.",
         Value    = settings.AutoTreat,
         Callback = function(v)
             settings.AutoTreat = v
@@ -813,7 +804,7 @@ end
 -- FEATURE: Auto Coffee Machine
 do
     MainTab:Paragraph({
-        Title = "Auto Coffee Machine",
+        Title = "Info: Coffee Machine",
         Desc  = "Automatically brews and grabs coffee when the machine is ready.",
         Image = "coffee", ImageSize = 30,
     })
@@ -848,7 +839,7 @@ end
 -- FEATURE: Auto Check-In (Normal Only)
 do
     MainTab:Paragraph({
-        Title = "Auto Check-In (Normal Only)",
+        Title = "Info: Check-In",
         Desc  = "Automatically checks in normal patients. Skips anomalies (Skinwalkers).",
         Image = "clipboard-check", ImageSize = 30,
     })
@@ -924,7 +915,7 @@ end
 -- FEATURE: Auto Clean Slime
 do
     MainTab:Paragraph({
-        Title = "Auto Clean Slime",
+        Title = "Info: Clean Slime",
         Desc  = "Automatically cleans up slime spills.",
         Image = "droplet", ImageSize = 30,
     })
@@ -953,7 +944,7 @@ end
 -- FEATURE: Auto Extinguish Fire
 do
     MainTab:Paragraph({
-        Title = "Auto Extinguish Fire",
+        Title = "Info: Extinguish Fire",
         Desc  = "Automatically extinguishes fires in rooms.",
         Image = "flame", ImageSize = 30,
     })
@@ -992,7 +983,7 @@ end
 -- FEATURE: Auto Taser Anomaly
 do
     MainTab:Paragraph({
-        Title = "Auto Taser Anomaly",
+        Title = "Info: Taser Anomaly",
         Desc  = "Automatically grabs a taser and fires it at an active anomaly (Skinwalker).",
         Image = "zap", ImageSize = 30,
     })
@@ -1083,13 +1074,13 @@ EspTab:Section({ Title = "NPC Detection", Icon = "eye" })
 
 do
     EspTab:Paragraph({
-        Title = "NPC Anomaly ESP",
+        Title = "Info: ESP Anomaly",
         Desc  = "Highlights all NPCs and tags whether they are a normal patient or an anomaly (Skinwalker).",
         Image = "eye", ImageSize = 30,
     })
     EspTab:Toggle({
-        Title    = "NPC Anomaly ESP",
-        Desc     = "Shows highlight + tag on all NPCs.",
+        Title    = "ESP Patients (NPC)",
+        Desc     = "Shows highlight and tag on all NPCs.",
         Value    = settings.EspEnabled,
         Callback = function(v)
             settings.EspEnabled = v
@@ -1139,12 +1130,12 @@ TeleportTab:Section({ Title = "Auto Collect", Icon = "package" })
 
 do
     TeleportTab:Paragraph({
-        Title = "Auto Collect Medicine (Room 8)",
+        Title = "Info: Collect Medicine (Room 8)",
         Desc  = "Reads the TV checklist in Room 8 and grabs only the medicine items still needed.",
         Image = "package", ImageSize = 30,
     })
     TeleportTab:Toggle({
-        Title    = "Auto Collect Medicine (Room 8)",
+        Title    = "Auto Collect Medicine",
         Desc     = "Automatically grabs required medicine based on the Room 8 checklist.",
         Value    = settings.AutoMedicine,
         Callback = function(v)
@@ -1240,21 +1231,8 @@ Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 07/10/2026 | CL: " .. ver,
-    Desc  = [[• [ Fixed ] Take DNA Sample ค้าง ไม่ไปขั้นต่อไป (ต้อง toggle ปิด/เปิด) — bypass ระยะ/LOS และเดินเข้าประชิด NPC อัตโนมัติถ้ายิงซ้ำหลายครั้งไม่ติด
-• [ Fixed ] Notify "รักษาเสร็จแล้ว" ขึ้นหลอกทั้งที่ยังไม่ได้เอายาให้คนไข้ — เช็คซ้ำหลายครั้งก่อนสรุปผลกัน false-alarm
-• [ Fixed ] Apply Treatment ตอนนี้มองหา PP จาก Minigame.Bed.InBed แทนที่จะหาบน NPC โดยตรง
-• [ Fixed ] รองรับทุกห้อง (Room1, Room2, Room3 ... Room8 และห้องอื่นๆ) โดยอัตโนมัติ
-• [ Fixed ] ถ้าคนไข้ได้รับยาไปแล้ว (PP หาย/ปิด) ระบบจะ notify แล้วหยุดรอคนไข้คนใหม่ทันที ไม่วนกลับไปเก็บยาอีก
-• [ Added ] Auto Treating Patients (DNA Sample → Analyzer → Monitor → Fetch Item → Apply Treatment, multi-room)
-• [ Added ] Auto Coffee Machine
-• [ Added ] Auto Check-In (Normal Only)
-• [ Added ] Auto Collect Medicine (Room 8)
-• [ Added ] Auto Clean Slime
-• [ Added ] Auto Extinguish Fire
-• [ Added ] Auto Taser Anomaly
-• [ Added ] NPC Anomaly ESP
-• [ Changed ] Rebuilt UI on WindUI with full auto-save config
-• [ Changed ] Renamed target game to Animal Hospital ]],
+    Desc  = [[• [Fixed] Taking DNA Sample gets stuck and doesn't proceed to the next step (requires toggle to turn on/off) 
+• [ Added ] Auto Treating Patients (DNA Sample → Analyzer → Monitor → Fetch Item → Apply Treatment, multi-room)]],
 })
 Info:Divider()
 
@@ -1347,5 +1325,5 @@ Info:Paragraph({Title="Discord",Desc="Join our discord for more scripts!",Image=
     Buttons={{Icon="copy",Title="Copy Link",Callback=function() setclipboard("https://discord.gg/jWNDPNMmyB") end}}})
 end -- INFORMATION TAB do-scope
 
-print("[DYHUB] "..version.." | "..ver.." loaded successfully! | Target: Animal Hospital")
+print("[DYHUB] Game: Animal Hospital "..version.." | "..ver.." loaded successfully!")
 print("[DYHUB] Config active | Auto saving every "..tostring(settings.AutoSaveDelay).."s")
