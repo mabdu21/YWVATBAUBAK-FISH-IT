@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v014.22"
+local ver     = "v014.25"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -68,7 +68,7 @@ local Window = WindUI:CreateWindow({
     IconThemed = true,
     Icon       = "rbxassetid://104487529937663",
     Author     = "Animal Hospital | " .. userversion,
-    Folder     = "DYHUB_AnimalHospital",
+    Folder     = "DYHUB_AH",
     Size       = UDim2.fromOffset(500, 400),
     Transparent = true,
     Theme      = "Dark",
@@ -157,6 +157,7 @@ end
 -- ====================== SETTINGS TABLE (รวม state ทั้งหมด) ======================
 local settings = {
     AutoTreat       = Config:Get("AutoTreat",       false),
+    InfiniteSanity  = Config:Get("InfSanity",       false),
     AutoCoffee      = Config:Get("AutoCoffee",      false),
     AutoCheckIn     = Config:Get("AutoCheckIn",     false),
     EspEnabled      = Config:Get("EspEnabled",      false),
@@ -836,6 +837,48 @@ do
     end)
 end
 
+-- FEATURE: INF SANITY
+
+do
+    MainTab:Toggle({
+        Title    = "Infinite Sanity",
+        Desc     = "Adjust your sanity never runs out.",
+        Value    = settings.InfiniteSanity,
+        Callback = function(v)
+            settings.InfiniteSanity = v
+            Config:Set("InfSanity", v)
+            Config:Save()
+
+            WindUI:Notify({
+                Title = "Infinite Sanity",
+                Content = v and "Enabled" or "Disabled",
+                Duration = 3,
+                Icon = v and "atom" or "ban"
+            })
+        end
+    })
+
+    task.spawn(function()
+        while task.wait(2) do
+            if settings.InfiniteSanity then
+                pcall(function()
+                    local args = {
+                        [1] = math.sqrt(-1),
+                        [2] = "ok",
+                        [3] = true,
+                        n = 3,
+                    }
+
+                    game:GetService("ReplicatedStorage")
+                        .Util.Net
+                        :FindFirstChild("RE/PlayerLostSanity")
+                        :FireServer(unpack(args, 1, args.n or #args))
+                end)
+            end
+        end
+    end)
+end
+
 -- FEATURE: Auto Check-In (Normal Only)
 do
     MainTab:Paragraph({
@@ -1230,9 +1273,9 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 07/10/2026 | CL: " .. ver,
-    Desc  = [[• [Fixed] Taking DNA Sample gets stuck and doesn't proceed to the next step (requires toggle to turn on/off) 
-• [ Added ] Auto Treating Patients (DNA Sample → Analyzer → Monitor → Fetch Item → Apply Treatment, multi-room)]],
+    Title = "Update: 07/11/2026 | CL: " .. ver,
+    Desc  = [[• [ Fixed ] Auto Treat Patient / bug from maintaining room 2, 3, 4.
+• [ Added ] Infinite Sanity (sanity never run out)]],
 })
 Info:Divider()
 
