@@ -1,4 +1,4 @@
--- speed
+-- speedv1
 
 repeat task.wait() until game:IsLoaded()
 
@@ -51,7 +51,7 @@ mf.BackgroundColor3 = Color3.fromRGB(10,10,10) mf.Active = true mf.Draggable = t
 Instance.new("UICorner", mf).CornerRadius = UDim.new(0,12)
 
 local tl = Instance.new("TextLabel", mf) 
-tl.Size = UDim2.new(1,0,0,45) tl.Text = "kalb (nigga hub jk)" tl.TextColor3 = Color3.fromRGB(0, 255, 180) 
+tl.Size = UDim2.new(1,0,0,45) tl.Text = "kalb (DYHUB)" tl.TextColor3 = Color3.fromRGB(0, 255, 180) 
 tl.Font = "GothamBold" tl.TextSize = 16 tl.BackgroundTransparency = 1
 
 local logL = Instance.new("TextLabel", mf)
@@ -156,14 +156,27 @@ function run()
             end
             if ok then
                 say("Escaping Nigga Wave...") tw(cfg.p.wt, cfg.s.sp)
-                repeat task.wait(0.5)
-                    local wv = w:FindFirstChild("Waves")
-                    local m = wv and wv:FindFirstChildOfClass("Model")
-                    local rp = m and (m:FindFirstChild("RootPart") or m:FindFirstChildWhichIsA("BasePart"))
-                until not cfg.f["Auto Farm"] or is_collecting or (rp and rp.Position.X >= cfg.p.tx) or p.Character.Humanoid.Health <= 0
-                if not is_collecting and p.Character.Humanoid.Health > 0 then
-                    say("Nigga Survived! Resetting position.") tw(cfg.p.fn, cfg.s.spfn)
-                    farm_count = farm_count + 1
+    repeat
+    task.wait(0.5)
+
+    local wv = w:FindFirstChild("Waves")
+    local target
+
+    if wv then
+        local model = wv:FindFirstChildOfClass("Model")
+        target = model and (model:FindFirstChild("RootPart") or model:FindFirstChildWhichIsA("BasePart"))
+        target = target or wv:FindFirstChild("Boulder")
+    end
+
+until not cfg.f["Auto Farm"]
+    or is_collecting
+    or (target and target.Position.X >= cfg.p.tx)
+    or p.Character.Humanoid.Health <= 0
+
+if not is_collecting and p.Character.Humanoid.Health > 0 then
+    say("Nigga Survived! Resetting position.")
+    tw(cfg.p.fn, cfg.s.spfn)
+    farm_count = farm_count + 1
                 end
             end
         end)
