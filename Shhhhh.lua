@@ -1,16 +1,6 @@
---[[
-    DYHUB | Storage Hunter
-    ------------------------------------------------------------
-    UI Kit   : WindUI (Footagesus) — auto save config, toggle,
-               dropdown, slider, button, tabbed window
-    Systems  : Auto-Bid, Auto-Accept Offers, Auto Place Items,
-               Auto-Collect, Unload Truck, Multi-location Teleport,
-               Server Utilities — ported from the Storage Hunters
-               open-world script and re-organized into the DYHUB kit
---]]
 -- =========================
 local version = "BETA"
-local ver     = "v002.00"
+local ver     = "v021.15"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -112,7 +102,7 @@ local Window = WindUI:CreateWindow({
     IconThemed = true,
     Icon       = "rbxassetid://104487529937663",
     Author     = "Storage Hunter | " .. userversion,
-    Folder     = "DYHUB_StorageHunter",
+    Folder     = "DYHUB_SH",
     Size       = UDim2.fromOffset(540, 420),
     Transparent = true,
     Theme      = "Dark",
@@ -137,14 +127,14 @@ Window:EditOpenButton({
 })
 
 -- ====================== CONFIG SYSTEM ======================
-local ConfigFolder = "DYHUB_StorageHunter"
+local ConfigFolder = "DYHUB_SH"
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
 
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/storagehunter_config.json"
+    self.ConfigPath = ConfigFolder .. "/config_sh.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -244,7 +234,7 @@ end
 -- ====================== TABS ======================
 local InfoTab     = Window:Tab({ Title = "Information", Icon = "info" })
 local _D1         = Window:Divider()
-local AuctionTab  = Window:Tab({ Title = "Auction",  Icon = "gavel" })
+local AuctionTab  = Window:Tab({ Title = "Main",  Icon = "rocket" })
 local CollectTab  = Window:Tab({ Title = "Collect",  Icon = "package" })
 local TeleportTab = Window:Tab({ Title = "Teleport", Icon = "map-pin" })
 local _D2         = Window:Divider()
