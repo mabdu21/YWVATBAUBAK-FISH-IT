@@ -1,7 +1,7 @@
 -- v191 | [Local Register Fix]
 -- =========================
 version = "Rework"
-ver = "v023.92"
+ver = "v023.93"
 -- =========================
 
 -- ====================== LOAD UI ======================
@@ -435,8 +435,8 @@ GlobalTables = {
 }
 
 -- ====================== CONFIG VARIABLES ======================
-skillList          = { "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B", "U" }
-skillDropdownValues = { "All", "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B", "U" }
+skillList          = { "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B", "U", "F" }
+skillDropdownValues = { "All", "Q", "E", "R", "T", "Y", "G", "H", "Z", "X", "C", "V", "B", "U", "F" }
 
 -- ====================== FARM  HELPERS ======================
 function NormalizeFarmMode(mode)
