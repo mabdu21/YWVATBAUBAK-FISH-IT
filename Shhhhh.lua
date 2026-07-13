@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v022.46"
+local ver     = "v022.48"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
