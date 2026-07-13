@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v022.54"
+local ver     = "v022.55"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -1094,7 +1094,7 @@ local function doAutoCleanCycle(myGen, silent)
         local anyMoved = false
         for _, uid in ipairs(itemUids) do
             if not (autoCleanEnabled and autoCleanGen == myGen) then break end
-            local success, moved = safeCallRemote(StartWash, 1, uid, "Vehicle", "STARTER-DUSTER")
+            local success, moved = safeCallRemote(StartWash, slot, uid, "Vehicle", "STARTER-DUSTER")
             if success and moved then
                 anyMoved = true
             end
@@ -1121,7 +1121,7 @@ end
 -- จะยิง StartWash แทน TransferVehicleItemsToInventory แล้ววนรอเก็บของอัตโนมัติ
 CollectTab:Toggle({
     Title    = "Auto Clean Item (Dirty)",
-    Desc     = "Automatically move dirty items into the washer and collect them on a loop.",
+    Desc     = "Automatically move dirty items into the washer and collect.",
     Value    = autoCleanEnabled,
     Callback = function(v)
         autoCleanEnabled = v
@@ -1149,7 +1149,7 @@ CollectTab:Toggle({
     end
 })
 CollectTab:Button({
-    Title = "Clean Item",
+    Title = "Clean Item (Slot 1)",
     Desc  = "Move dirty from your vehicle into washing.",
     Callback = function()
         local vehicle = getMyVehicle()
@@ -1157,6 +1157,50 @@ CollectTab:Button({
             local itemUids = getVehicleItems(vehicle)
             if #itemUids > 0 then
                 local success, result = safeCallRemote(StartWash, 1, itemUids, "Vehicle", "STARTER-DUSTER")
+                if success then
+                    WindUI:Notify({ Title = "Clean Item", Content = "Clean command sent!", Duration = 2, Icon = "truck" })
+                else
+                    WindUI:Notify({ Title = "Clean Item", Content = "Failed to Clean Item.", Duration = 3, Icon = "alert-triangle" })
+                end
+            else
+                WindUI:Notify({ Title = "Clean Item", Content = "No items detected in the vehicle.", Duration = 3, Icon = "alert-triangle" })
+            end
+        else
+            WindUI:Notify({ Title = "Clean Item", Content = "Remote not ready yet, try again shortly.", Duration = 3, Icon = "alert-triangle" })
+        end
+    end
+})
+CollectTab:Button({
+    Title = "Clean Item (Slot 2)",
+    Desc  = "Move dirty from your vehicle into washing.",
+    Callback = function()
+        local vehicle = getMyVehicle()
+        if TransferVehicleItemsToInventory then
+            local itemUids = getVehicleItems(vehicle)
+            if #itemUids > 0 then
+                local success, result = safeCallRemote(StartWash, 2, itemUids, "Vehicle", "STARTER-DUSTER")
+                if success then
+                    WindUI:Notify({ Title = "Clean Item", Content = "Clean command sent!", Duration = 2, Icon = "truck" })
+                else
+                    WindUI:Notify({ Title = "Clean Item", Content = "Failed to Clean Item.", Duration = 3, Icon = "alert-triangle" })
+                end
+            else
+                WindUI:Notify({ Title = "Clean Item", Content = "No items detected in the vehicle.", Duration = 3, Icon = "alert-triangle" })
+            end
+        else
+            WindUI:Notify({ Title = "Clean Item", Content = "Remote not ready yet, try again shortly.", Duration = 3, Icon = "alert-triangle" })
+        end
+    end
+})
+CollectTab:Button({
+    Title = "Clean Item (Slot 3)",
+    Desc  = "Move dirty from your vehicle into washing.",
+    Callback = function()
+        local vehicle = getMyVehicle()
+        if TransferVehicleItemsToInventory then
+            local itemUids = getVehicleItems(vehicle)
+            if #itemUids > 0 then
+                local success, result = safeCallRemote(StartWash, 3, itemUids, "Vehicle", "STARTER-DUSTER")
                 if success then
                     WindUI:Notify({ Title = "Clean Item", Content = "Clean command sent!", Duration = 2, Icon = "truck" })
                 else
