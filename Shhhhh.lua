@@ -1,6 +1,6 @@
 -- =========================
-local version = "BETA"
-local ver     = "v022.51"
+local version = "ไอเกอร์เป็นเกย์"
+local ver     = "v022.52"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
