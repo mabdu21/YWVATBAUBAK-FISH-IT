@@ -1,6 +1,6 @@
 -- =========================
-local version = "ไอเกอร์เป็นเกย์"
-local ver     = "v022.52"
+local version = "ควยไอสัส"
+local ver     = "v022.53"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -1087,7 +1087,7 @@ local function doAutoCleanCycle(myGen, silent)
     for _, slot in ipairs(slots) do
         if not (autoCleanEnabled and autoCleanGen == myGen) then break end
 
-        local success, moved = safeCallRemote(StartWash, slot, itemUids, "Vehicle", nil)
+        local success, moved = safeCallRemote(StartWash, slot, itemUids, "Vehicle", "STARTER-DUSTER")
 
         if success and moved then
             local ready = waitForCollectReady(slot, myGen, 20)
@@ -1134,6 +1134,28 @@ CollectTab:Toggle({
                     task.wait(2)
                 end
             end)
+        end
+    end
+})
+CollectTab:Button({
+    Title = "Clean Item",
+    Desc  = "Move dirty from your vehicle into washing.",
+    Callback = function()
+        local vehicle = getMyVehicle()
+        if TransferVehicleItemsToInventory then
+            local itemUids = getVehicleItems(vehicle)
+            if #itemUids > 0 then
+                local success, result = safeCallRemote(StartWash, slot, itemUids, "Vehicle", "STARTER-DUSTER")
+                if success then
+                    WindUI:Notify({ Title = "Clean Item", Content = "Clean command sent!", Duration = 2, Icon = "truck" })
+                else
+                    WindUI:Notify({ Title = "Clean Item", Content = "Failed to Clean Item.", Duration = 3, Icon = "alert-triangle" })
+                end
+            else
+                WindUI:Notify({ Title = "Clean Item", Content = "No items detected in the vehicle.", Duration = 3, Icon = "alert-triangle" })
+            end
+        else
+            WindUI:Notify({ Title = "Clean Item", Content = "Remote not ready yet, try again shortly.", Duration = 3, Icon = "alert-triangle" })
         end
     end
 })
