@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v021.20"
+local ver     = "v022.35"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -1051,12 +1051,10 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 07/12/2026 | CL: " .. ver,
+    Title = "Update: 07/13/2026 | CL: " .. ver,
     Desc  = [[• [ Added ] Auction tab: Auto-Bid, Min Starting Bid, Max Bid
 • [ Added ] Collect tab: Auto-Accept Offers, Auto Place Items, Unload Truck, Auto-Collect
-• [ Added ] Teleport tab: Base, Zones & Shops shortcuts
-• [ Changed ] Rebuilt on the DYHUB UI Kit with full auto-save config support
-• [ Changed ] Renamed from 100 Day to Storage Hunter ]],
+• [ Added ] Teleport tab: Base, Zones & Shops shortcuts ]],
 })
 Info:Divider()
 
@@ -1422,5 +1420,5 @@ task.spawn(function()
     end
 end)
 
-print("[DYHUB] "..version.." | "..ver.." loaded successfully!")
-print("[DYHUB] Storage Hunter systems active | Auto saving every "..tostring(settings.AutoSaveDelay).."s")
+print("[DYHUB] Game loaded "..version.." | "..ver.." loaded successfully!")
+print("[DYHUB] Auto saving every "..tostring(settings.AutoSaveDelay).."s")
