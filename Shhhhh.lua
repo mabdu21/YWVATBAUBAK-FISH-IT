@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v022.53"
+local ver     = "v022.54"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -999,6 +999,9 @@ CollectTab:Toggle({
 
 CollectTab:Divider()
 CollectTab:Section({ Title = "Clean Dirty", Icon = "package" })
+
+local StartWash = game:GetService("ReplicatedStorage").Events.Wash.StartWash
+local CollectWash = game:GetService("ReplicatedStorage").Events.Wash.CollectWash
 
 -- ค่าที่บันทึกไว้ (โหลดจาก settings ถ้ามี)
 -- washSlot ตอนนี้เป็น table เพราะ dropdown เป็น Multi-select เช่น { "1", "3" }
