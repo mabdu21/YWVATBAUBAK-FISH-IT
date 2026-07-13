@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v021.15"
+local ver     = "v021.20"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -192,15 +192,19 @@ local settings = {
     AutoAcceptOffers = Config:Get("AutoAcceptOffers", false),
     MinAcceptPercent = Config:Get("MinAcceptPercent", 15),
     AutoPlaceEnabled = Config:Get("AutoPlaceEnabled", false),
+    InstantPrompt    = Config:Get("InstantPrompt", false),
+    autoCleanEnabled = Config:Get("autoCleanEnabled", false),
+    washSlot         = Config:Get("1"),
     AutoBid          = Config:Get("AutoBid", false),
-    MinBid           = Config:Get("MinBid", 0),
-    MaxBid           = Config:Get("MaxBid", 0),
+    MinBid           = Config:Get("MinBid", 5),
+    MaxBid           = Config:Get("MaxBid", 1000),
     AutoCollect      = Config:Get("AutoCollect", false),
     AutoSaveEnabled  = Config:Get("AutoSaveEnabled", true),
     AutoSaveDelay    = Config:Get("AutoSaveDelay", 15),
 }
 
 -- Sync loaded config into the live runtime state declared earlier
+InstantPrompt    = settings.InstantPrompt
 AutoAcceptOffers = settings.AutoAcceptOffers
 MinAcceptPercent = settings.MinAcceptPercent
 AutoPlaceEnabled = settings.AutoPlaceEnabled
@@ -483,26 +487,112 @@ local startAutoPlaceLoop
 
 -- ====================== AUCTION TAB ======================
 AuctionTab:Divider()
+local Workspace = game:GetService("Workspace")
+
+local InstantPrompt = false
+local PromptCache = {}
+local Connections = {}
+
+local function ApplyPrompt(prompt)
+    if not PromptCache[prompt] then
+        PromptCache[prompt] = prompt.HoldDuration
+    end
+
+    if prompt.HoldDuration ~= 0 then
+        prompt.HoldDuration = 0
+    end
+end
+
+local function RestorePrompts()
+    for prompt, duration in pairs(PromptCache) do
+        if prompt and prompt.Parent then
+            prompt.HoldDuration = duration
+        end
+    end
+
+    table.clear(PromptCache)
+end
+
+AuctionTab:Section({ Title = "Auction Prompt", Icon = "cpu" })
+
+AuctionTab:Toggle({
+    Title = "Instant Prompt",
+    Desc = "Adjust proximity prompt to no hold anymore.",
+    Value = InstantPrompt,
+    Callback = function(state)
+        InstantPrompt = state
+        settings.InstantPrompt = state
+        Config:Set("InstantPrompt", state)
+        Config:Save()
+
+        WindUI:Notify({
+            Title = "Instant Prompt",
+            Content = state and "Enabled" or "Disabled",
+            Duration = 2,
+            Icon = state and "cpu" or "ban"
+        })
+
+        if state then
+
+            -- Apply ทุกตัวที่มีอยู่
+            for _, v in ipairs(Workspace:GetDescendants()) do
+                if v:IsA("ProximityPrompt") then
+                    ApplyPrompt(v)
+                end
+            end
+
+            -- Prompt ที่สร้างใหม่
+            Connections.Added = Workspace.DescendantAdded:Connect(function(v)
+                if v:IsA("ProximityPrompt") then
+                    ApplyPrompt(v)
+                end
+            end)
+
+            -- กันเกมเปลี่ยน HoldDuration กลับ
+            task.spawn(function()
+                while InstantPrompt do
+                    for prompt in pairs(PromptCache) do
+                        if prompt and prompt.Parent and prompt.HoldDuration ~= 0 then
+                            prompt.HoldDuration = 0
+                        end
+                    end
+                    task.wait(0.2)
+                end
+            end)
+
+        else
+
+            if Connections.Added then
+                Connections.Added:Disconnect()
+                Connections.Added = nil
+            end
+
+            RestorePrompts()
+
+        end
+    end
+})
+
 AuctionTab:Section({ Title = "Auction Bidding", Icon = "gavel" })
 
 AuctionTab:Toggle({
-    Title    = "Auto-Bid",
+    Title    = "Auto Bid",
     Desc     = "Automatically place bids while an auction is active.",
     Value    = AutoBid,
     Callback = function(state)
         AutoBid = state
         settings.AutoBid = state
         Config:Set("AutoBid", state); Config:Save()
-        WindUI:Notify({ Title = "Auto-Bid", Content = state and "Enabled" or "Disabled", Duration = 2, Icon = state and "gavel" or "ban" })
+        WindUI:Notify({ Title = "Auto Bid", Content = state and "Enabled" or "Disabled", Duration = 2, Icon = state and "gavel" or "ban" })
     end
 })
 AuctionTab:Input({
     Title       = "Min Starting Bid",
     Value       = tostring(MinBid),
-    Placeholder = "0",
+    Placeholder = "Enter your min bid",
     Callback    = function(text)
         local num = tonumber(text)
-        MinBid = num or 0
+        MinBid = num or 5
         settings.MinBid = MinBid
         Config:Set("MinBid", MinBid); Config:Save()
     end
@@ -513,7 +603,7 @@ AuctionTab:Input({
     Placeholder = "Enter your max bid",
     Callback    = function(text)
         local num = tonumber(text)
-        MaxBid = num or 0
+        MaxBid = num or 1000
         settings.MaxBid = MaxBid
         Config:Set("MaxBid", MaxBid); Config:Save()
     end
@@ -528,18 +618,18 @@ CollectTab:Divider()
 CollectTab:Section({ Title = "Offers & Plot", Icon = "tag" })
 
 CollectTab:Toggle({
-    Title    = "Auto-Accept Offers",
+    Title    = "Auto Accept Offers",
     Desc     = "Automatically respond to shopper NPC offers.",
     Value    = AutoAcceptOffers,
     Callback = function(state)
         AutoAcceptOffers = state
         settings.AutoAcceptOffers = state
         Config:Set("AutoAcceptOffers", state); Config:Save()
-        WindUI:Notify({ Title = "Auto-Accept Offers", Content = state and "Enabled" or "Disabled", Duration = 2, Icon = state and "tag" or "ban" })
+        WindUI:Notify({ Title = "Auto Accept Offers", Content = state and "Enabled" or "Disabled", Duration = 2, Icon = state and "tag" or "ban" })
     end
 })
 CollectTab:Input({
-    Title       = "Min Accept %",
+    Title       = "Min Accept (%)",
     Value       = tostring(MinAcceptPercent),
     Placeholder = "15",
     Callback    = function(text)
@@ -562,6 +652,148 @@ CollectTab:Toggle({
         settings.AutoPlaceEnabled = state
         Config:Set("AutoPlaceEnabled", state); Config:Save()
         if state then startAutoPlaceLoop() end
+    end
+})
+
+CollectTab:Divider()
+CollectTab:Section({ Title = "Clean Dirty", Icon = "package" })
+
+-- ค่าที่บันทึกไว้ (โหลดจาก settings ถ้ามี)
+local washSlot         = settings.washSlot or "All"
+local autoCleanEnabled = settings.autoCleanEnabled or false
+local autoCleanGen     = 0 -- กันไม่ให้ลูปเก่ากับลูปใหม่ทับกันตอนกด toggle ถี่ๆ
+
+-- Dropdown เลือกช่องล้าง (ใช้กับทั้ง StartWash และ CollectWash)
+CollectTab:Dropdown({
+    Title    = "Adjust slot for Clean",
+    Values   = { "All", "1", "2", "3" },
+    Multi    = false,
+    Value    = washSlot,
+    Callback = function(v)
+        washSlot = v
+        settings.washSlot = v
+        Config:Set("washSlot", v); Config:Save()
+        WindUI:Notify({ Title = "Wash Slot", Content = v, Duration = 2, Icon = "settings" })
+    end
+})
+
+-- ช่องที่จะใช้ยิง CollectWash (ถ้าเลือก All จะยิงครบ 1, 2, 3)
+local function getCollectSlots()
+    if washSlot == "All" then
+        return { 1, 2, 3 }
+    end
+    return { tonumber(washSlot) or 1 }
+end
+
+-- ช่องที่จะใช้ยิง StartWash
+-- หมายเหตุ: ของชุดเดียวส่งไปได้ทีละช่องเท่านั้น ถ้าเลือก All จึงใช้ช่อง 1 เป็นค่า default
+-- (ปรับ logic ตรงนี้ได้ถ้าเกมมีพฤติกรรมอื่น)
+local function getStartWashSlot()
+    if washSlot == "All" then
+        return 1
+    end
+    return tonumber(washSlot) or 1
+end
+
+local function fireStartWash(itemUids)
+    local StartWash = game:GetService("ReplicatedStorage").Events.Wash.StartWash
+    return pcall(function()
+        StartWash:InvokeServer(getStartWashSlot(), itemUids, "Vehicle", nil)
+    end)
+end
+
+local function fireCollectWash()
+    local CollectWash = game:GetService("ReplicatedStorage").Events.Wash.CollectWash
+    for _, slotNum in ipairs(getCollectSlots()) do
+        pcall(function()
+            CollectWash:InvokeServer(slotNum)
+        end)
+    end
+end
+
+-- ยกของสกปรกจากรถ -> ส่งไปล้าง
+-- silent = true จะไม่มี WindUI:Notify (ใช้ตอนรันวนในลูปทุก 2 วิ กันสแปมแจ้งเตือน)
+local function doAutoCleanCycle(silent)
+    local vehicle = getMyVehicle()
+
+    if not TransferVehicleItemsToInventory then
+        if not silent then
+            WindUI:Notify({ Title = "Auto Clean", Content = "Remote not ready yet, try again shortly.", Duration = 3, Icon = "alert-triangle" })
+        end
+        return false
+    end
+
+    local itemUids = getVehicleItems(vehicle)
+
+    if #itemUids == 0 then
+        if not silent then
+            WindUI:Notify({ Title = "Auto Clean", Content = "No items detected in the vehicle.", Duration = 3, Icon = "alert-triangle" })
+        end
+        return false
+    end
+
+    local moved = game:GetService("ReplicatedStorage").Events.Wash.StartWash
+          return pcall(function()
+          StartWash:InvokeServer(getStartWashSlot(), itemUids, "Vehicle", nil)
+       end)
+    end
+
+    if not moved then
+        if not silent then
+            WindUI:Notify({ Title = "Auto Clean", Content = "Failed to unload.", Duration = 3, Icon = "alert-triangle" })
+        end
+        return false
+    end
+
+    task.wait(0.2)
+
+    local ok, err = fireStartWash(itemUids)
+
+    if not silent then
+        WindUI:Notify({
+            Title    = "Auto Clean",
+            Content  = ok and "Items sent to washer!" or ("Wash failed: " .. tostring(err)),
+            Duration = 3,
+            Icon     = ok and "check" or "alert-triangle"
+        })
+    end
+
+    return ok
+end
+
+-- Toggle: Auto Clean (Dirty) -- เดิมเป็น Button เปลี่ยนเป็น Toggle เพื่อรันวนลูปได้
+CollectTab:Toggle({
+    Title    = "Auto Clean Item (Dirty)",
+    Desc     = "Automatically move dirty items into the washer and collect them on a loop.",
+    Value    = autoCleanEnabled,
+    Callback = function(v)
+        autoCleanEnabled = v
+        settings.autoCleanEnabled = v
+        Config:Set("autoCleanEnabled", v); Config:Save()
+
+        WindUI:Notify({
+            Title    = "Auto Clean",
+            Content  = v and "Enabled" or "Disabled",
+            Duration = 3,
+            Icon     = v and "shield" or "shield-off"
+        })
+
+        autoCleanGen = autoCleanGen + 1
+        local myGen = autoCleanGen
+
+        if v then
+            doAutoCleanCycle(false) -- ยิงรอบแรกทันที พร้อม notify
+
+            task.spawn(function()
+                while autoCleanEnabled and autoCleanGen == myGen do
+                    task.wait(2)
+                    if not (autoCleanEnabled and autoCleanGen == myGen) then break end
+
+                    fireCollectWash()      -- Remote 2: เก็บของที่ล้างเสร็จกลับมา
+                    doAutoCleanCycle(true) -- Remote 1: ส่งของสกปรกใหม่ไปล้างต่อ (silent)
+                end
+            end)
+        end
     end
 })
 
@@ -595,16 +827,16 @@ CollectTab:Paragraph({
 })
 
 CollectTab:Divider()
-CollectTab:Section({ Title = "Auto-Collect", Icon = "move" })
+CollectTab:Section({ Title = "Collect", Icon = "move" })
 CollectTab:Toggle({
-    Title    = "Auto-Collect",
+    Title    = "Auto Collect",
     Desc     = "Teleports to and collects nearby items via ProximityPrompt.",
     Value    = AutoCollect,
     Callback = function(state)
         AutoCollect = state
         settings.AutoCollect = state
         Config:Set("AutoCollect", state); Config:Save()
-        WindUI:Notify({ Title = "Auto-Collect", Content = state and "Enabled" or "Disabled", Duration = 2, Icon = state and "move" or "ban" })
+        WindUI:Notify({ Title = "Auto Collect", Content = state and "Enabled" or "Disabled", Duration = 2, Icon = state and "move" or "ban" })
     end
 })
 
@@ -630,98 +862,155 @@ TeleportTab:Paragraph({
 
 TeleportTab:Divider()
 TeleportTab:Section({ Title = "Zones", Icon = "map" })
-TeleportTab:Button({
-    Title = "TP to Junk Yard",
-    Desc  = "Teleport to the Junk Yard area.",
-    Callback = function()
-        local areas = Workspace:FindFirstChild('Areas')
-        local junkyard = areas and areas:FindFirstChild('Junk Yard')
-        local centrePiece = junkyard and junkyard:FindFirstChild('CentrePiece', true)
-        if centrePiece then
-            teleportTo(centrePiece:GetPivot() + Vector3.new(0, 5, 0))
-        else
-            WindUI:Notify({ Title = "TP to Junk Yard", Content = "Location not found.", Duration = 3, Icon = "alert-triangle" })
-        end
+local zoneList = {
+    ["Junk Yard"] = function()
+        local areas = Workspace:FindFirstChild("Areas")
+        local zone = areas and areas:FindFirstChild("Junk Yard")
+        local part = zone and zone:FindFirstChild("CentrePiece", true)
+        return part
+    end,
+
+    ["Back Alley"] = function()
+        local areas = Workspace:FindFirstChild("Areas")
+        local zone = areas and areas:FindFirstChild("Back Alley")
+        local part = zone and zone:FindFirstChild("Back Alley Road", true)
+        return part
+    end,
+
+    ["Farm Yard"] = function()
+        local areas = Workspace:FindFirstChild("Areas")
+        local zone = areas and areas:FindFirstChild("Farmyard")
+        local part = zone and zone:FindFirstChild("Lost and Found Box", true)
+        return part
+    end,
+
+    ["Jurassic"] = function()
+        local areas = Workspace:FindFirstChild("Areas")
+        local zone = areas and areas:FindFirstChild("Jurassic")
+        local part = zone and zone:FindFirstChild("AreaBoundary", true)
+        return part
+    end,
+
+    ["Shipyard"] = function()
+        local areas = Workspace:FindFirstChild("Areas")
+        local zone = areas and areas:FindFirstChild("Shipyard")
+        local part = zone and zone:FindFirstChild("Lost and Found Box", true)
+        return part
+    end,
+}
+
+local selectedZone = settings.selectedZone or "Junk Yard"
+
+TeleportTab:Dropdown({
+    Title = "Select Zone",
+    Values = {
+        "Junk Yard",
+        "Back Alley",
+        "Farm Yard",
+        "Shipyard",
+        "Jurassic",
+    },
+    Multi = false,
+    Value = selectedZone,
+    Callback = function(v)
+        selectedZone = v
+        settings.selectedZone = v
+        Config:Set("selectedZone", v)
+        Config:Save()
+
+        WindUI:Notify({
+            Title = "Teleport",
+            Content = "Selected: " .. v,
+            Duration = 2,
+            Icon = "map-pin"
+        })
     end
 })
+
 TeleportTab:Button({
-    Title = "TP to Back Alley",
-    Desc  = "Teleport to the Back Alley area.",
+    Title = "TP to Zone",
+    Desc = "Teleport to the selected zone.",
     Callback = function()
-        local areas = Workspace:FindFirstChild('Areas')
-        local backAlley = areas and areas:FindFirstChild('Back Alley')
-        local road = backAlley and backAlley:FindFirstChild('Back Alley Road', true)
-        if road then
-            teleportTo(road:GetPivot() + Vector3.new(0, 5, 0))
-        else
-            WindUI:Notify({ Title = "TP to Back Alley", Content = "Location not found.", Duration = 3, Icon = "alert-triangle" })
+        local finder = zoneList[selectedZone]
+
+        if not finder then
+            WindUI:Notify({
+                Title = "Teleport",
+                Content = "Invalid zone selected.",
+                Duration = 3,
+                Icon = "alert-triangle"
+            })
+            return
         end
-    end
-})
-TeleportTab:Button({
-    Title = "TP to Farm Yard",
-    Desc  = "Teleport to the Farmyard area.",
-    Callback = function()
-        local areas = Workspace:FindFirstChild('Areas')
-        local farmyard = areas and areas:FindFirstChild('Farmyard')
-        local box = farmyard and farmyard:FindFirstChild('Lost and Found Box', true)
-        if box then
-            teleportTo(box:GetPivot() + Vector3.new(0, 5, 0))
+
+        local part = finder()
+
+        if part then
+            teleportTo(part:GetPivot() + Vector3.new(0, 5, 0))
         else
-            WindUI:Notify({ Title = "TP to Farm Yard", Content = "Location not found.", Duration = 3, Icon = "alert-triangle" })
-        end
-    end
-})
-TeleportTab:Button({
-    Title = "TP to Shipyard",
-    Desc  = "Teleport to the Shipyard area.",
-    Callback = function()
-        local areas = Workspace:FindFirstChild('Areas')
-        local shipyard = areas and areas:FindFirstChild('Shipyard')
-        local box = shipyard and shipyard:FindFirstChild('Lost and Found Box', true)
-        if box then
-            teleportTo(box:GetPivot() + Vector3.new(0, 5, 0))
-        else
-            WindUI:Notify({ Title = "TP to Shipyard", Content = "Location not found.", Duration = 3, Icon = "alert-triangle" })
+            WindUI:Notify({
+                Title = "Teleport",
+                Content = "Location not found.",
+                Duration = 3,
+                Icon = "alert-triangle"
+            })
         end
     end
 })
 
 TeleportTab:Divider()
 TeleportTab:Section({ Title = "Shops", Icon = "shopping-cart" })
-TeleportTab:Button({
-    Title = "TP to Mall",
-    Desc  = "Teleport to the Pawn Shop / Mall.",
-    Callback = function()
-        local mallPart = findLocationByName("Mall") or findLocationByName("Pawn Shop")
-        if mallPart then
-            teleportTo(mallPart:GetPivot() + Vector3.new(0, 5, 0))
-        else
-            WindUI:Notify({ Title = "TP to Mall", Content = "Location not found.", Duration = 3, Icon = "alert-triangle" })
-        end
+local tpLocations = {
+    ["Car Shop"]     = Vector3.new(-240, 1725, -181),
+    ["Grading"]      = Vector3.new(339, 1725, -280),
+    ["Item Clearing"]= Vector3.new(406, 1725, -275),
+    ["Repair Shop"]  = Vector3.new(425, 1725, -77),
+    ["Mall"]         = Vector3.new(363, 1725, -58),
+}
+
+local selectedLocation = settings.selectedLocation or "Mall"
+
+TeleportTab:Dropdown({
+    Title = "Select Location",
+    Values = {
+        "Car Shop",
+        "Grading",
+        "Item Clearing",
+        "Repair Shop",
+        "Mall"
+    },
+    Multi = false,
+    Value = selectedLocation,
+    Callback = function(v)
+        selectedLocation = v
+        settings.selectedLocation = v
+        Config:Set("selectedLocation", v)
+        Config:Save()
+
+        WindUI:Notify({
+            Title = "Teleport",
+            Content = "Selected: " .. v,
+            Duration = 2,
+            Icon = "map-pin"
+        })
     end
 })
+
 TeleportTab:Button({
-    Title = "TP to Cleaning Service",
-    Desc  = "Teleport to the item cleaning / wash station.",
+    Title = "TP to Location",
+    Desc = "Teleport to the selected location",
     Callback = function()
-        local cleanPart = findLocationByName("Cleaning") or findLocationByName("Wash") or findLocationByName("Cleaning Service")
-        if cleanPart then
-            teleportTo(cleanPart:GetPivot() + Vector3.new(0, 5, 0))
+        local pos = tpLocations[selectedLocation]
+
+        if pos then
+            teleportTo(CFrame.new(pos + Vector3.new(0, 5, 0)))
         else
-            WindUI:Notify({ Title = "TP to Cleaning Service", Content = "Location not found.", Duration = 3, Icon = "alert-triangle" })
-        end
-    end
-})
-TeleportTab:Button({
-    Title = "TP to Car Garage",
-    Desc  = "Teleport to the Car Garage / Dealer.",
-    Callback = function()
-        local garagePart = findLocationByName("CarGarage") or findLocationByName("Car Garage") or findLocationByName("Garage")
-        if garagePart then
-            teleportTo(garagePart:GetPivot() + Vector3.new(0, 5, 0))
-        else
-            WindUI:Notify({ Title = "TP to Car Garage", Content = "Location not found.", Duration = 3, Icon = "alert-triangle" })
+            WindUI:Notify({
+                Title = "Teleport",
+                Content = "No location selected.",
+                Duration = 3,
+                Icon = "alert-triangle"
+            })
         end
     end
 })
