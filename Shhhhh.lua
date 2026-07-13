@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v022.35"
+local ver     = "v022.46"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -203,6 +203,11 @@ local settings = {
     AutoSaveDelay    = Config:Get("AutoSaveDelay", 15),
     selectedZone     = Config:Get("selectedZone", "Junk Yard"),
     selectedLocation = Config:Get("selectedLocation", "Mall"),
+    MovementType     = Config:Get("MovementType", "WalkSpeed"),
+    MovementEnabled  = Config:Get("MovementEnabled", false),
+    Noclip           = Config:Get("Noclip", false),
+    InfiniteJump     = Config:Get("InfiniteJump", false),
+    MovementValue    = Config:Get("MovementValue", 16),
 }
 
 -- Sync loaded config into the live runtime state declared earlier
@@ -241,12 +246,267 @@ end
 local InfoTab     = Window:Tab({ Title = "Information", Icon = "info" })
 local _D1         = Window:Divider()
 local AuctionTab  = Window:Tab({ Title = "Main",  Icon = "rocket" })
+local PlayerTab  = Window:Tab({ Title = "Player",  Icon = "user" })
 local CollectTab  = Window:Tab({ Title = "Collect",  Icon = "package" })
 local TeleportTab = Window:Tab({ Title = "Teleport", Icon = "map-pin" })
 local _D2         = Window:Divider()
 local SettingsTab = Window:Tab({ Title = "Settings", Icon = "settings" })
 
 Window:SelectTab(1)
+
+--// =========================
+--// PLAYER TAB - MOVEMENT
+--// =========================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local LocalPlayer = Players.LocalPlayer
+
+local movementType    = settings.MovementType or "WalkSpeed"
+local movementValue   = settings.MovementValue or 16
+local movementEnabled = settings.MovementEnabled or false
+
+local noclipEnabled   = settings.Noclip or false
+local infJumpEnabled  = settings.InfiniteJump or false
+
+local function getHumanoid()
+    local char = LocalPlayer.Character
+    if not char then return end
+    return char:FindFirstChildOfClass("Humanoid")
+end
+
+local function getCharacter()
+    return LocalPlayer.Character
+end
+
+PlayerTab:Section({
+    Title = "Movement",
+    Icon = "person-standing"
+})
+
+-- Movement Type
+PlayerTab:Dropdown({
+
+    Title = "Movement Type",
+
+    Values = {
+        "WalkSpeed",
+        "JumpPower",
+    },
+
+    Multi = true,
+
+    Value = movementType,
+
+    Callback = function(v)
+
+        movementType = v
+
+        settings.MovementType = v
+        Config:Set("MovementType", v)
+        Config:Save()
+
+        WindUI:Notify({
+            Title = "Movement",
+            Content = "Selected : "..v,
+            Duration = 2,
+            Icon = "settings"
+        })
+
+    end
+
+})
+
+-- Value
+PlayerTab:Slider({
+
+    Title = "Movement Value",
+
+    Desc = "Adjust selected movement.",
+
+    Value = {
+        Min = 0,
+        Max = 200,
+        Default = movementValue
+    },
+
+    Step = 1,
+
+    Callback = function(v)
+
+        movementValue = v
+
+        settings.MovementValue = v
+        Config:Set("MovementValue", v)
+        Config:Save()
+
+    end
+
+})
+
+-- Enable
+PlayerTab:Toggle({
+
+    Title = "Enable Movement",
+
+    Desc = "Keep movement value forever.",
+
+    Value = movementEnabled,
+
+    Callback = function(v)
+
+        movementEnabled = v
+
+        settings.MovementEnabled = v
+        Config:Set("MovementEnabled", v)
+        Config:Save()
+
+        WindUI:Notify({
+            Title = "Movement",
+            Content = v and "Enabled" or "Disabled",
+            Duration = 2,
+            Icon = v and "shield" or "shield-off"
+        })
+
+    end
+
+})
+
+-- Noclip
+PlayerTab:Toggle({
+
+    Title = "Noclip",
+
+    Desc = "Walk through walls.",
+
+    Value = noclipEnabled,
+
+    Callback = function(v)
+
+        noclipEnabled = v
+
+        settings.Noclip = v
+        Config:Set("Noclip", v)
+        Config:Save()
+
+        WindUI:Notify({
+            Title = "Noclip",
+            Content = v and "Enabled" or "Disabled",
+            Duration = 2,
+            Icon = v and "shield" or "shield-off"
+        })
+
+    end
+
+})
+
+-- Infinite Jump
+PlayerTab:Toggle({
+
+    Title = "Infinite Jump",
+
+    Desc = "Adjust your jump to infinitely.",
+
+    Value = infJumpEnabled,
+
+    Callback = function(v)
+
+        infJumpEnabled = v
+
+        settings.InfiniteJump = v
+        Config:Set("InfiniteJump", v)
+        Config:Save()
+
+        WindUI:Notify({
+            Title = "Infinite Jump",
+            Content = v and "Enabled" or "Disabled",
+            Duration = 2,
+            Icon = v and "shield" or "shield-off"
+        })
+
+    end
+
+})
+
+----------------------------------------------------
+-- Force WalkSpeed / JumpPower
+----------------------------------------------------
+
+RunService.Heartbeat:Connect(function()
+
+    if not movementEnabled then
+        return
+    end
+
+    local hum = getHumanoid()
+
+    if not hum then
+        return
+    end
+
+    if movementType == "WalkSpeed" then
+
+        if hum.WalkSpeed ~= movementValue then
+            hum.WalkSpeed = movementValue
+        end
+
+    elseif movementType == "JumpPower" then
+
+        hum.UseJumpPower = true
+
+        if hum.JumpPower ~= movementValue then
+            hum.JumpPower = movementValue
+        end
+
+    end
+
+end)
+
+----------------------------------------------------
+-- Noclip
+----------------------------------------------------
+
+RunService.Stepped:Connect(function()
+
+    if not noclipEnabled then
+        return
+    end
+
+    local char = getCharacter()
+
+    if not char then
+        return
+    end
+
+    for _,v in ipairs(char:GetDescendants()) do
+
+        if v:IsA("BasePart") then
+            v.CanCollide = false
+        end
+
+    end
+
+end)
+
+----------------------------------------------------
+-- Infinite Jump
+----------------------------------------------------
+
+UserInputService.JumpRequest:Connect(function()
+
+    if not infJumpEnabled then
+        return
+    end
+
+    local hum = getHumanoid()
+
+    if hum then
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+
+end)
 
 -- ====================== HELPER FUNCTIONS ======================
 -- (ported from the Storage Hunters system — logic unchanged)
@@ -747,10 +1007,10 @@ local function doAutoCleanCycle(silent)
         return false
     end
 
-    local moved = game:GetService("ReplicatedStorage").Events.Wash.StartWash
-          return pcall(function()
-          StartWash:InvokeServer(getStartWashSlot(), itemUids, "Vehicle", nil)
-       end)
+    local success, moved = safeCallRemote(TransferVehicleItemsToInventory, itemUids)
+    
+    if not success then
+        moved = false
     end
 
     if not moved then
