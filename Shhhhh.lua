@@ -1,5 +1,5 @@
 -- =========================
-local version = "ควยไอสัส"
+local version = "BETA"
 local ver     = "v022.53"
 -- =========================
 
@@ -1087,7 +1087,7 @@ local function doAutoCleanCycle(myGen, silent)
     for _, slot in ipairs(slots) do
         if not (autoCleanEnabled and autoCleanGen == myGen) then break end
 
-        local success, moved = safeCallRemote(StartWash, slot, itemUids, "Vehicle", "STARTER-DUSTER")
+        local success, moved = safeCallRemote(StartWash, 1, itemUids, "Vehicle", "STARTER-DUSTER")
 
         if success and moved then
             local ready = waitForCollectReady(slot, myGen, 20)
@@ -1145,7 +1145,7 @@ CollectTab:Button({
         if TransferVehicleItemsToInventory then
             local itemUids = getVehicleItems(vehicle)
             if #itemUids > 0 then
-                local success, result = safeCallRemote(StartWash, slot, itemUids, "Vehicle", "STARTER-DUSTER")
+                local success, result = safeCallRemote(StartWash, 1, itemUids, "Vehicle", "STARTER-DUSTER")
                 if success then
                     WindUI:Notify({ Title = "Clean Item", Content = "Clean command sent!", Duration = 2, Icon = "truck" })
                 else
