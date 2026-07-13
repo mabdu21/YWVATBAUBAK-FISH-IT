@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v022.49"
+local ver     = "v022.51"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -1037,22 +1037,6 @@ local function getStartWashSlot()
     return tonumber(washSlot) or 1
 end
 
-local function fireStartWash(itemUids)
-    local StartWash = game:GetService("ReplicatedStorage").Events.Wash.StartWash
-    return pcall(function()
-        StartWash:InvokeServer(getStartWashSlot(), itemUids, "Vehicle", nil)
-    end)
-end
-
-local function fireCollectWash()
-    local CollectWash = game:GetService("ReplicatedStorage").Events.Wash.CollectWash
-    for _, slotNum in ipairs(getCollectSlots()) do
-        pcall(function()
-            CollectWash:InvokeServer(slotNum)
-        end)
-    end
-end
-
 -- ยกของสกปรกจากรถ -> ส่งไปล้าง
 -- silent = true จะไม่มี WindUI:Notify (ใช้ตอนรันวนในลูปทุก 2 วิ กันสแปมแจ้งเตือน)
 local function doAutoCleanCycle(silent)
@@ -1074,7 +1058,7 @@ local function doAutoCleanCycle(silent)
         return false
     end
 
-    local success, moved = fireStartWash(itemUids)
+    local success, moved = safeCallRemote(StartWash, getStartWashSlot(), itemUids, "Vehicle", nil)
     
     if not success then
         moved = false
@@ -1089,7 +1073,7 @@ local function doAutoCleanCycle(silent)
 
     task.wait(0.2)
 
-    local ok, err = fireStartWash(itemUids)
+    local ok, err = safeCallRemote(CollectWash, getStartWashSlot())
 
     if not silent then
         WindUI:Notify({
@@ -1131,7 +1115,7 @@ CollectTab:Toggle({
                     task.wait(2)
                     if not (autoCleanEnabled and autoCleanGen == myGen) then break end
 
-                    fireCollectWash()      -- Remote 2: เก็บของที่ล้างเสร็จกลับมา
+                    safeCallRemote(CollectWash, getStartWashSlot())      -- Remote 2: เก็บของที่ล้างเสร็จกลับมา
                     doAutoCleanCycle(true) -- Remote 1: ส่งของสกปรกใหม่ไปล้างต่อ (silent)
                 end
             end)
@@ -1172,7 +1156,7 @@ CollectTab:Divider()
 CollectTab:Section({ Title = "Collect", Icon = "move" })
 CollectTab:Toggle({
     Title    = "Auto Collect",
-    Desc     = "Teleports to and collects nearby \"Open\" / \"Add to Vehicle\" prompts.",
+    Desc     = "Teleports to and collects nearby item.",
     Value    = AutoCollect,
     Callback = function(state)
         AutoCollect = state
@@ -1190,7 +1174,7 @@ CollectTab:Toggle({
 
 CollectTab:Toggle({
     Title    = "Auto Collect (without tp)",
-    Desc     = "Collects \"Open\" / \"Add to Vehicle\" prompts only when you're already close enough. No teleporting.",
+    Desc     = "Collects item only when you're already close enough.",
     Value    = AutoCollectNoTP,
     Callback = function(state)
         AutoCollectNoTP = state
