@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v022.48"
+local ver     = "v022.49"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -1074,7 +1074,7 @@ local function doAutoCleanCycle(silent)
         return false
     end
 
-    local success, moved = safeCallRemote(TransferVehicleItemsToInventory, itemUids)
+    local success, moved = fireStartWash(itemUids)
     
     if not success then
         moved = false
