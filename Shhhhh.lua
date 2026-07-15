@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v027.21"
+local ver     = "v027.22"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -887,12 +887,12 @@ local jumpPowerValue  = settings.JumpPowerValue or 50
 
 local function getHumanoid() local c = LocalPlayer.Character return c and c:FindFirstChildOfClass("Humanoid") end
 local function getCharacter() return LocalPlayer.Character end
-
+PlayerTab:Divider()
 PlayerTab:Section({ Title = "Movement", Icon = "person-standing" })
 
 PlayerTab:Dropdown({
     Title  = "Movement Type",
-    Desc   = "Select multiple (WalkSpeed + JumpPower)",
+    Desc   = "Select movement for Physical",
     Values = { "WalkSpeed", "JumpPower" },
     Multi  = true,
     Value  = movementTypes,
@@ -942,6 +942,8 @@ PlayerTab:Toggle({
         Config:Set("MovementEnabled", v); Config:Save()
     end
 })
+PlayerTab:Divider()
+PlayerTab:Section({ Title = "Physical", Icon = "flame" })
 
 PlayerTab:Toggle({
     Title = "Noclip",
@@ -1061,7 +1063,7 @@ AuctionTab:Toggle({
 })
 
 if InstantPrompt then task.defer(function() setInstantPrompt(true, false) end) end
-
+AuctionTab:Divider()
 AuctionTab:Section({ Title = "Auction Bidding", Icon = "gavel" })
 
 AuctionTab:Toggle({
@@ -1472,7 +1474,7 @@ PathfinderTab:Section({ Title = "Farm Option", Icon = "cpu" })
 
 PathfinderTab:Toggle({
     Title    = "Auto Farm",
-    Desc     = "move to bid zone → spawn car → exit → bid → collect → seat car → unload → exit → base → place → loop",
+    Desc     = "Activate full auto auction cycle for farm",
     Value    = PathfinderEnabled,
     Callback = function(state)
         setPathfinderEnabled(state)
@@ -1608,8 +1610,8 @@ TeleportTab:Paragraph({
 })
 TeleportTab:Divider()
 TeleportTab:Button({
-    Title = "TP to Base (Without item in car)",
-    Desc  = "Teleport to your base plot directly.",
+    Title = "TP to Base",
+    Desc  = "Teleport to your base plot directly. (Without item in car)",
     Callback = function()
         local plot = getMyPlot()
         local pivot = plot and Utils:GetSafePivot(plot)
@@ -2253,29 +2255,51 @@ local function pathfinderLoop()
             elseif checkEnabled() then
 
                 -- ========== STEP 3: Spawn car (ถ้ายังไม่มี) ==========
-                if not Vehicle:IsSeated() then
-                    local myVehicle, isSeated = Vehicle:GetMyVehicle()
-                    if not myVehicle then
-                        setState("Spawning Car", "No vehicle found, requesting STARTER-DUSTER...")
-                        if RequestSpawnRemote then
-                            Utils:SafeCallRemote(RequestSpawnRemote, "STARTER-DUSTER")
-                            task.wait(2)
-                            -- รอรถมา
-                            local waitStart = tick()
-                            while tick() - waitStart < 10 and checkEnabled() do
-                                task.wait(0.5)
-                                myVehicle, isSeated = Vehicle:GetMyVehicle()
-                                if myVehicle and isSeated then break end
+                local myVehicle, isSeated = Vehicle:GetMyVehicle()
+                local needSpawn = false
+                
+                if not myVehicle then
+                    needSpawn = true
+                    setState("Spawning Car", "No vehicle found, requesting STARTER-DUSTER...")
+                elseif not isSeated then
+                    -- มีรถ แต่ยังไม่ได้นั่ง → spawn ใหม่
+                    needSpawn = true
+                    setState("Spawning Car", "Vehicle exists but not seated, requesting new one...")
+                end
+                
+                if needSpawn then
+                    if RequestSpawnRemote then
+                        Utils:SafeCallRemote(RequestSpawnRemote, "STARTER-DUSTER")
+                        task.wait(2)
+                        
+                        -- รอรถมา (สูงสุด 15 วินาที)
+                        local waitStart = tick()
+                        while tick() - waitStart < 15 and checkEnabled() do
+                            task.wait(0.5)
+                            myVehicle, isSeated = Vehicle:GetMyVehicle()
+                            if myVehicle and isSeated then 
+                                setState("Spawning Car", "Vehicle spawned & seated!")
+                                break 
                             end
                         end
+                        
+                        -- ถ้ายังไม่ได้นั่ง ลองอีกครั้ง
+                        if not isSeated then
+                            setState("Spawning Car", "Waiting for auto-seat...")
+                            task.wait(3)
+                            myVehicle, isSeated = Vehicle:GetMyVehicle()
+                        end
+                    else
+                        setState("Error", "RequestSpawn remote not ready!")
+                        task.wait(3)
                     end
+                end
 
-                    -- ถ้าเรียกรถแล้วเรานั่งอยู่ → ลงก่อน
-                    if Vehicle:IsSeated() then
-                        setState("Exiting Vehicle", "Auto-spawned, exiting vehicle...")
-                        Vehicle:ExitByPrompt()
-                        task.wait(1)
-                    end
+                -- ถ้าเรียกรถแล้วเรานั่งอยู่ → ลงก่อน
+                if Vehicle:IsSeated() then
+                    setState("Exiting Vehicle", "Auto-spawned into vehicle, exiting...")
+                    Vehicle:ExitByPrompt()
+                    task.wait(1.5)
                 end
 
                 if not checkEnabled() then break end
