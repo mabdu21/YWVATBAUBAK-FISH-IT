@@ -1,5 +1,5 @@
 local version = "BETA"
-local ver     = "v014.45"
+local ver     = "v014.46"
 
 repeat task.wait() until game:IsLoaded()
 
@@ -793,16 +793,16 @@ end)
 -- MAIN TAB
 -- =====================================================
 MainTab:Divider()
-MainTab:Section({ Title = "Auto Farm Features", Icon = "rocket" })
+MainTab:Section({ Title = "Farm Features", Icon = "rocket" })
 MainTab:Paragraph({
-    Title = "Drain The Lake - Auto Farm",
-    Desc  = "Enable 'Auto Farm' to run all features, or toggle them individually.",
+    Title = "Info: Auto Farm",
+    Desc  = "Enable Auto Farm to run all features, or toggle them individually.",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
 
 MainTab:Toggle({
-    Title    = "Auto Farm (All-In-One)",
+    Title    = "Auto Farm",
     Desc     = "Enable all farming systems at once",
     Value    = Settings.AutoFarm,
     Callback = function(v)
@@ -914,12 +914,6 @@ EspTab:Toggle({
     Desc     = "Display distance to the target",
     Value    = Settings.ESP_Distance,
     Callback = function(v) Settings.ESP_Distance = v; Config.Save() end
-})
-EspTab:Toggle({
-    Title    = "Show Tracer",
-    Desc     = "Draw a line from screen to target",
-    Value    = Settings.ESP_Tracer,
-    Callback = function(v) Settings.ESP_Tracer = v; Config.Save() end
 })
 
 -- =====================================================
@@ -1078,7 +1072,7 @@ TeleportTab:Divider()
 TeleportTab:Section({ Title = "Quick Teleport", Icon = "package" })
 TeleportTab:Paragraph({
     Title = "Teleport",
-    Desc  = "Warp to key locations in the game",
+    Desc  = "Warp to object/locations in the game",
     Image = "package",
 })
 
@@ -1175,7 +1169,7 @@ TeleportTab:Button({
     Callback = function()
         pcall(function()
             if not HumanoidRootPart or not HumanoidRootPart.Parent then return end
-            HumanoidRootPart.CFrame = CFrame.new(0, 50, 0)
+            HumanoidRootPart.CFrame = CFrame.new(50, 2528, -383)
             WindUI:Notify({ Title = "Teleport", Content = "Teleported to spawn!", Duration = 2, Icon = "home" })
         end)
     end
@@ -1303,7 +1297,7 @@ do
 • [ Added ] Player Mods (Speed, Jump, Noclip, Infinite Jump, Instant Prompt)
 • [ Added ] Quick Teleport (Drain, Chest, Phone, Spawn)
 • [ Added ] Auto-Save Config System
-• [ Added ] Anti AFK
+• [ Added ] Anti AFK for blocked kick from afk
 • [ Fixed ] Performance improvements, fixed respawn bug]],
     })
     InfoTab:Divider()
