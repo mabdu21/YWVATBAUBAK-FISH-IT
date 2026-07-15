@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v028.50"
+local ver     = "v028.51"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -45,7 +45,6 @@ LocalPlayer.CharacterAdded:Connect(refreshCharacter)
 
 -- ====================== UTILITIES MODULE ======================
 local Utils = {}
-Utils.BusyLock = false
 
 function Utils:Log(msg)
     print("[DYHUB] " .. tostring(msg))
@@ -163,7 +162,6 @@ function Vehicle:GetDistanceFromPlayer(vehicle)
     return (root.Position - vehiclePart.Position).Magnitude
 end
 
--- ขึ้นรถ
 function Vehicle:EnterByPrompt(vehicle)
     if not vehicle then return false end
     if self:IsSeated() then return true end
@@ -217,7 +215,6 @@ function Vehicle:EnterByPrompt(vehicle)
     return self:IsSeated()
 end
 
--- ลงรถ
 function Vehicle:ExitByPrompt()
     if not self:IsSeated() then return true end
     local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -267,7 +264,7 @@ end
 function Vehicle:Enter(vehicle) return self:EnterByPrompt(vehicle) end
 function Vehicle:Exit() return self:ExitByPrompt() end
 
--- ====================== MOVEMENT SYSTEM (Tween/Teleport only) ======================
+-- ====================== MOVEMENT SYSTEM ======================
 local Movement = {}
 Movement.Mode        = "Tween"
 Movement.Speed       = 200
@@ -281,7 +278,6 @@ function Movement:Cancel()
     end
 end
 
--- Move character + vehicle together
 function Movement:GoTo(targetCFrame, options)
     options = options or {}
     local character = LocalPlayer.Character
@@ -357,7 +353,7 @@ local function checkVersion(playerName)
     local url = "https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/listpremium.lua"
     local success, response = pcall(function() return game:HttpGet(url) end)
     if not success then return FreeVersion end
-    local func, err = loadstring(response)
+    local func = loadstring(response)
     if not func then return FreeVersion end
     local ok, premiumData = pcall(func)
     if not ok then return FreeVersion end
@@ -374,7 +370,6 @@ local function registerConnection(connection)
     return connection
 end
 
--- Live runtime state
 local AutoAcceptOffers = false
 local MinAcceptPercent = 15
 local AutoPlaceEnabled = false
@@ -412,12 +407,13 @@ local AreaToggles = {
     ["Jurassic"]   = false,
 }
 
+-- ✅ CHANGED: เปลี่ยน Jurassic เป็น "Jurassic Stable Garage"
 local AREA_GARAGES = {
     ["Junk Yard"]  = { "Scrap Garage" },
     ["Back Alley"] = { "Shop Front" },
     ["Farmyard"]   = { "Stable Garage", "Barn Garage" },
     ["Shipyard"]   = { "Small Container Garage", "Large Container Garage", "Warehouse Garage" },
-    ["Jurassic"]   = { "Prehistoric Garage" },
+    ["Jurassic"]   = { "Jurassic Stable Garage" },
 }
 
 local ItemsModule = (function()
@@ -502,9 +498,7 @@ function CustomConfig:Get(key, default)
 end
 
 function CustomConfig:Save()
-    Utils:SafeCall(function()
-        writefile(self.ConfigPath, HttpService:JSONEncode(self.ConfigData))
-    end)
+    Utils:SafeCall(function() writefile(self.ConfigPath, HttpService:JSONEncode(self.ConfigData)) end)
 end
 
 function CustomConfig:Load()
@@ -577,7 +571,6 @@ local settings = {
     MovementSpeed     = Config:Get("MovementSpeed", 200),
 }
 
--- Sync loaded config
 local InstantPrompt  = settings.InstantPrompt
 AutoAcceptOffers     = settings.AutoAcceptOffers
 MinAcceptPercent     = settings.MinAcceptPercent
@@ -616,9 +609,7 @@ getgenv().DYHUB_SH_Cleanup = function()
     PathfinderRunning = false
     Movement:Cancel()
     for _, conn in ipairs(activeConnections) do
-        if conn and conn.Connected then
-            pcall(function() conn:Disconnect() end)
-        end
+        if conn and conn.Connected then pcall(function() conn:Disconnect() end) end
     end
     table.clear(activeConnections)
     pcall(function()
@@ -693,9 +684,7 @@ local function teleportTo(destinationCFrame)
         return
     end
     local character = LocalPlayer.Character
-    if character then
-        pcall(function() character:PivotTo(destinationCFrame) end)
-    end
+    if character then pcall(function() character:PivotTo(destinationCFrame) end) end
 end
 
 local function getVehicleItems(vehicle)
@@ -826,20 +815,14 @@ PlayerTab:Dropdown({
     Multi  = true,
     Value  = movementTypes,
     Callback = function(v)
-        if type(v) == "table" then
-            movementTypes = v
-        else
-            movementTypes = { v }
-        end
+        if type(v) == "table" then movementTypes = v else movementTypes = { v } end
         settings.MovementTypes = movementTypes
         Config:Set("MovementTypes", movementTypes); Config:Save()
-        Utils:Notify("Movement", "Selected: " .. table.concat(movementTypes, ", "), "settings", 2)
     end
 })
 
 PlayerTab:Slider({
     Title = "WalkSpeed Value",
-    Desc  = "Adjust WalkSpeed.",
     Value = { Min = 0, Max = 500, Default = walkSpeedValue },
     Step  = 1,
     Callback = function(v)
@@ -851,7 +834,6 @@ PlayerTab:Slider({
 
 PlayerTab:Slider({
     Title = "JumpPower Value",
-    Desc  = "Adjust JumpPower.",
     Value = { Min = 0, Max = 500, Default = jumpPowerValue },
     Step  = 1,
     Callback = function(v)
@@ -863,7 +845,6 @@ PlayerTab:Slider({
 
 PlayerTab:Toggle({
     Title = "Enable Movement",
-    Desc  = "Keep movement values forever.",
     Value = movementEnabled,
     Callback = function(v)
         movementEnabled = v
@@ -875,43 +856,25 @@ PlayerTab:Divider()
 PlayerTab:Section({ Title = "Physical", Icon = "flame" })
 
 PlayerTab:Toggle({
-    Title = "Noclip",
-    Desc  = "Walk through walls.",
-    Value = noclipEnabled,
-    Callback = function(v)
-        noclipEnabled = v
-        settings.Noclip = v
-        Config:Set("Noclip", v); Config:Save()
-    end
+    Title = "Noclip", Value = noclipEnabled,
+    Callback = function(v) noclipEnabled = v; settings.Noclip = v; Config:Set("Noclip", v); Config:Save() end
 })
 
 PlayerTab:Toggle({
-    Title = "Infinite Jump",
-    Desc  = "Adjust your jump to infinitely.",
-    Value = infJumpEnabled,
-    Callback = function(v)
-        infJumpEnabled = v
-        settings.InfiniteJump = v
-        Config:Set("InfiniteJump", v); Config:Save()
-    end
+    Title = "Infinite Jump", Value = infJumpEnabled,
+    Callback = function(v) infJumpEnabled = v; settings.InfiniteJump = v; Config:Set("InfiniteJump", v); Config:Save() end
 })
 
 RunService.Heartbeat:Connect(function()
     if not movementEnabled then return end
     local hum = getHumanoid()
     if not hum then return end
-
-    local hasWalkSpeed = false
-    local hasJumpPower = false
+    local hasWalkSpeed, hasJumpPower = false, false
     for _, t in ipairs(movementTypes) do
         if t == "WalkSpeed" then hasWalkSpeed = true end
         if t == "JumpPower"  then hasJumpPower  = true end
     end
-
-    if hasWalkSpeed then
-        if hum.WalkSpeed ~= walkSpeedValue then hum.WalkSpeed = walkSpeedValue end
-    end
-
+    if hasWalkSpeed and hum.WalkSpeed ~= walkSpeedValue then hum.WalkSpeed = walkSpeedValue end
     if hasJumpPower then
         hum.UseJumpPower = true
         if hum.JumpPower ~= jumpPowerValue then hum.JumpPower = jumpPowerValue end
@@ -933,7 +896,7 @@ UserInputService.JumpRequest:Connect(function()
     if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
 end)
 
--- ====================== AUCTION TAB (MAIN) ======================
+-- ====================== AUCTION TAB ======================
 AuctionTab:Divider()
 
 local PromptCache = {}
@@ -957,13 +920,9 @@ local function setInstantPrompt(state, notify)
     InstantPrompt = state
     settings.InstantPrompt = state
     Config:Set("InstantPrompt", state); Config:Save()
-    if notify then
-        Utils:Notify("Instant Prompt", state and "Enabled" or "Disabled", state and "cpu" or "ban", 2)
-    end
+    if notify then Utils:Notify("Instant Prompt", state and "Enabled" or "Disabled", state and "cpu" or "ban", 2) end
     if state then
-        for _, v in ipairs(Workspace:GetDescendants()) do
-            if v:IsA("ProximityPrompt") then ApplyPrompt(v) end
-        end
+        for _, v in ipairs(Workspace:GetDescendants()) do if v:IsA("ProximityPrompt") then ApplyPrompt(v) end end
         if PromptConns.Added then PromptConns.Added:Disconnect() end
         PromptConns.Added = Workspace.DescendantAdded:Connect(function(v)
             if v:IsA("ProximityPrompt") then ApplyPrompt(v) end
@@ -971,9 +930,7 @@ local function setInstantPrompt(state, notify)
         task.spawn(function()
             while InstantPrompt do
                 for prompt in pairs(PromptCache) do
-                    if prompt and prompt.Parent and prompt.HoldDuration ~= 0 then
-                        prompt.HoldDuration = 0
-                    end
+                    if prompt and prompt.Parent and prompt.HoldDuration ~= 0 then prompt.HoldDuration = 0 end
                 end
                 task.wait(0.5)
             end
@@ -985,9 +942,7 @@ local function setInstantPrompt(state, notify)
 end
 
 AuctionTab:Toggle({
-    Title = "Instant Prompt",
-    Desc  = "Adjust proximity prompt to no hold anymore.",
-    Value = InstantPrompt,
+    Title = "Instant Prompt", Value = InstantPrompt,
     Callback = function(state) setInstantPrompt(state, true) end
 })
 
@@ -996,37 +951,23 @@ AuctionTab:Divider()
 AuctionTab:Section({ Title = "Auction Bidding", Icon = "gavel" })
 
 AuctionTab:Toggle({
-    Title    = "Auto Bid",
-    Desc     = "Automatically place bids while an auction is active.",
-    Value    = AutoBid,
-    Callback = function(state)
-        AutoBid = state
-        settings.AutoBid = state
-        Config:Set("AutoBid", state); Config:Save()
+    Title    = "Auto Bid", Value    = AutoBid,
+    Callback = function(state) AutoBid = state; settings.AutoBid = state; Config:Set("AutoBid", state); Config:Save() end
+})
+
+AuctionTab:Input({
+    Title = "Min Starting Bid", Value = tostring(MinBid), Placeholder = "Enter your min bid",
+    Callback = function(text)
+        local num = tonumber(text)
+        MinBid = num or 5; settings.MinBid = MinBid; Config:Set("MinBid", MinBid); Config:Save()
     end
 })
 
 AuctionTab:Input({
-    Title       = "Min Starting Bid",
-    Value       = tostring(MinBid),
-    Placeholder = "Enter your min bid",
-    Callback    = function(text)
+    Title = "Max Bid", Value = tostring(MaxBid), Placeholder = "Enter your max bid",
+    Callback = function(text)
         local num = tonumber(text)
-        MinBid = num or 5
-        settings.MinBid = MinBid
-        Config:Set("MinBid", MinBid); Config:Save()
-    end
-})
-
-AuctionTab:Input({
-    Title       = "Max Bid",
-    Value       = tostring(MaxBid),
-    Placeholder = "Enter your max bid",
-    Callback    = function(text)
-        local num = tonumber(text)
-        MaxBid = num or 1000
-        settings.MaxBid = MaxBid
-        Config:Set("MaxBid", MaxBid); Config:Save()
+        MaxBid = num or 1000; settings.MaxBid = MaxBid; Config:Set("MaxBid", MaxBid); Config:Save()
     end
 })
 
@@ -1037,7 +978,6 @@ AuctionTab:Paragraph({
 
 AuctionTab:Button({
     Title = "Leave Auction",
-    Desc  = "Leave the current active auction.",
     Callback = function()
         if LeaveAuctionRemote then
             local ok = pcall(function() Utils:SafeCallRemote(LeaveAuctionRemote) end)
@@ -1053,40 +993,21 @@ CollectTab:Divider()
 CollectTab:Section({ Title = "Offers & Plot", Icon = "tag" })
 
 CollectTab:Toggle({
-    Title    = "Auto Accept Offers",
-    Desc     = "Automatically respond to shopper NPC offers.",
-    Value    = AutoAcceptOffers,
-    Callback = function(state)
-        AutoAcceptOffers = state
-        settings.AutoAcceptOffers = state
-        Config:Set("AutoAcceptOffers", state); Config:Save()
-    end
+    Title    = "Auto Accept Offers", Value    = AutoAcceptOffers,
+    Callback = function(state) AutoAcceptOffers = state; settings.AutoAcceptOffers = state; Config:Set("AutoAcceptOffers", state); Config:Save() end
 })
 
 CollectTab:Input({
-    Title       = "Min Accept (%)",
-    Value       = tostring(MinAcceptPercent),
-    Placeholder = "15",
-    Callback    = function(text)
+    Title = "Min Accept (%)", Value = tostring(MinAcceptPercent), Placeholder = "15",
+    Callback = function(text)
         local num = tonumber(text)
-        if num then
-            MinAcceptPercent = num
-            settings.MinAcceptPercent = num
-            Config:Set("MinAcceptPercent", num); Config:Save()
-        end
+        if num then MinAcceptPercent = num; settings.MinAcceptPercent = num; Config:Set("MinAcceptPercent", num); Config:Save() end
     end
 })
 
 CollectTab:Toggle({
-    Title    = "Auto Place Items",
-    Desc     = "Automatically place inventory items onto your plot.",
-    Value    = AutoPlaceEnabled,
-    Callback = function(state)
-        AutoPlaceEnabled = state
-        settings.AutoPlaceEnabled = state
-        Config:Set("AutoPlaceEnabled", state); Config:Save()
-        if state then startAutoPlaceLoop() end
-    end
+    Title    = "Auto Place Items", Value    = AutoPlaceEnabled,
+    Callback = function(state) AutoPlaceEnabled = state; settings.AutoPlaceEnabled = state; Config:Set("AutoPlaceEnabled", state); Config:Save(); if state then startAutoPlaceLoop() end end
 })
 
 CollectTab:Divider()
@@ -1105,19 +1026,12 @@ CollectTab:Dropdown({
     Values   = { "1", "2", "3" },
     Multi    = true,
     Value    = washSlot,
-    Callback = function(v)
-        washSlot = v
-        settings.washSlot = v
-        Config:Set("washSlot", v); Config:Save()
-    end
+    Callback = function(v) washSlot = v; settings.washSlot = v; Config:Set("washSlot", v); Config:Save() end
 })
 
 local function getSelectedWashSlots()
     local list = {}
-    for _, v in pairs(washSlot) do
-        local n = tonumber(v)
-        if n then table.insert(list, n) end
-    end
+    for _, v in pairs(washSlot) do local n = tonumber(v); if n then table.insert(list, n) end end
     table.sort(list)
     return list
 end
@@ -1174,13 +1088,9 @@ local function doAutoCleanCycle(myGen, silent)
 end
 
 CollectTab:Toggle({
-    Title    = "Auto Clean Item (Dirty)",
-    Desc     = "Automatically move dirty items into the washer and collect them on a loop.",
-    Value    = autoCleanEnabled,
+    Title    = "Auto Clean Item (Dirty)", Value    = autoCleanEnabled,
     Callback = function(v)
-        autoCleanEnabled = v
-        settings.autoCleanEnabled = v
-        Config:Set("autoCleanEnabled", v); Config:Save()
+        autoCleanEnabled = v; settings.autoCleanEnabled = v; Config:Set("autoCleanEnabled", v); Config:Save()
         autoCleanGen = autoCleanGen + 1
         local myGen = autoCleanGen
         if v then
@@ -1196,20 +1106,14 @@ CollectTab:Toggle({
 
 CollectTab:Button({
     Title = "Clean Item",
-    Desc  = "Move dirty from your vehicle into washing.",
     Callback = function()
         local vehicle = Vehicle:GetMyVehicle()
         local itemUids = getVehicleItems(vehicle)
         if #itemUids > 0 then
             local success = Utils:SafeCallRemote(StartWash, 1, itemUids, "Vehicle", "STARTER-DUSTER")
-            if success then
-                Utils:Notify("Clean Item", "Clean command sent!", "truck", 2)
-            else
-                Utils:Notify("Clean Item", "Failed to Clean Item.", "alert-triangle", 3)
-            end
-        else
-            Utils:Notify("Clean Item", "No items detected in the vehicle.", "alert-triangle", 3)
-        end
+            if success then Utils:Notify("Clean Item", "Clean command sent!", "truck", 2)
+            else Utils:Notify("Clean Item", "Failed to Clean Item.", "alert-triangle", 3) end
+        else Utils:Notify("Clean Item", "No items detected in the vehicle.", "alert-triangle", 3) end
     end
 })
 
@@ -1218,24 +1122,16 @@ CollectTab:Section({ Title = "Truck Utilities", Icon = "truck" })
 
 CollectTab:Button({
     Title = "Unload Truck",
-    Desc  = "Move everything from your vehicle into your inventory.",
     Callback = function()
         local vehicle = Vehicle:GetMyVehicle()
         if TransferVehicleItemsToInventory then
             local itemUids = getVehicleItems(vehicle)
             if #itemUids > 0 then
                 local success = Utils:SafeCallRemote(TransferVehicleItemsToInventory, itemUids)
-                if success then
-                    Utils:Notify("Unload Truck", "Unload command sent!", "truck", 2)
-                else
-                    Utils:Notify("Unload Truck", "Failed to unload.", "alert-triangle", 3)
-                end
-            else
-                Utils:Notify("Unload Truck", "No items detected in the vehicle.", "alert-triangle", 3)
-            end
-        else
-            Utils:Notify("Unload Truck", "Remote not ready yet, try again shortly.", "alert-triangle", 3)
-        end
+                if success then Utils:Notify("Unload Truck", "Unload command sent!", "truck", 2)
+                else Utils:Notify("Unload Truck", "Failed to unload.", "alert-triangle", 3) end
+            else Utils:Notify("Unload Truck", "No items detected in the vehicle.", "alert-triangle", 3) end
+        else Utils:Notify("Unload Truck", "Remote not ready yet, try again shortly.", "alert-triangle", 3) end
     end
 })
 
@@ -1248,34 +1144,18 @@ CollectTab:Divider()
 CollectTab:Section({ Title = "Collect", Icon = "move" })
 
 CollectTab:Toggle({
-    Title    = "Auto Collect",
-    Desc     = "Teleports to and collects nearby item.",
-    Value    = AutoCollect,
+    Title    = "Auto Collect", Value    = AutoCollect,
     Callback = function(state)
-        AutoCollect = state
-        settings.AutoCollect = state
-        Config:Set("AutoCollect", state); Config:Save()
-        if state and AutoCollectNoTP then
-            AutoCollectNoTP = false
-            settings.AutoCollectNoTP = false
-            Config:Set("AutoCollectNoTP", false); Config:Save()
-        end
+        AutoCollect = state; settings.AutoCollect = state; Config:Set("AutoCollect", state); Config:Save()
+        if state and AutoCollectNoTP then AutoCollectNoTP = false; settings.AutoCollectNoTP = false; Config:Set("AutoCollectNoTP", false); Config:Save() end
     end
 })
 
 CollectTab:Toggle({
-    Title    = "Auto Collect (Without tp)",
-    Desc     = "Collects item only when you're already close enough.",
-    Value    = AutoCollectNoTP,
+    Title    = "Auto Collect (Without tp)", Value    = AutoCollectNoTP,
     Callback = function(state)
-        AutoCollectNoTP = state
-        settings.AutoCollectNoTP = state
-        Config:Set("AutoCollectNoTP", state); Config:Save()
-        if state and AutoCollect then
-            AutoCollect = false
-            settings.AutoCollect = false
-            Config:Set("AutoCollect", false); Config:Save()
-        end
+        AutoCollectNoTP = state; settings.AutoCollectNoTP = state; Config:Set("AutoCollectNoTP", state); Config:Save()
+        if state and AutoCollect then AutoCollect = false; settings.AutoCollect = false; Config:Set("AutoCollect", false); Config:Save() end
     end
 })
 
@@ -1284,61 +1164,32 @@ AuctionTab:Divider()
 AuctionTab:Section({ Title = "Sell Option", Icon = "dollar-sign" })
 
 AuctionTab:Toggle({
-    Title    = "Auto Sell",
-    Desc     = "Automatically sell items when rate and weight conditions are met.",
-    Value    = AutoSellEnabled,
-    Callback = function(state)
-        AutoSellEnabled = state
-        settings.AutoSellEnabled = state
-        Config:Set("AutoSellEnabled", state); Config:Save()
-        if state then startAutoSellLoop() end
-    end
+    Title    = "Auto Sell", Value    = AutoSellEnabled,
+    Callback = function(state) AutoSellEnabled = state; settings.AutoSellEnabled = state; Config:Set("AutoSellEnabled", state); Config:Save(); if state then startAutoSellLoop() end end
 })
 
 AuctionTab:Slider({
     Title = "Min Sell Rate (%)",
-    Desc  = "Minimum rate percentage before selling (can be negative for loss).",
     Value = { Min = -100, Max = 10000, Default = MinSellRate },
     Step  = 1,
-    Callback = function(value)
-        MinSellRate = value
-        settings.MinSellRate = value
-        Config:Set("MinSellRate", value); Config:Save()
-    end
+    Callback = function(value) MinSellRate = value; settings.MinSellRate = value; Config:Set("MinSellRate", value); Config:Save() end
 })
 
 AuctionTab:Slider({
     Title = "Min Load Weight (kg)",
-    Desc  = "Minimum vehicle load weight before selling.",
     Value = { Min = 0, Max = 1000, Default = MinWeight },
     Step  = 1,
-    Callback = function(value)
-        MinWeight = value
-        settings.MinWeight = value
-        Config:Set("MinWeight", value); Config:Save()
-    end
+    Callback = function(value) MinWeight = value; settings.MinWeight = value; Config:Set("MinWeight", value); Config:Save() end
 })
 
 AuctionTab:Toggle({
-    Title    = "Save Trophies",
-    Desc     = "Don't sell Trophy category items.",
-    Value    = SaveTrophies,
-    Callback = function(state)
-        SaveTrophies = state
-        settings.SaveTrophies = state
-        Config:Set("SaveTrophies", state); Config:Save()
-    end
+    Title    = "Save Trophies", Value    = SaveTrophies,
+    Callback = function(state) SaveTrophies = state; settings.SaveTrophies = state; Config:Set("SaveTrophies", state); Config:Save() end
 })
 
 AuctionTab:Toggle({
-    Title    = "Save Accessories",
-    Desc     = "Don't sell Accessories category items.",
-    Value    = SaveAccessories,
-    Callback = function(state)
-        SaveAccessories = state
-        settings.SaveAccessories = state
-        Config:Set("SaveAccessories", state); Config:Save()
-    end
+    Title    = "Save Accessories", Value    = SaveAccessories,
+    Callback = function(state) SaveAccessories = state; settings.SaveAccessories = state; Config:Set("SaveAccessories", state); Config:Save() end
 })
 
 AuctionTab:Divider()
@@ -1350,7 +1201,6 @@ local SellStatusLabel = AuctionTab:Paragraph({ Title = "Status",         Desc = 
 
 AuctionTab:Button({
     Title = "Refresh Rate Now",
-    Desc  = "Force update current Pawn Shop rate.",
     Callback = function()
         task.spawn(function()
             if GetPawnState then
@@ -1358,12 +1208,8 @@ AuctionTab:Button({
                 if ok and type(state) == "table" and state.rate then
                     CurrentRate = state.rate
                     Utils:Notify("Rate Refreshed", "Done!", "refresh-cw", 2)
-                else
-                    Utils:Notify("Refresh Failed", "Pawn remote not ready.", "alert-triangle", 3)
-                end
-            else
-                Utils:Notify("Refresh Failed", "Pawn remote not ready.", "alert-triangle", 3)
-            end
+                else Utils:Notify("Refresh Failed", "Pawn remote not ready.", "alert-triangle", 3) end
+            else Utils:Notify("Refresh Failed", "Pawn remote not ready.", "alert-triangle", 3) end
         end)
     end
 })
@@ -1374,26 +1220,11 @@ RunService.Heartbeat:Connect(function()
     local rateText = pct >= 0 and "+" .. pct .. "%" or pct .. "%"
     pcall(function() RateLabel:SetDesc("Rate: " .. rateText) end)
     pcall(function() WeightLabel:SetDesc("Weight: " .. math.floor(CurrentWeight) .. " kg") end)
-    if not AutoSellEnabled then
-        pcall(function() SellStatusLabel:SetDesc("Disabled") end)
-        return
-    end
-    if pct < MinSellRate then
-        pcall(function() SellStatusLabel:SetDesc(string.format("Waiting rate (%d%% < %d%%)", pct, MinSellRate)) end)
-        return
-    end
-    if CurrentWeight < MinWeight then
-        pcall(function() SellStatusLabel:SetDesc(string.format("Waiting weight (%dkg < %dkg)", math.floor(CurrentWeight), MinWeight)) end)
-        return
-    end
-    if SellSyncing then
-        pcall(function() SellStatusLabel:SetDesc("Selling...") end)
-        return
-    end
-    if tick() < SellCooldown then
-        pcall(function() SellStatusLabel:SetDesc(string.format("Cooldown (%ds)", math.ceil(SellCooldown - tick()))) end)
-        return
-    end
+    if not AutoSellEnabled then pcall(function() SellStatusLabel:SetDesc("Disabled") end); return end
+    if pct < MinSellRate then pcall(function() SellStatusLabel:SetDesc(string.format("Waiting rate (%d%% < %d%%)", pct, MinSellRate)) end); return end
+    if CurrentWeight < MinWeight then pcall(function() SellStatusLabel:SetDesc(string.format("Waiting weight (%dkg < %dkg)", math.floor(CurrentWeight), MinWeight)) end); return end
+    if SellSyncing then pcall(function() SellStatusLabel:SetDesc("Selling...") end); return end
+    if tick() < SellCooldown then pcall(function() SellStatusLabel:SetDesc(string.format("Cooldown (%ds)", math.ceil(SellCooldown - tick()))) end); return end
     pcall(function() SellStatusLabel:SetDesc("Ready to sell") end)
 end)
 
@@ -1402,9 +1233,7 @@ PathfinderTab:Divider()
 PathfinderTab:Section({ Title = "Farm Option", Icon = "cpu" })
 
 PathfinderTab:Toggle({
-    Title    = "Auto Farm",
-    Desc     = "Activate full auto auction cycle for farm",
-    Value    = PathfinderEnabled,
+    Title    = "Auto Farm", Value    = PathfinderEnabled,
     Callback = function(state)
         setPathfinderEnabled(state)
         settings.PathfinderEnabled = state
@@ -1416,90 +1245,55 @@ PathfinderTab:Toggle({
 PathfinderTab:Divider()
 PathfinderTab:Section({ Title = "Movement Farm", Icon = "footprints" })
 
--- CHANGED: ลบ Walk ออก เหลือแค่ Tween กับ Teleport
 PathfinderTab:Dropdown({
     Title  = "Movement Type for Farm",
-    Desc   = "Tween moves smoothly, Teleport is instant.",
     Values = { "Tween", "Teleport" },
     Multi  = false,
     Value  = settings.FarmMovementMode or "Tween",
     Callback = function(v)
         if type(v) == "table" then v = v[1] end
-        Movement.Mode = v
-        settings.FarmMovementMode = v
-        Config:Set("FarmMovementMode", v); Config:Save()
-        Utils:Notify("Farm Movement", "Set to: " .. v, "footprints", 2)
+        Movement.Mode = v; settings.FarmMovementMode = v; Config:Set("FarmMovementMode", v); Config:Save()
     end
 })
 
 PathfinderTab:Slider({
     Title = "Movement Speed (studs/s)",
-    Desc  = "Speed for Tween mode.",
     Value = { Min = 50, Max = 500, Default = settings.MovementSpeed or 200 },
     Step  = 10,
-    Callback = function(v)
-        Movement.Speed = v
-        settings.MovementSpeed = v
-        Config:Set("MovementSpeed", v); Config:Save()
-    end
+    Callback = function(v) Movement.Speed = v; settings.MovementSpeed = v; Config:Set("MovementSpeed", v); Config:Save() end
 })
 
 PathfinderTab:Paragraph({
     Title = "Movement Info",
-    Desc  = "• Tween: Smooth movement (uses Movement Speed as studs/s)\n• Teleport: Instant teleport to destination\n• Walk mode has been removed",
+    Desc  = "• Tween: Smooth movement\n• Teleport: Instant\n• Walk mode has been removed",
 })
 
 PathfinderTab:Divider()
 PathfinderTab:Section({ Title = "Target Areas", Icon = "map" })
 
 PathfinderTab:Toggle({
-    Title    = "Junk Yard",   Desc = "Scrap Garage",
-    Value    = AreaToggles["Junk Yard"],
-    Callback = function(state)
-        AreaToggles["Junk Yard"] = state
-        settings.AreaJunkYard = state
-        Config:Set("AreaJunkYard", state); Config:Save()
-    end
+    Title    = "Junk Yard", Desc = "Scrap Garage", Value = AreaToggles["Junk Yard"],
+    Callback = function(state) AreaToggles["Junk Yard"] = state; settings.AreaJunkYard = state; Config:Set("AreaJunkYard", state); Config:Save() end
 })
 
 PathfinderTab:Toggle({
-    Title    = "Back Alley",  Desc = "Shop Front",
-    Value    = AreaToggles["Back Alley"],
-    Callback = function(state)
-        AreaToggles["Back Alley"] = state
-        settings.AreaBackAlley = state
-        Config:Set("AreaBackAlley", state); Config:Save()
-    end
+    Title    = "Back Alley", Desc = "Shop Front", Value = AreaToggles["Back Alley"],
+    Callback = function(state) AreaToggles["Back Alley"] = state; settings.AreaBackAlley = state; Config:Set("AreaBackAlley", state); Config:Save() end
 })
 
 PathfinderTab:Toggle({
-    Title    = "Farmyard",    Desc = "Stable Garage, Barn Garage",
-    Value    = AreaToggles["Farmyard"],
-    Callback = function(state)
-        AreaToggles["Farmyard"] = state
-        settings.AreaFarmyard = state
-        Config:Set("AreaFarmyard", state); Config:Save()
-    end
+    Title    = "Farmyard", Desc = "Stable Garage, Barn Garage", Value = AreaToggles["Farmyard"],
+    Callback = function(state) AreaToggles["Farmyard"] = state; settings.AreaFarmyard = state; Config:Set("AreaFarmyard", state); Config:Save() end
 })
 
 PathfinderTab:Toggle({
-    Title    = "Shipyard",    Desc = "Small, Large & Warehouse Garage",
-    Value    = AreaToggles["Shipyard"],
-    Callback = function(state)
-        AreaToggles["Shipyard"] = state
-        settings.AreaShipyard = state
-        Config:Set("AreaShipyard", state); Config:Save()
-    end
+    Title    = "Shipyard", Desc = "Small, Large & Warehouse Garage", Value = AreaToggles["Shipyard"],
+    Callback = function(state) AreaToggles["Shipyard"] = state; settings.AreaShipyard = state; Config:Set("AreaShipyard", state); Config:Save() end
 })
 
 PathfinderTab:Toggle({
-    Title    = "Jurassic",    Desc = "Prehistoric Garage",
-    Value    = AreaToggles["Jurassic"],
-    Callback = function(state)
-        AreaToggles["Jurassic"] = state
-        settings.AreaJurassic = state
-        Config:Set("AreaJurassic", state); Config:Save()
-    end
+    Title    = "Jurassic", Desc = "Jurassic Stable Garage", Value = AreaToggles["Jurassic"],
+    Callback = function(state) AreaToggles["Jurassic"] = state; settings.AreaJurassic = state; Config:Set("AreaJurassic", state); Config:Save() end
 })
 
 PathfinderTab:Divider()
@@ -1526,18 +1320,12 @@ TeleportTab:Button({
     Callback = function()
         local unpackZone = findUnpackZone()
         local pivot = unpackZone and Utils:GetSafePivot(unpackZone)
-        if pivot then
-            teleportTo(pivot + Vector3.new(0, 5, 0))
-        else
-            Utils:Notify("TP to Base", "Unpack Zone not found. Make sure your truck has at least 1 item.", "triangle-alert", 3)
-        end
+        if pivot then teleportTo(pivot + Vector3.new(0, 5, 0))
+        else Utils:Notify("TP to Base", "Unpack Zone not found. Make sure your truck has at least 1 item.", "triangle-alert", 3) end
     end
 })
 
-TeleportTab:Paragraph({
-    Title = "Tips",
-    Desc  = "If you're seated in the truck, it teleports together with you.",
-})
+TeleportTab:Paragraph({ Title = "Tips", Desc  = "If you're seated in the truck, it teleports together with you." })
 TeleportTab:Divider()
 TeleportTab:Button({
     Title = "TP to Base",
@@ -1545,18 +1333,14 @@ TeleportTab:Button({
     Callback = function()
         local plot = getMyPlot()
         local pivot = plot and Utils:GetSafePivot(plot)
-        if pivot then
-            teleportTo(pivot + Vector3.new(0, 5, 0))
-        else
-            Utils:Notify("TP to Base", "Your plot could not be found.", "alert-triangle", 3)
-        end
+        if pivot then teleportTo(pivot + Vector3.new(0, 5, 0))
+        else Utils:Notify("TP to Base", "Your plot could not be found.", "alert-triangle", 3) end
     end
 })
 
 TeleportTab:Divider()
 TeleportTab:Section({ Title = "Zones", Icon = "map" })
 
--- ZONE LIST (ใช้ทั้ง Teleport และ Pathfinder)
 local zoneList = {
     ["Junk Yard"] = function()
         local areas = Workspace:FindFirstChild("Areas")
@@ -1599,15 +1383,13 @@ TeleportTab:Dropdown({
     end
 })
 
--- ฟังก์ชันคำนวณจุดจอดรถ (ใช้ร่วมกันระหว่าง Teleport และ Pathfinder)
 local function getZoneCarParkPosition()
-    local finder = zoneList[selectedZone]
+    local currentZone = selectedZone or "Junk Yard"
+    local finder = zoneList[currentZone]
     if not finder then return nil end
     local part  = finder()
     local pivot = part and Utils:GetSafePivot(part)
-    if pivot then
-        return pivot + Vector3.new(0, 3, 0)
-    end
+    if pivot then return pivot + Vector3.new(0, 3, 0) end
     return nil
 end
 
@@ -1616,11 +1398,8 @@ TeleportTab:Button({
     Desc  = "Teleport to the selected zone. (Same parking spot used by Auto Farm)",
     Callback = function()
         local pos = getZoneCarParkPosition()
-        if pos then
-            teleportTo(pos)
-        else
-            Utils:Notify("Teleport", "Location not found.", "alert-triangle", 3)
-        end
+        if pos then teleportTo(pos)
+        else Utils:Notify("Teleport", "Location not found.", "alert-triangle", 3) end
     end
 })
 
@@ -1654,11 +1433,8 @@ TeleportTab:Button({
     Desc  = "Teleport to the selected location.",
     Callback = function()
         local pos = tpLocations[selectedLocation]
-        if pos then
-            teleportTo(CFrame.new(pos + Vector3.new(0, 5, 0)))
-        else
-            Utils:Notify("Teleport", "No location selected.", "alert-triangle", 3)
-        end
+        if pos then teleportTo(CFrame.new(pos + Vector3.new(0, 5, 0)))
+        else Utils:Notify("Teleport", "No location selected.", "alert-triangle", 3) end
     end
 })
 
@@ -1671,13 +1447,11 @@ Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 07/16/2026 | CL: " .. ver,
-    Desc  = [[• [ NEW ] Car is parked at Zone teleport location (not at Bid)
-• [ NEW ] Player and vehicle move together to parking spot
-• [ REMOVED ] Walk mode from Farm Movement (Tween/Teleport only)
-• [ FIX ] Prevent entering vehicle at Bid location
-• [ FIX ] Car park position matches Teleport Tab Zone
-• [ NEW ] Auto Flow: Spawn car → Park at zone → Exit → Move to Bid → Collect → Seat → Unload → Exit → Base → Place
-• [ FIX ] Loop continues until toggle is turned off]],
+    Desc  = [[• [ FIX ] Zone selection now correctly reads the selected zone
+• [ FIX ] Car parks at the correct zone location (not the bid location)
+• [ FIX ] Prevent reading wrong zone after loop iteration
+• [ FIX ] Updated Jurassic garage to Jurassic Stable Garage
+• [ NEW ] Path: Spawn → Park at Zone → Exit → Bid → Collect → Park → Unload → Base → Place]],
 })
 Info:Divider()
 
@@ -1714,9 +1488,7 @@ local function LoadDiscordInfo()
             if ok and r and r.guild then
                 DiscordInfo:SetDesc(' <font color="#52525b">●</font> Member Count : ' .. tostring(r.approximate_member_count) .. '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(r.approximate_presence_count))
                 Utils:Notify("Discord Info Updated", "Refreshed!", "refresh-cw", 2)
-            else
-                Utils:Notify("Update Failed", "Could not refresh.", "alert-triangle", 3)
-            end
+            else Utils:Notify("Update Failed", "Could not refresh.", "alert-triangle", 3) end
         end })
         Info:Button({ Title = "Copy Discord Invite", Callback = function()
             setclipboard("https://discord.gg/" .. InviteCode)
@@ -1742,52 +1514,38 @@ end
 do
 SettingsTab:Divider()
 SettingsTab:Section({ Title = "Save Config", Icon = "save" })
-SettingsTab:Button({ Title = "Save Config (NOW)", Desc = "Saves all current settings immediately.", Callback = function()
-    Config:Save()
-    Utils:Notify("Config Saved", "Config saved successfully!", "save", 2)
-end })
+SettingsTab:Button({ Title = "Save Config (NOW)", Callback = function() Config:Save(); Utils:Notify("Config Saved", "Config saved successfully!", "save", 2) end })
 
 local AutoSaveEnabled = settings.AutoSaveEnabled
 local AutoSaveDelay   = settings.AutoSaveDelay
 
-SettingsTab:Toggle({ Title = "Auto Save Config", Desc = "Automatically saves config at set interval.", Value = AutoSaveEnabled, Callback = function(state)
+SettingsTab:Toggle({ Title = "Auto Save Config", Value = AutoSaveEnabled, Callback = function(state)
     AutoSaveEnabled = state; settings.AutoSaveEnabled = state; Config:Set("AutoSaveEnabled", state); Config:Save()
     if state then Config:AutoSave(AutoSaveDelay) else Config:AutoSave(0) end
 end })
 
 SettingsTab:Input({ Title = "Delay Save Config", Value = tostring(AutoSaveDelay), Placeholder = "Default: 15", Callback = function(text)
     local num = tonumber(text)
-    if num and num >= 1 then
-        AutoSaveDelay = num; settings.AutoSaveDelay = num; Config:Set("AutoSaveDelay", num); Config:Save()
-        if AutoSaveEnabled then Config:AutoSave(num) end
+    if num and num >= 1 then AutoSaveDelay = num; settings.AutoSaveDelay = num; Config:Set("AutoSaveDelay", num); Config:Save(); if AutoSaveEnabled then Config:AutoSave(num) end
     else warn("[DYHUB] Invalid delay value!") end
 end })
 
 SettingsTab:Divider()
 SettingsTab:Section({ Title = "Server Status", Icon = "server" })
 
-SettingsTab:Button({ Title = "Serverhop", Desc = "Teleports you to a different random server.", Callback = function()
+SettingsTab:Button({ Title = "Serverhop", Callback = function()
     local servers = {}
-    local success, result = pcall(function()
-        return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"))
-    end)
+    local success, result = pcall(function() return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100")) end)
     if success and result and result.data then
         for _, server in ipairs(result.data) do
             if server.id ~= game.JobId and server.playing < server.maxPlayers then table.insert(servers, server.id) end
         end
     end
-    if #servers > 0 then
-        Utils:Notify("Serverhop", "Teleporting...", "server", 2); task.wait(1)
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], LocalPlayer)
-    else
-        Utils:Notify("Serverhop Failed", "No available servers.", "alert-triangle", 3)
-    end
+    if #servers > 0 then Utils:Notify("Serverhop", "Teleporting...", "server", 2); task.wait(1); TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], LocalPlayer)
+    else Utils:Notify("Serverhop Failed", "No available servers.", "alert-triangle", 3) end
 end })
 
-SettingsTab:Button({ Title = "Rejoin", Desc = "Rejoins the current game server.", Callback = function()
-    Utils:Notify("Rejoin", "Rejoining...", "refresh-cw", 2); task.wait(1)
-    TeleportService:Teleport(game.PlaceId, LocalPlayer)
-end })
+SettingsTab:Button({ Title = "Rejoin", Callback = function() Utils:Notify("Rejoin", "Rejoining...", "refresh-cw", 2); task.wait(1); TeleportService:Teleport(game.PlaceId, LocalPlayer) end })
 end
 
 -- ====================== BACKGROUND INITIALIZATION ======================
@@ -1841,11 +1599,8 @@ task.spawn(function()
                         return 0
                     end
                     local percent = getParsedPercent(args)
-                    if percent >= MinAcceptPercent then
-                        Utils:SafeCallRemote(RespondOffer, offerId, true)
-                    else
-                        Utils:SafeCallRemote(RespondOffer, offerId, false)
-                    end
+                    if percent >= MinAcceptPercent then Utils:SafeCallRemote(RespondOffer, offerId, true)
+                    else Utils:SafeCallRemote(RespondOffer, offerId, false) end
                 end))
             end
         end
@@ -1861,18 +1616,14 @@ task.spawn(function()
 
     task.spawn(function()
         local InventoryEvents = Events:WaitForChild('Inventory')
-        if InventoryEvents then
-            GetPlayerInventory = InventoryEvents:WaitForChild('GetPlayerInventory')
-        end
+        if InventoryEvents then GetPlayerInventory = InventoryEvents:WaitForChild('GetPlayerInventory') end
     end)
 
     task.spawn(function()
         local VehicleEvents = Events:WaitForChild('Vehicles')
         if VehicleEvents then
             TransferVehicleItemsToInventory = VehicleEvents:WaitForChild('TransferVehicleItemsToInventory')
-            pcall(function()
-                RequestSpawnRemote = VehicleEvents:FindFirstChild('RequestSpawn') or VehicleEvents:WaitForChild('RequestSpawn', 5)
-            end)
+            pcall(function() RequestSpawnRemote = VehicleEvents:FindFirstChild('RequestSpawn') or VehicleEvents:WaitForChild('RequestSpawn', 5) end)
         end
     end)
 
@@ -1909,12 +1660,8 @@ task.spawn(function()
             AuctionPickupStart      = AuctionEvents:WaitForChild('AuctionPickupStart')
             AuctionPickupEnd        = AuctionEvents:WaitForChild('AuctionPickupEnd')
 
-            registerConnection(AuctionPickupStart.OnClientEvent:Connect(function(bidAmount, totalValue)
-                State_itemsAvailable = true
-            end))
-            registerConnection(AuctionPickupEnd.OnClientEvent:Connect(function()
-                State_itemsAvailable = false
-            end))
+            registerConnection(AuctionPickupStart.OnClientEvent:Connect(function() State_itemsAvailable = true end))
+            registerConnection(AuctionPickupEnd.OnClientEvent:Connect(function() State_itemsAvailable = false end))
 
             if UpdateCurrentWinningBid and BidEvent then
                 registerConnection(UpdateCurrentWinningBid.OnClientEvent:Connect(function(currentBid, winningPlayer, storageUnit, timeLeft)
@@ -1925,30 +1672,21 @@ task.spawn(function()
                         currentAuctionUnit = storageUnit
                         if currentBidNum < MinBid then
                             ignoredAuctionUnits[storageUnit] = true
-                            if LeaveAuction then
-                                task.spawn(function() Utils:SafeCallRemote(LeaveAuction) end)
-                            end
+                            if LeaveAuction then task.spawn(function() Utils:SafeCallRemote(LeaveAuction) end) end
                         else
                             ignoredAuctionUnits[storageUnit] = false
                         end
                     end
                     if storageUnit and ignoredAuctionUnits[storageUnit] then return end
                     local isWinning = false
-                    if typeof(winningPlayer) == "Instance" and winningPlayer:IsA("Player") then
-                        isWinning = (winningPlayer == LocalPlayer)
-                    elseif type(winningPlayer) == "string" then
-                        isWinning = (winningPlayer == LocalPlayer.Name)
-                    elseif type(winningPlayer) == "number" then
-                        isWinning = (winningPlayer == LocalPlayer.UserId)
-                    end
+                    if typeof(winningPlayer) == "Instance" and winningPlayer:IsA("Player") then isWinning = (winningPlayer == LocalPlayer)
+                    elseif type(winningPlayer) == "string" then isWinning = (winningPlayer == LocalPlayer.Name)
+                    elseif type(winningPlayer) == "number" then isWinning = (winningPlayer == LocalPlayer.UserId) end
                     if isWinning then return end
                     local nextBid = currentBidNum + 50
                     if nextBid <= MaxBid then
-                        if storageUnit then
-                            Utils:SafeCallRemote(BidEvent, storageUnit, nextBid)
-                        else
-                            Utils:SafeCallRemote(BidEvent, nextBid)
-                        end
+                        if storageUnit then Utils:SafeCallRemote(BidEvent, storageUnit, nextBid)
+                        else Utils:SafeCallRemote(BidEvent, nextBid) end
                     end
                 end))
             end
@@ -1987,14 +1725,10 @@ startAutoPlaceLoop = function()
             local success, inventory
             if GetPlayerInventory then
                 success, inventory = pcall(function()
-                    if GetPlayerInventory:IsA("RemoteFunction") then
-                        return GetPlayerInventory:InvokeServer()
-                    end
+                    if GetPlayerInventory:IsA("RemoteFunction") then return GetPlayerInventory:InvokeServer() end
                 end)
             end
-            if not success or type(inventory) ~= "table" then
-                inventory = getLocalInventory()
-            end
+            if not success or type(inventory) ~= "table" then inventory = getLocalInventory() end
 
             if inventory and type(inventory) == "table" then
                 local occupiedPoints = {}
@@ -2017,12 +1751,7 @@ startAutoPlaceLoop = function()
 
                 local itemsToPlace = {}
                 for itemUID, itemData in pairs(inventory) do
-                    local itemId = nil
-                    if type(itemData) == "table" then
-                        itemId = itemData.ItemId or itemData.itemId or itemData.Id or itemData.id
-                    else
-                        itemId = itemData
-                    end
+                    local itemId = type(itemData) == "table" and (itemData.ItemId or itemData.itemId or itemData.Id or itemData.id) or itemData
                     if itemUID and itemId then table.insert(itemsToPlace, { uid = itemUID, id = itemId }) end
                 end
 
@@ -2035,7 +1764,7 @@ startAutoPlaceLoop = function()
                             if promptName:find("additem") or actionText:find("add item") then
                                 local snapPoint = desc.Parent
                                 if snapPoint and (snapPoint:IsA("BasePart") or snapPoint:IsA("Attachment")) then
-                                    local current  = snapPoint
+                                    local current = snapPoint
                                     local shelfGUID = nil
                                     while current and current ~= plot do
                                         shelfGUID = current:GetAttribute("GUID")
@@ -2056,7 +1785,6 @@ startAutoPlaceLoop = function()
                 end
 
                 local placedThisCycle = 0
-
                 if GetShopStock and #itemsToPlace > 0 and #emptySnapPoints > 0 then
                     for _, snapPointInfo in ipairs(emptySnapPoints) do
                         if not AutoPlaceEnabled then break end
@@ -2064,11 +1792,8 @@ startAutoPlaceLoop = function()
                         local item = table.remove(itemsToPlace, 1)
                         if PlaceStockItem then
                             Utils:SafeCall(function()
-                                if PlaceStockItem:IsA("RemoteEvent") then
-                                    PlaceStockItem:FireServer(item.uid, tostring(item.id), snapPointInfo.worldCFrame, 0, snapPointInfo.shelfGUID, snapPointInfo.name)
-                                elseif PlaceStockItem:IsA("RemoteFunction") then
-                                    PlaceStockItem:InvokeServer(item.uid, tostring(item.id), snapPointInfo.worldCFrame, 0, snapPointInfo.shelfGUID, snapPointInfo.name)
-                                end
+                                if PlaceStockItem:IsA("RemoteEvent") then PlaceStockItem:FireServer(item.uid, tostring(item.id), snapPointInfo.worldCFrame, 0, snapPointInfo.shelfGUID, snapPointInfo.name)
+                                elseif PlaceStockItem:IsA("RemoteFunction") then PlaceStockItem:InvokeServer(item.uid, tostring(item.id), snapPointInfo.worldCFrame, 0, snapPointInfo.shelfGUID, snapPointInfo.name) end
                             end)
                             placedThisCycle = placedThisCycle + 1
                             task.wait(0.5)
@@ -2077,26 +1802,17 @@ startAutoPlaceLoop = function()
                 else
                     for itemId, itemData in pairs(inventory) do
                         if not AutoPlaceEnabled then break end
-                        local idToSend
-                        if type(itemData) == "table" then
-                            idToSend = itemData.UID or itemData.uid or itemData.UUID or itemData.uuid or itemData.Id or itemData.id or itemData.ItemId or itemData.itemId or itemId
-                        else
-                            idToSend = itemData
-                        end
+                        local idToSend = type(itemData) == "table" and (itemData.UID or itemData.uid or itemData.UUID or itemData.uuid or itemData.Id or itemData.id or itemData.ItemId or itemData.itemId or itemId) or itemData
                         if idToSend and PlaceStockItem then
                             Utils:SafeCall(function()
-                                if PlaceStockItem:IsA("RemoteEvent") then
-                                    PlaceStockItem:FireServer(plot, idToSend)
-                                elseif PlaceStockItem:IsA("RemoteFunction") then
-                                    PlaceStockItem:InvokeServer(plot, idToSend)
-                                end
+                                if PlaceStockItem:IsA("RemoteEvent") then PlaceStockItem:FireServer(plot, idToSend)
+                                elseif PlaceStockItem:IsA("RemoteFunction") then PlaceStockItem:InvokeServer(plot, idToSend) end
                             end)
                             placedThisCycle = placedThisCycle + 1
                             task.wait(0.5)
                         end
                     end
                 end
-
                 ItemsPlacedCount = ItemsPlacedCount + placedThisCycle
             end
             task.wait(2)
@@ -2108,16 +1824,12 @@ end
 startAutoSellLoop = function()
     task.spawn(function()
         while AutoSellEnabled do
-            if SellSyncing then
-                task.wait(1)
-            elseif tick() < SellCooldown then
-                task.wait(1)
+            if SellSyncing then task.wait(1)
+            elseif tick() < SellCooldown then task.wait(1)
             else
                 local pct = math.floor((CurrentRate - 1) * 100 + 0.5)
-                if pct < MinSellRate then
-                    task.wait(2)
-                elseif CurrentWeight < MinWeight then
-                    task.wait(2)
+                if pct < MinSellRate then task.wait(2)
+                elseif CurrentWeight < MinWeight then task.wait(2)
                 else
                     SellSyncing = true
                     if GetSellableItems and SellItems then
@@ -2129,8 +1841,8 @@ startAutoSellLoop = function()
                                     local itemDef = ItemsModule[info.ItemId]
                                     local skip = false
                                     if itemDef then
-                                        if SaveTrophies     and itemDef.Category == "Trophy"      then skip = true end
-                                        if SaveAccessories  and itemDef.Category == "Accessories" then skip = true end
+                                        if SaveTrophies and itemDef.Category == "Trophy" then skip = true end
+                                        if SaveAccessories and itemDef.Category == "Accessories" then skip = true end
                                     end
                                     if not skip then table.insert(toSell, guid) end
                                 end
@@ -2152,7 +1864,7 @@ startAutoSellLoop = function()
     end)
 end
 
--- ====================== PATHFINDER LOOP (NEW LOGIC) ======================
+-- ====================== PATHFINDER LOOP (FIXED) ======================
 local function pathfinderLoop()
     local function setState(phase, status)
         PathfinderPhase = phase
@@ -2161,6 +1873,22 @@ local function pathfinderLoop()
 
     local function checkEnabled()
         return PathfinderEnabled and not PathfinderStopping
+    end
+
+    -- ✅ FIXED: อ่าน selectedZone ใหม่ทุกครั้ง
+    local function getZoneCarParkPosition()
+        local currentZone = selectedZone or "Junk Yard"
+        print("[DYHUB] Parking at zone: " .. currentZone)
+        local finder = zoneList[currentZone]
+        if not finder then
+            print("[DYHUB] ERROR: No finder for zone: " .. tostring(currentZone))
+            return nil
+        end
+        local part  = finder()
+        local pivot = part and Utils:GetSafePivot(part)
+        if pivot then return pivot + Vector3.new(0, 3, 0) end
+        print("[DYHUB] ERROR: No pivot for zone: " .. tostring(currentZone))
+        return nil
     end
 
     while PathfinderEnabled and not PathfinderStopping do
@@ -2173,22 +1901,22 @@ local function pathfinderLoop()
             local waitStart = tick()
             while tick() - waitStart < 5 and checkEnabled() do task.wait(0.5) end
         else
+            -- ========== DEBUG ==========
+            print("[DYHUB] Target found: " .. target.garageType .. " (Area: " .. target.areaName .. ")")
+            print("[DYHUB] Selected Zone for parking: " .. (selectedZone or "Junk Yard"))
+            -- ===========================
+
             -- ========== STEP 2: Spawn car ==========
             setState("Spawning Car", "Requesting STARTER-DUSTER...")
             local myVehicle, isSeated = Vehicle:GetMyVehicle()
             local needSpawn = false
-            
-            if not myVehicle then
-                needSpawn = true
-            elseif not isSeated then
-                needSpawn = true
-            end
-            
+            if not myVehicle then needSpawn = true
+            elseif not isSeated then needSpawn = true end
+
             if needSpawn then
                 if RequestSpawnRemote then
                     Utils:SafeCallRemote(RequestSpawnRemote, "STARTER-DUSTER")
                     task.wait(2)
-                    
                     local waitStart = tick()
                     while tick() - waitStart < 15 and checkEnabled() do
                         task.wait(0.5)
@@ -2201,26 +1929,11 @@ local function pathfinderLoop()
             if not checkEnabled() then break end
 
             -- ========== STEP 3: Move car + player to Zone parking spot ==========
-            setState("Moving to Zone", "Parking car at " .. selectedZone .. " zone...")
+            setState("Moving to Zone", "Parking at " .. (selectedZone or "Junk Yard") .. " zone...")
             local parkPos = getZoneCarParkPosition()
-            
+
             if parkPos and checkEnabled() then
-                -- ถ้านั่งรถอยู่ ให้ย้ายรถ+ตัวเราไปด้วยกัน
-                -- ถ้ายังไม่นั่ง ก็ย้ายตัวเราไป พอรถ spawn มันจะมาเอง (ถ้าเกมเขาทำงั้น)
-                if Vehicle:IsSeated() then
-                    -- นั่งรถอยู่ → ย้ายพร้อมรถ
-                    Movement:GoTo(parkPos, { timeout = 60 })
-                else
-                    -- ยังไม่นั่ง → ย้ายตัวเราก่อน ถ้ารถมาแล้วก็จะตามมาเอง
-                    myVehicle = Vehicle:GetMyVehicle()
-                    if myVehicle and myVehicle.PrimaryPart then
-                        -- ย้ายทั้งคู่
-                        Movement:GoTo(parkPos, { timeout = 60 })
-                    else
-                        -- ไม่มีรถ ก็เดินไปเอง
-                        Movement:GoTo(parkPos, { timeout = 60 })
-                    end
-                end
+                Movement:GoTo(parkPos, { timeout = 60 })
                 task.wait(1)
             end
 
@@ -2242,7 +1955,7 @@ local function pathfinderLoop()
                 setState("Walking to Bid", "Failed to reach, retrying...")
                 task.wait(3)
             elseif checkEnabled() then
-                -- ========== STEP 6: Trigger auction + bid ==========
+                -- ========== STEP 6: Trigger auction ==========
                 setState("Triggering Auction", "Starting auction...")
                 triggerPrompt(target.prompt)
                 task.wait(1)
@@ -2254,7 +1967,7 @@ local function pathfinderLoop()
                     task.wait(1)
                 end
 
-                setState("Waiting for Bidding", "Auction in progress, bidding...")
+                setState("Waiting for Bidding", "Auction in progress...")
                 State_itemsAvailable = false
 
                 local biddingEndTime = tick()
@@ -2265,17 +1978,12 @@ local function pathfinderLoop()
                     gui       = LocalPlayer.PlayerGui:FindFirstChild("UIControllerGui")
                     container = gui and gui:FindFirstChild("AuctionBiddingContainer")
                     if not (container and container.Visible) then
-                        if State_itemsAvailable then
-                            inAuction = false
-                        else
-                            if tick() - biddingEndTime > 8 then inAuction = false end
-                        end
+                        if State_itemsAvailable then inAuction = false
+                        else if tick() - biddingEndTime > 8 then inAuction = false end end
                     else
                         biddingEndTime = tick()
                     end
-                    if tick() - biddingEndTime > 180 then
-                        inAuction = false
-                    end
+                    if tick() - biddingEndTime > 180 then inAuction = false end
                 end
 
                 if State_itemsAvailable and checkEnabled() then
@@ -2324,16 +2032,12 @@ local function pathfinderLoop()
                                     triggerPrompt(box.prompt)
                                     collectedThisCycle = collectedThisCycle + 1
                                     task.wait(0.3)
-                                else
-                                    recordAttempt(key)
-                                end
+                                else recordAttempt(key) end
                             end
                         end
 
                         local pickups = findPromptsNear(target.position, 80, "PickupPrompt")
-                        if #pickups == 0 and garageModel then
-                            pickups = findPromptsNear(garagePos, 100, "PickupPrompt")
-                        end
+                        if #pickups == 0 and garageModel then pickups = findPromptsNear(garagePos, 100, "PickupPrompt") end
                         if #pickups == 0 then
                             for _, desc in ipairs(Workspace:GetDescendants()) do
                                 if desc:IsA("ProximityPrompt") and desc.Name == "PickupPrompt" then
@@ -2356,18 +2060,14 @@ local function pathfinderLoop()
                                     triggerPrompt(pickup.prompt)
                                     collectedThisCycle = collectedThisCycle + 1
                                     task.wait(0.3)
-                                else
-                                    recordAttempt(key)
-                                end
+                                else recordAttempt(key) end
                             end
                         end
 
                         task.wait(0.3)
                         local remainingBoxes = findPromptsNear(garagePos, 100, "OpenBoxPrompt")
                         local remainingItems = findPromptsNear(garagePos, 100, "PickupPrompt")
-                        if #remainingBoxes == 0 and #remainingItems == 0 then
-                            garageCleared = true
-                        end
+                        if #remainingBoxes == 0 and #remainingItems == 0 then garageCleared = true end
                         task.wait(0.5)
                     end
 
@@ -2377,7 +2077,7 @@ local function pathfinderLoop()
                     if not checkEnabled() then break end
 
                     -- ========== STEP 8: Return to Zone parking spot ==========
-                    setState("Returning to Zone", "Going back to parking spot...")
+                    setState("Returning to Zone", "Going back to " .. (selectedZone or "Junk Yard") .. " parking...")
                     local returnPos = getZoneCarParkPosition()
                     if returnPos then
                         Movement:GoTo(returnPos, { timeout = 60 })
@@ -2389,7 +2089,7 @@ local function pathfinderLoop()
                     -- ========== STEP 9: Seat car for unload ==========
                     setState("Entering Vehicle", "Pressing E to enter vehicle...")
                     myVehicle, isSeated = Vehicle:GetMyVehicle()
-                    
+
                     if not myVehicle then
                         setState("Spawning Car", "No vehicle, requesting...")
                         if RequestSpawnRemote then
@@ -2405,7 +2105,6 @@ local function pathfinderLoop()
                     end
 
                     if myVehicle and checkEnabled() then
-                        -- ลองขึ้นรถ
                         local entered = false
                         for attempt = 1, 3 do
                             if not checkEnabled() then break end
@@ -2421,9 +2120,7 @@ local function pathfinderLoop()
                             -- ========== STEP 10: Wait for items ==========
                             setState("Waiting for Items", "Waiting for items to load into trunk...")
                             local waitStart = tick()
-                            while tick() - waitStart < 5 and checkEnabled() do
-                                task.wait(0.3)
-                            end
+                            while tick() - waitStart < 5 and checkEnabled() do task.wait(0.3) end
 
                             -- ========== STEP 11: Unload trunk ==========
                             setState("Unloading Trunk", "Transferring items to inventory...")
@@ -2432,12 +2129,10 @@ local function pathfinderLoop()
 
                             while not unloadSuccess and unloadAttempts < 3 and checkEnabled() do
                                 unloadAttempts = unloadAttempts + 1
-                                
                                 if not Vehicle:IsSeated() then
                                     Vehicle:EnterByPrompt(myVehicle)
                                     task.wait(1)
                                 end
-
                                 if Vehicle:IsSeated() and TransferVehicleItemsToInventory then
                                     local itemUids = getVehicleItems(myVehicle)
                                     if #itemUids > 0 then
@@ -2508,18 +2203,13 @@ local function pathfinderLoop()
                         local success, inventory = false, nil
                         if GetPlayerInventory then
                             success, inventory = pcall(function()
-                                if GetPlayerInventory:IsA("RemoteFunction") then
-                                    return GetPlayerInventory:InvokeServer()
-                                end
+                                if GetPlayerInventory:IsA("RemoteFunction") then return GetPlayerInventory:InvokeServer() end
                             end)
                         end
-                        if not success or type(inventory) ~= "table" then
-                            inventory = getLocalInventory()
-                        end
+                        if not success or type(inventory) ~= "table" then inventory = getLocalInventory() end
 
                         if not inventory or type(inventory) ~= "table" then break end
-                        
-                        -- นับจำนวน items
+
                         local itemCount = 0
                         for _ in pairs(inventory) do itemCount = itemCount + 1 end
                         if itemCount == 0 then break end
@@ -2560,7 +2250,7 @@ local function pathfinderLoop()
                             local snapPoint = table.remove(emptySnapPoints, 1)
                             local itemId = type(itemData) == "table" and (itemData.ItemId or itemData.itemId or itemData.Id or itemData.id) or itemData
                             if itemUID and itemId then
-                                setState("Placing Items", string.format("Placing item %d (snap %d)", placedThisRound + 1, #emptySnapPoints))
+                                setState("Placing Items", string.format("Placing item %d", placedThisRound + 1))
                                 Utils:SafeCall(function()
                                     if PlaceStockItem:IsA("RemoteEvent") then
                                         PlaceStockItem:FireServer(itemUID, tostring(itemId), snapPoint.worldCFrame, 0, snapPoint.shelfGUID, snapPoint.name)
@@ -2573,12 +2263,12 @@ local function pathfinderLoop()
                                 task.wait(0.4)
                             end
                         end
-                        
+
                         if placedThisRound == 0 then
                             setState("Placing Items", "Could not place any items")
                             break
                         end
-                        
+
                         setState("Placing Items", string.format("Placed %d items, checking for more...", placedThisRound))
                         task.wait(1)
                     end
@@ -2590,9 +2280,7 @@ local function pathfinderLoop()
                 -- ========== STEP 15: Loop delay ==========
                 setState("Loop Delay", "Cycle complete, restarting in 3s...")
                 local delayStart = tick()
-                while tick() - delayStart < 3 and checkEnabled() do
-                    task.wait(0.5)
-                end
+                while tick() - delayStart < 3 and checkEnabled() do task.wait(0.5) end
             end
         end
     end
@@ -2676,9 +2364,7 @@ end)
 -- Resume loops if left enabled in saved config
 if AutoPlaceEnabled then task.defer(startAutoPlaceLoop) end
 if AutoSellEnabled  then task.defer(startAutoSellLoop)  end
-if PathfinderEnabled then
-    task.defer(function() setPathfinderEnabled(true) end)
-end
+if PathfinderEnabled then task.defer(function() setPathfinderEnabled(true) end) end
 
 print("[DYHUB] Game loaded " .. version .. " loaded successfully!")
 print("[DYHUB] Auto saving every " .. tostring(settings.AutoSaveDelay) .. "s")
