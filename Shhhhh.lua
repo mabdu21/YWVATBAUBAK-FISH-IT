@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v029.05"
+local ver     = "v029.10"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -120,29 +120,99 @@ function Utils:IsGUID(str)
     return hyphens == 4
 end
 
--- ✅ NEW: Parse vehicle weight from UI text
-function Utils:ParseVehicleWeight()
-    local ok, label = pcall(function()
-        local gui = LocalPlayer.PlayerGui:FindFirstChild("UIControllerGui")
-        if not gui then return nil end
-        return gui:FindFirstChild("OverweightValue")
-    end)
-    if not ok or not label then return nil, nil end
-    local text = label.Text or ""
-    -- Strip HTML tags: <font color="#XXXXXX">50</font><font color="#808080"> / 50kg</font>
-    local stripped = text:gsub("<[^>]+>", "")
-    -- Parse: "50 / 50kg" or "0 / 1000kg"
-    local current = tonumber(stripped:match("^(%d+)"))
-    local max     = tonumber(stripped:match("/%s*(%d+)"))
-    return current, max
+-- ✅ FIXED: Find weight label with recursive search
+function Utils:FindWeightLabel()
+    local gui = LocalPlayer.PlayerGui:FindFirstChild("UIControllerGui")
+    if not gui then return nil end
+    
+    -- Try direct child first
+    local label = gui:FindFirstChild("OverweightValue")
+    if label then return label end
+    
+    -- Recursive search as fallback
+    for _, desc in ipairs(gui:GetDescendants()) do
+        if desc.Name == "OverweightValue" and (desc:IsA("TextLabel") or desc:IsA("TextButton")) then
+            return desc
+        end
+    end
+    
+    return nil
 end
 
-function Utils:IsWeightFull()
-    local curr, max = self:ParseVehicleWeight()
+-- ✅ FIXED: Parse vehicle weight with better regex
+function Utils:ParseVehicleWeight()
+    local label = self:FindWeightLabel()
+    if not label then return nil, nil end
+    
+    local text = label.Text or ""
+    -- Strip all HTML tags
+    local stripped = text:gsub("<[^>]+>", "")
+    -- Remove "kg" and other non-numeric chars
+    stripped = stripped:gsub("kg", "")
+    
+    -- Try to match "X / Y" pattern
+    local current = tonumber(stripped:match("(%d+)"))
+    local max     = tonumber(stripped:match("/%s*(%d+)"))
+    
+    if current and max and max > 0 then
+        return current, max
+    end
+    
+    return nil, nil
+end
+
+-- ====================== WEIGHT TRACKER (NEW) ======================
+local WeightTracker = {
+    current = 0,
+    max = 50,
+    lastRead = 0,
+    readInterval = 0.25,
+    itemsCollected = 0,
+    lastKnownGood = { current = 0, max = 50 }
+}
+
+function WeightTracker:Read(force)
+    local now = tick()
+    if not force and (now - self.lastRead) < self.readInterval then
+        return self.current, self.max
+    end
+    self.lastRead = now
+    
+    local curr, max = Utils:ParseVehicleWeight()
     if curr and max and max > 0 then
-        return curr >= max
+        self.current = curr
+        self.max = max
+        self.lastKnownGood = { current = curr, max = max }
+        self.itemsCollected = 0  -- Reset counter on real read
+    end
+    return self.current, self.max
+end
+
+function WeightTracker:AddItem()
+    self.itemsCollected = self.itemsCollected + 1
+    self.current = self.current + 1
+    if self.current > self.max then
+        self.current = self.max
+    end
+end
+
+function WeightTracker:IsFull()
+    self:Read(true)
+    if self.current >= self.max then
+        return true
+    end
+    -- Fallback: if we collected more items than max without UI updating
+    if self.itemsCollected >= (self.max - 2) then
+        return true
     end
     return false
+end
+
+function WeightTracker:Reset()
+    self.current = 0
+    self.itemsCollected = 0
+    self.lastRead = 0
+    self.max = 50
 end
 
 -- ====================== VEHICLE MANAGER ======================
@@ -423,7 +493,6 @@ local PathfinderRunning = false
 local PathfinderStopping = false
 local State_itemsAvailable = false
 
--- ✅ NEW: Farm Mode state
 local FarmMode          = "Full Weight"
 local farmTargetArea    = "Junk Yard"
 
@@ -589,7 +658,6 @@ local settings = {
     PathfinderEnabled = Config:Get("PathfinderEnabled", false),
     FarmMovementMode  = Config:Get("FarmMovementMode", "Tween"),
     MovementSpeed     = Config:Get("MovementSpeed", 200),
-    -- ✅ NEW: Farm Mode setting
     FarmMode          = Config:Get("FarmMode", "Full Weight"),
 }
 
@@ -1177,7 +1245,7 @@ CollectTab:Button({
                 Utils:Notify("Clean Item", "Failed to Clean Item.", "alert-triangle", 3)
             end
         else
-            Utils:Notify("Clean Item", "No items detected in the vehicle.", "alert-triangle", 3)
+            Utils:Notify("Clean Item", "No items detected in the vehicle.", "alert-triertriangle", 3)
         end
     end
 })
@@ -1337,35 +1405,6 @@ AuctionTab:Button({
     end
 })
 
-RunService.Heartbeat:Connect(function()
-    if not RateLabel or not WeightLabel or not SellStatusLabel then return end
-    local pct = math.floor((CurrentRate - 1) * 100 + 0.5)
-    local rateText = pct >= 0 and "+" .. pct .. "%" or pct .. "%"
-    pcall(function() RateLabel:SetDesc("Rate: " .. rateText) end)
-    pcall(function() WeightLabel:SetDesc("Weight: " .. math.floor(CurrentWeight) .. " kg") end)
-    if not AutoSellEnabled then
-        pcall(function() SellStatusLabel:SetDesc("Disabled") end)
-        return
-    end
-    if pct < MinSellRate then
-        pcall(function() SellStatusLabel:SetDesc(string.format("Waiting rate (%d%% < %d%%)", pct, MinSellRate)) end)
-        return
-    end
-    if CurrentWeight < MinWeight then
-        pcall(function() SellStatusLabel:SetDesc(string.format("Waiting weight (%dkg < %dkg)", math.floor(CurrentWeight), MinWeight)) end)
-        return
-    end
-    if SellSyncing then
-        pcall(function() SellStatusLabel:SetDesc("Selling...") end)
-        return
-    end
-    if tick() < SellCooldown then
-        pcall(function() SellStatusLabel:SetDesc(string.format("Cooldown (%ds)", math.ceil(SellCooldown - tick()))) end)
-        return
-    end
-    pcall(function() SellStatusLabel:SetDesc("Ready to sell") end)
-end)
-
 -- ====================== PATHFINDER TAB ======================
 PathfinderTab:Divider()
 PathfinderTab:Section({ Title = "Farm Option", Icon = "cpu" })
@@ -1384,7 +1423,6 @@ PathfinderTab:Toggle({
 
 PathfinderTab:Divider()
 
--- ✅ NEW: Farm Mode dropdown (placed below Auto Farm)
 PathfinderTab:Section({ Title = "Farm Mode", Icon = "layers" })
 
 PathfinderTab:Dropdown({
@@ -1472,19 +1510,15 @@ local StatusLabel        = PathfinderTab:Paragraph({ Title = "State",     Desc =
 local WeightStatusLabel  = PathfinderTab:Paragraph({ Title = "Weight",    Desc = "Waiting for data..." })
 local ItemsLabel         = PathfinderTab:Paragraph({ Title = "Items",     Desc = "Collected: 0 | Placed: 0" })
 
+-- ✅ FIXED: Real-time weight display using WeightTracker
 RunService.Heartbeat:Connect(function()
     if not PhaseLabel or not StatusLabel then return end
     pcall(function() PhaseLabel:SetDesc("Phase: " .. tostring(PathfinderPhase)) end)
     pcall(function() StatusLabel:SetDesc("State: " .. tostring(PathfinderStatus)) end)
     pcall(function() ItemsLabel:SetDesc(string.format("Collected: %d | Placed: %d", ItemsCollectedCount, ItemsPlacedCount)) end)
-    -- ✅ NEW: Update weight display from UI
     pcall(function()
-        local currW, maxW = Utils:ParseVehicleWeight()
-        if currW and maxW then
-            WeightStatusLabel:SetDesc(string.format("%d / %d kg", currW, maxW))
-        else
-            WeightStatusLabel:SetDesc("Waiting for data...")
-        end
+        local currW, maxW = WeightTracker:Read(false)
+        WeightStatusLabel:SetDesc(string.format("%d / %d kg", currW, maxW))
     end)
 end)
 
@@ -1650,13 +1684,13 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 07/16/2026 | CL: " .. ver,
-    Desc  = [[• [ NEW ] Auto Farm now supports Full Weight and Garage All modes
-• [ NEW ] Weight check during collect - reads from UI dynamically
-• [ NEW ] If weight fills up mid-collection, bot unloads and comes back
-• [ NEW ] Weight display added to Pathfinder status
-• [ FIX ] All descriptions improved for clarity
-• [ FIX ] Farm Mode persists in config]],
+    Title = "Update: 07/17/2026 | CL: " .. ver,
+    Desc  = [[• [ FIX ] Weight display now updates in real-time during collect
+• [ NEW ] WeightTracker system with caching and fallback
+• [ FIX ] Bot now reliably detects weight full and returns to base
+• [ FIX ] Garage All mode - collects everything then returns to base
+• [ FIX ] Auto unload & return to garage when weight fills up mid-collect
+• [ FIX ] All descriptions improved for clarity]],
 })
 Info:Divider()
 
@@ -1781,7 +1815,7 @@ task.spawn(function()
         end)
     end)
 
-    -- Auto-Accept Offers hook (FIXED)
+    -- Auto-Accept Offers hook
     task.spawn(function()
         local NPCShopper = Events:WaitForChild('NPCShopper')
         if NPCShopper then
@@ -2133,7 +2167,7 @@ startAutoSellLoop = function()
     end)
 end
 
--- ====================== PATHFINDER LOOP (WITH WEIGHT CHECK) ======================
+-- ====================== PATHFINDER LOOP (FIXED - REAL-TIME WEIGHT) ======================
 local function pathfinderLoop()
     local function setState(phase, status)
         PathfinderPhase = phase
@@ -2186,6 +2220,45 @@ local function pathfinderLoop()
         return bestPrompt
     end
 
+    -- ✅ Helper: Unload trunk reliably
+    local function unloadTrunkReliably(maxAttempts)
+        maxAttempts = maxAttempts or 3
+        for attempt = 1, maxAttempts do
+            if not checkEnabled() then return false end
+            if not Vehicle:IsSeated() then
+                local veh = Vehicle:GetMyVehicle()
+                if veh then
+                    Vehicle:EnterByPrompt(veh)
+                    task.wait(1)
+                end
+            end
+            if Vehicle:IsSeated() and TransferVehicleItemsToInventory then
+                local veh = Vehicle:GetSeatedVehicle()
+                local itemUids = getVehicleItems(veh)
+                if #itemUids > 0 then
+                    setState("Unloading", string.format("Unloading %d items (attempt %d)", #itemUids, attempt))
+                    local ok = Utils:SafeCallRemote(TransferVehicleItemsToInventory, itemUids)
+                    if ok then
+                        task.wait(2)
+                        local newItems = getVehicleItems(veh)
+                        if #newItems == 0 or #newItems < #itemUids then
+                            -- Force reset weight tracker after unload
+                            WeightTracker:Reset()
+                            WeightTracker:Read(true)
+                            return true
+                        end
+                    end
+                else
+                    WeightTracker:Reset()
+                    WeightTracker:Read(true)
+                    return true
+                end
+            end
+            task.wait(0.5)
+        end
+        return false
+    end
+
     while PathfinderEnabled and not PathfinderStopping do
         local targetArea = farmTargetArea
 
@@ -2217,7 +2290,6 @@ local function pathfinderLoop()
                 if RequestSpawnRemote then
                     Utils:SafeCallRemote(RequestSpawnRemote, "STARTER-DUSTER")
                     task.wait(2)
-
                     local waitStart = tick()
                     while tick() - waitStart < 15 and checkEnabled() do
                         task.wait(0.5)
@@ -2232,7 +2304,6 @@ local function pathfinderLoop()
             -- ========== STEP 3: Move car to Zone ==========
             setState("Moving to Zone", "Parking car at " .. targetArea .. "...")
             local parkPos = getZoneCarParkPosition()
-
             if parkPos and checkEnabled() then
                 Movement:GoTo(parkPos, { timeout = 60 })
                 task.wait(1)
@@ -2293,8 +2364,12 @@ local function pathfinderLoop()
                 end
 
                 if State_itemsAvailable and checkEnabled() then
-                    -- ========== STEP 7: Collect items (WITH WEIGHT CHECK) ==========
+                    -- ========== STEP 7: Collect items (REAL-TIME WEIGHT CHECK) ==========
                     setState("Collecting Items", "Auction won! Collecting items...")
+
+                    -- ✅ Reset weight tracker for new collect session
+                    WeightTracker:Reset()
+                    WeightTracker:Read(true)
 
                     local function findGarageModel()
                         for _, model in ipairs(Workspace:GetChildren()) do
@@ -2310,9 +2385,8 @@ local function pathfinderLoop()
 
                     local totalCollected = 0
                     local collectComplete = false
-                    local maxUnloadRetries = 3
 
-                    -- ✅ NEW: Collect loop with weight check and unload support
+                    -- ✅ Collect loop with real-time weight check
                     while not collectComplete and checkEnabled() do
                         local blacklist = {}
                         local collectedThisCycle = 0
@@ -2334,18 +2408,10 @@ local function pathfinderLoop()
                                 break
                             end
 
-                            -- ✅ NEW: Weight check at start of each iteration
-                            local currW, maxW = Utils:ParseVehicleWeight()
-                            if currW and maxW and currW >= maxW then
-                                weightFullHit = true
-                                setState("Collecting Items", string.format("Weight full! (%d/%d kg)", currW, maxW))
-                                break
-                            end
-
                             -- Collect boxes
                             local boxes = findPromptsNear(garagePos, 100, "OpenBoxPrompt")
                             for i, box in ipairs(boxes) do
-                                if not checkEnabled() then break end
+                                if not checkEnabled() or weightFullHit then break end
                                 local key = tostring(box.prompt)
                                 if not isBlacklisted(key) then
                                     setState("Collecting Items", string.format("Opening box %d/%d", i, #boxes))
@@ -2353,12 +2419,22 @@ local function pathfinderLoop()
                                     if arrived then
                                         triggerPrompt(box.prompt)
                                         collectedThisCycle = collectedThisCycle + 1
+                                        WeightTracker:AddItem()
+                                        -- ✅ Real-time weight check after collect
                                         task.wait(0.3)
+                                        if WeightTracker:IsFull() then
+                                            weightFullHit = true
+                                            setState("Collecting Items", string.format("Weight full! (%d/%d kg)", WeightTracker.current, WeightTracker.max))
+                                            break
+                                        end
+                                        task.wait(0.2)
                                     else
                                         recordAttempt(key)
                                     end
                                 end
                             end
+
+                            if weightFullHit then break end
 
                             -- Collect pickups
                             local pickups = findPromptsNear(target.position, 80, "PickupPrompt")
@@ -2378,7 +2454,7 @@ local function pathfinderLoop()
                             end
 
                             for i, pickup in ipairs(pickups) do
-                                if not checkEnabled() then break end
+                                if not checkEnabled() or weightFullHit then break end
                                 local key = tostring(pickup.prompt)
                                 if not isBlacklisted(key) then
                                     setState("Collecting Items", string.format("Collecting item %d/%d", i, #pickups))
@@ -2386,7 +2462,15 @@ local function pathfinderLoop()
                                     if arrived then
                                         triggerPrompt(pickup.prompt)
                                         collectedThisCycle = collectedThisCycle + 1
+                                        WeightTracker:AddItem()
+                                        -- ✅ Real-time weight check after collect
                                         task.wait(0.3)
+                                        if WeightTracker:IsFull() then
+                                            weightFullHit = true
+                                            setState("Collecting Items", string.format("Weight full! (%d/%d kg)", WeightTracker.current, WeightTracker.max))
+                                            break
+                                        end
+                                        task.wait(0.2)
                                     else
                                         recordAttempt(key)
                                     end
@@ -2405,11 +2489,11 @@ local function pathfinderLoop()
                         totalCollected = totalCollected + collectedThisCycle
                         ItemsCollectedCount = ItemsCollectedCount + collectedThisCycle
 
-                        -- If weight was full, unload and come back
+                        -- If weight was full mid-collect, unload and come back
                         if weightFullHit and checkEnabled() then
                             setState("Unloading", "Weight full! Returning to unload...")
 
-                            -- Return to zone
+                            -- Return to zone parking
                             if selectedZone ~= targetArea then selectedZone = targetArea end
                             local returnPos = getZoneCarParkPosition()
                             if returnPos then
@@ -2419,7 +2503,7 @@ local function pathfinderLoop()
 
                             if not checkEnabled() then break end
 
-                            -- Enter vehicle
+                            -- Enter vehicle + unload
                             myVehicle, isSeated = Vehicle:GetMyVehicle()
                             if not myVehicle then
                                 if RequestSpawnRemote then
@@ -2445,36 +2529,8 @@ local function pathfinderLoop()
 
                                 if entered then
                                     task.wait(0.5)
-
-                                    -- Unload trunk
-                                    setState("Unloading", "Transferring items to inventory...")
-                                    if TransferVehicleItemsToInventory then
-                                        local itemUids = getVehicleItems(myVehicle)
-                                        if #itemUids > 0 then
-                                            for unloadAttempt = 1, maxUnloadRetries do
-                                                if not checkEnabled() then break end
-                                                if not Vehicle:IsSeated() then
-                                                    Vehicle:EnterByPrompt(myVehicle)
-                                                    task.wait(1)
-                                                end
-                                                if Vehicle:IsSeated() then
-                                                    local ok = Utils:SafeCallRemote(TransferVehicleItemsToInventory, itemUids)
-                                                    if ok then
-                                                        task.wait(2)
-                                                        local newItems = getVehicleItems(myVehicle)
-                                                        if #newItems == 0 or #newItems < #itemUids then
-                                                            break
-                                                        end
-                                                        itemUids = newItems
-                                                    end
-                                                end
-                                                task.wait(0.5)
-                                            end
-                                        end
-                                    end
-
+                                    unloadTrunkReliably(3)
                                     task.wait(1)
-
                                     -- Exit vehicle
                                     setState("Exiting Vehicle", "Exiting vehicle...")
                                     for attempt = 1, 3 do
@@ -2483,7 +2539,7 @@ local function pathfinderLoop()
                                         task.wait(0.8)
                                     end
 
-                                    -- Go back to garage to continue collecting
+                                    -- Go back to garage to finish collecting
                                     setState("Returning to Garage", "Going back to collect remaining...")
                                     Movement:GoTo(CFrame.new(target.position + Vector3.new(0, 3, 0)), { timeout = 60 })
                                     task.wait(1)
@@ -2505,20 +2561,16 @@ local function pathfinderLoop()
 
                     if not checkEnabled() then break end
 
-                    -- ✅ NEW: Determine if we should return to base based on Farm Mode
+                    -- ✅ Determine if we should return to base
                     local shouldReturnToBase = true
+                    local weightFullNow = WeightTracker:IsFull()
 
-                    if FarmMode == "Full Weight" then
-                        local currW, maxW = Utils:ParseVehicleWeight()
-                        if currW and maxW then
-                            if currW < maxW then
-                                -- Weight not full, find next auction instead
-                                shouldReturnToBase = false
-                                setState("Finding More", string.format("Weight: %d/%d kg, looking for more auctions", currW, maxW))
-                            else
-                                setState("Weight Full", string.format("Weight: %d/%d kg, returning to base", currW, maxW))
-                            end
-                        end
+                    if FarmMode == "Full Weight" and not weightFullNow then
+                        -- Weight not full, find more auctions
+                        shouldReturnToBase = false
+                        setState("Finding More", string.format("Weight: %d/%d kg, finding more auctions", WeightTracker.current, WeightTracker.max))
+                    elseif weightFullNow then
+                        setState("Weight Full", string.format("Weight: %d/%d kg, returning to base", WeightTracker.current, WeightTracker.max))
                     end
 
                     if shouldReturnToBase then
@@ -2562,35 +2614,7 @@ local function pathfinderLoop()
 
                             if entered then
                                 task.wait(0.5)
-                                setState("Unloading Trunk", "Transferring items...")
-                                local unloadSuccess = false
-                                local unloadAttempts = 0
-
-                                while not unloadSuccess and unloadAttempts < 3 and checkEnabled() do
-                                    unloadAttempts = unloadAttempts + 1
-                                    if not Vehicle:IsSeated() then
-                                        Vehicle:EnterByPrompt(myVehicle)
-                                        task.wait(1)
-                                    end
-                                    if Vehicle:IsSeated() and TransferVehicleItemsToInventory then
-                                        local itemUids = getVehicleItems(myVehicle)
-                                        if #itemUids > 0 then
-                                            setState("Unloading Trunk", string.format("Unloading %d items (attempt %d)", #itemUids, unloadAttempts))
-                                            local ok = Utils:SafeCallRemote(TransferVehicleItemsToInventory, itemUids)
-                                            if ok then
-                                                task.wait(2)
-                                                local newItems = getVehicleItems(myVehicle)
-                                                if #newItems == 0 or #newItems < #itemUids then
-                                                    unloadSuccess = true
-                                                end
-                                            end
-                                        else
-                                            unloadSuccess = true
-                                        end
-                                    end
-                                    task.wait(0.5)
-                                end
-
+                                unloadTrunkReliably(3)
                                 task.wait(1)
                                 setState("Exiting Vehicle", "Exiting vehicle...")
                                 for attempt = 1, 3 do
@@ -2605,7 +2629,6 @@ local function pathfinderLoop()
 
                         -- ========== STEP 10: Walk to base ==========
                         setState("Walking to Base", "Returning to base...")
-
                         local plot = getMyPlot()
                         if plot then
                             local plotPivot = Utils:GetSafePivot(plot)
@@ -2708,6 +2731,9 @@ local function pathfinderLoop()
                             setState("Placing Items", string.format("Placed %d items, checking for more...", placedThisRound))
                             task.wait(1)
                         end
+
+                        -- ✅ Reset weight tracker after returning to base
+                        WeightTracker:Reset()
                     end
                 else
                     setState("Bidding", "Auction lost / no items")
