@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v028.55"
+local ver     = "v028.60"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -401,6 +401,7 @@ local State_itemsAvailable = false
 local ItemsCollectedCount = 0
 local ItemsPlacedCount    = 0
 
+-- ✅ CHANGED: ค่าเริ่มต้น false ทั้งหมด (ใช้ dropdown แทน toggle)
 local AreaToggles = {
     ["Junk Yard"]  = false,
     ["Back Alley"] = false,
@@ -539,6 +540,7 @@ end
 local Config = CustomConfig.new()
 
 -- ====================== SETTINGS TABLE ======================
+-- ✅ CHANGED: ลบ AreaJunkYard, AreaBackAlley ฯลฯ ออก เพราะใช้ dropdown แทนแล้ว
 local settings = {
     AutoAcceptOffers  = Config:Get("AutoAcceptOffers", false),
     MinAcceptPercent  = Config:Get("MinAcceptPercent", 15),
@@ -567,12 +569,7 @@ local settings = {
     SaveTrophies      = Config:Get("SaveTrophies", true),
     SaveAccessories   = Config:Get("SaveAccessories", true),
     PathfinderEnabled = Config:Get("PathfinderEnabled", false),
-    AreaJunkYard      = Config:Get("AreaJunkYard", false),
-    AreaBackAlley     = Config:Get("AreaBackAlley", false),
-    AreaFarmyard      = Config:Get("AreaFarmyard", false),
-    AreaShipyard      = Config:Get("AreaShipyard", false),
-    AreaJurassic      = Config:Get("AreaJurassic", false),
-    AreaCargoShip     = Config:Get("AreaCargoShip", false),
+    -- ✅ CHANGED: ไม่มี AreaJunkYard etc. แล้ว
     FarmMovementMode  = Config:Get("FarmMovementMode", "Tween"),
     MovementSpeed     = Config:Get("MovementSpeed", 200),
 }
@@ -592,12 +589,8 @@ MinSellRate          = settings.MinSellRate
 MinWeight            = settings.MinWeight
 SaveTrophies         = settings.SaveTrophies
 SaveAccessories      = settings.SaveAccessories
-AreaToggles["Junk Yard"]  = settings.AreaJunkYard
-AreaToggles["Back Alley"] = settings.AreaBackAlley
-AreaToggles["Farmyard"]   = settings.AreaFarmyard
-AreaToggles["Shipyard"]   = settings.AreaShipyard
-AreaToggles["Jurassic"]   = settings.AreaJurassic
-AreaToggles["Cargo Ship"] = settings.AreaCargoShip
+-- ✅ CHANGED: ไม่ load AreaToggles จาก settings เพราะลบออกแล้ว
+-- AreaToggles จะถูก enable ผ่าน dropdown farmTargetArea เท่านั้น
 Movement.Mode        = settings.FarmMovementMode
 Movement.Speed       = settings.MovementSpeed
 
@@ -755,48 +748,6 @@ local function getRoot()
     local char = LocalPlayer.Character
     if not char then return nil end
     return char:FindFirstChild("HumanoidRootPart")
-end
-
-local function findAuctionInArea(areaName)
-    local root = getRoot()
-    if not root then return nil end
-    local rootPos = root.Position
-    local bestDist = math.huge
-    local bestPrompt = nil
-
-    local targetGarages = AREA_GARAGES[areaName]
-    if not targetGarages then return nil end
-
-    for _, prompt in ipairs(Workspace:GetDescendants()) do
-        if prompt:IsA("ProximityPrompt") and prompt.Name == "EnterAuction" then
-            local garageType = prompt.ObjectText
-            local isInArea = false
-            for _, g in ipairs(targetGarages) do
-                if g == garageType then
-                    isInArea = true
-                    break
-                end
-            end
-            if isInArea then
-                local promptParent = prompt.Parent
-                if promptParent then
-                    local dist = (promptParent.Position - rootPos).Magnitude
-                    if dist < bestDist then
-                        bestDist = dist
-                        bestPrompt = {
-                            prompt = prompt,
-                            promptParent = promptParent,
-                            position = promptParent.Position,
-                            garageType = garageType,
-                            areaName = areaName,
-                            distance = dist,
-                        }
-                    end
-                end
-            end
-        end
-    end
-    return bestPrompt
 end
 
 -- Forward declarations
@@ -1415,22 +1366,29 @@ PathfinderTab:Toggle({
 PathfinderTab:Divider()
 PathfinderTab:Section({ Title = "Target Area (Auto Farm)", Icon = "map-pin" })
 
--- CHANGED: ประกาศ farmTargetArea ก่อน dropdown
+-- ✅ CHANGED: ลบ Toggle เก่าออกทั้งหมด เหลือแค่ Dropdown
+-- CHANGED: ประกาศ farmTargetArea เป็น global state
 local farmTargetArea = settings.selectedZone or "Junk Yard"
 
 PathfinderTab:Dropdown({
     Title  = "Target Area for Farm",
-    Desc   = "Car will park here, then move to bid in same area.",
+    Desc   = "Select ONE area. Car will park there, then move to bid in same area.",
     Values = { "Junk Yard", "Back Alley", "Farm Yard", "Shipyard", "Jurassic", "Cargo Ship" },
     Multi  = false,
     Value  = farmTargetArea,
     Callback = function(v)
+        if type(v) == "table" then v = v[1] end
         farmTargetArea = v
         selectedZone = v  -- sync กับ Teleport tab
         settings.selectedZone = v
         Config:Set("selectedZone", v); Config:Save()
         Utils:Notify("Target Area", "Set to: " .. v, "map-pin", 2)
     end
+})
+
+PathfinderTab:Paragraph({
+    Title = "How it works",
+    Desc  = "Select ONE area above. The bot will:\n1. Spawn car\n2. Park car at selected area\n3. Walk to bid in same area\n4. Collect items\n5. Return to car & unload\n6. Walk to base & place items",
 })
 
 PathfinderTab:Divider()
@@ -1461,11 +1419,6 @@ PathfinderTab:Slider({
         settings.MovementSpeed = v
         Config:Set("MovementSpeed", v); Config:Save()
     end
-})
-
-PathfinderTab:Paragraph({
-    Title = "Movement Info",
-    Desc  = "• Tween: Smooth movement (uses Movement Speed as studs/s)\n• Teleport: Instant teleport to destination\n• Walk mode has been removed",
 })
 
 PathfinderTab:Divider()
@@ -1573,7 +1526,6 @@ TeleportTab:Dropdown({
     end
 })
 
--- จุดจอดรถ (shared)
 local function getZoneCarParkPosition()
     local finder = zoneList[selectedZone]
     if not finder then return nil end
@@ -1644,12 +1596,13 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 07/16/2026 | CL: " .. ver,
-    Desc  = [[• [ FIX ] Auto Accept Offer now works (typo Show → ShowOffer)
-• [ FIX ] Auto Farm now uses correct Target Area
-• [ FIX ] Zone sync between Pathfinder and Teleport tabs
-• [ FIX ] Cargo Ship finder now works
-• [ NEW ] Support Cargo Ship target area]],
+    Title = "Update: 07/17/2026 | CL: " .. ver,
+    Desc  = [[• [ FIX ] Phase: Error - removed old AreaJunkYard toggle logic
+• [ NEW ] Auto Farm now uses single Dropdown (1 area at a time)
+• [ FIX ] Config no longer has Area toggles (dropdown only)
+• [ NEW ] Select area once, bot farms in that area continuously
+• [ NEW ] Sync between Pathfinder and Teleport Zone dropdowns
+• [ FIX ] Removed old Area toggles section completely]],
 })
 Info:Divider()
 
@@ -1774,14 +1727,14 @@ task.spawn(function()
         end)
     end)
 
-    -- ✅ CHANGED: Auto-Accept Offers hook (FIXED TYPO)
+    -- Auto-Accept Offers hook (FIXED)
     task.spawn(function()
         local NPCShopper = Events:WaitForChild('NPCShopper')
         if NPCShopper then
             local RespondOffer = NPCShopper:WaitForChild('RespondOffer')
             local ShowOffer    = NPCShopper:WaitForChild('ShowOffer')
             if ShowOffer and RespondOffer then
-                registerConnection(ShowOffer.OnClientEvent:Connect(function(...)  -- ✅ FIXED: ShowOffer not Show
+                registerConnection(ShowOffer.OnClientEvent:Connect(function(...)
                     if not AutoAcceptOffers then return end
                     local args = {...}
                     local offerId = args[1]
@@ -2126,7 +2079,7 @@ startAutoSellLoop = function()
     end)
 end
 
--- ====================== PATHFINDER LOOP (FIXED) ======================
+-- ====================== PATHFINDER LOOP (FIXED - DROPDOWN ONLY) ======================
 local function pathfinderLoop()
     local function setState(phase, status)
         PathfinderPhase = phase
@@ -2135,6 +2088,49 @@ local function pathfinderLoop()
 
     local function checkEnabled()
         return PathfinderEnabled and not PathfinderStopping
+    end
+
+    -- ฟังก์ชันหา auction ใน area เดียวที่กำหนด
+    local function findAuctionInArea(areaName)
+        local root = getRoot()
+        if not root then return nil end
+        local rootPos = root.Position
+        local bestDist = math.huge
+        local bestPrompt = nil
+
+        local targetGarages = AREA_GARAGES[areaName]
+        if not targetGarages then return nil end
+
+        for _, prompt in ipairs(Workspace:GetDescendants()) do
+            if prompt:IsA("ProximityPrompt") and prompt.Name == "EnterAuction" then
+                local garageType = prompt.ObjectText
+                local isInArea = false
+                for _, g in ipairs(targetGarages) do
+                    if g == garageType then
+                        isInArea = true
+                        break
+                    end
+                end
+                if isInArea then
+                    local promptParent = prompt.Parent
+                    if promptParent then
+                        local dist = (promptParent.Position - rootPos).Magnitude
+                        if dist < bestDist then
+                            bestDist = dist
+                            bestPrompt = {
+                                prompt = prompt,
+                                promptParent = promptParent,
+                                position = promptParent.Position,
+                                garageType = garageType,
+                                areaName = areaName,
+                                distance = dist,
+                            }
+                        end
+                    end
+                end
+            end
+        end
+        return bestPrompt
     end
 
     while PathfinderEnabled and not PathfinderStopping do
@@ -2146,425 +2142,417 @@ local function pathfinderLoop()
             selectedZone = targetArea
         end
 
-        if not AreaToggles[targetArea] then
-            setState("Error", "Target Area (" .. targetArea .. ") is not enabled! Enable it first.")
-            task.wait(3)
+        -- ✅ CHANGED: ลบการเช็ค AreaToggles ออก เพราะใช้ dropdown แล้ว ไม่ต้องเปิด toggle
+        -- ========== STEP 1: หา auction ใน target area ==========
+        setState("Finding Auction", "Searching " .. targetArea .. " for auctions...")
+        local target = findAuctionInArea(targetArea)
+
+        if not target then
+            setState("Idle", "No auctions in " .. targetArea .. ", waiting 5s...")
+            local waitStart = tick()
+            while tick() - waitStart < 5 and checkEnabled() do task.wait(0.5) end
         else
-            -- ========== STEP 1: หา auction ใน target area เท่านั้น ==========
-            setState("Finding Auction", "Searching " .. targetArea .. " for auctions...")
-            local target = findAuctionInArea(targetArea)
-
-            if not target then
-                setState("Idle", "No auctions in " .. targetArea .. ", waiting 5s...")
-                local waitStart = tick()
-                while tick() - waitStart < 5 and checkEnabled() do task.wait(0.5) end
-            else
-                -- ========== STEP 2: Spawn car ==========
-                setState("Spawning Car", "Requesting STARTER-DUSTER...")
-                local myVehicle, isSeated = Vehicle:GetMyVehicle()
-                local needSpawn = false
-                
-                if not myVehicle then
-                    needSpawn = true
-                elseif not isSeated then
-                    needSpawn = true
-                end
-                
-                if needSpawn then
-                    if RequestSpawnRemote then
-                        Utils:SafeCallRemote(RequestSpawnRemote, "STARTER-DUSTER")
-                        task.wait(2)
-                        
-                        local waitStart = tick()
-                        while tick() - waitStart < 15 and checkEnabled() do
-                            task.wait(0.5)
-                            myVehicle, isSeated = Vehicle:GetMyVehicle()
-                            if myVehicle and isSeated then break end
-                        end
+            -- ========== STEP 2: Spawn car ==========
+            setState("Spawning Car", "Requesting STARTER-DUSTER...")
+            local myVehicle, isSeated = Vehicle:GetMyVehicle()
+            local needSpawn = false
+            
+            if not myVehicle then
+                needSpawn = true
+            elseif not isSeated then
+                needSpawn = true
+            end
+            
+            if needSpawn then
+                if RequestSpawnRemote then
+                    Utils:SafeCallRemote(RequestSpawnRemote, "STARTER-DUSTER")
+                    task.wait(2)
+                    
+                    local waitStart = tick()
+                    while tick() - waitStart < 15 and checkEnabled() do
+                        task.wait(0.5)
+                        myVehicle, isSeated = Vehicle:GetMyVehicle()
+                        if myVehicle and isSeated then break end
                     end
                 end
+            end
 
-                if not checkEnabled() then break end
+            if not checkEnabled() then break end
 
-                -- ========== STEP 3: Move car + player to Zone parking spot ==========
-                setState("Moving to Zone", "Parking car at " .. targetArea .. "...")
-                local parkPos = getZoneCarParkPosition()
-                
-                if parkPos and checkEnabled() then
-                    if Vehicle:IsSeated() then
-                        Movement:GoTo(parkPos, { timeout = 60 })
-                    else
-                        Movement:GoTo(parkPos, { timeout = 60 })
-                    end
-                    task.wait(1)
-                end
+            -- ========== STEP 3: Move car + player to Zone parking spot ==========
+            setState("Moving to Zone", "Parking car at " .. targetArea .. "...")
+            local parkPos = getZoneCarParkPosition()
+            
+            if parkPos and checkEnabled() then
+                Movement:GoTo(parkPos, { timeout = 60 })
+                task.wait(1)
+            end
 
-                if not checkEnabled() then break end
+            if not checkEnabled() then break end
 
-                -- ========== STEP 4: Exit car ==========
-                if Vehicle:IsSeated() then
-                    setState("Exiting Car", "Exiting vehicle...")
-                    Vehicle:ExitByPrompt()
-                    task.wait(1.5)
-                end
+            -- ========== STEP 4: Exit car ==========
+            if Vehicle:IsSeated() then
+                setState("Exiting Car", "Exiting vehicle...")
+                Vehicle:ExitByPrompt()
+                task.wait(1.5)
+            end
 
-                if not checkEnabled() then break end
+            if not checkEnabled() then break end
 
-                -- ========== STEP 5: Move to bid zone ==========
-                setState("Walking to Bid", "Walking to " .. target.garageType)
-                local arrived = Movement:GoTo(CFrame.new(target.position + Vector3.new(0, 3, 0)), { timeout = 60 })
-                if not arrived and checkEnabled() then
-                    setState("Walking to Bid", "Failed to reach, retrying...")
-                    task.wait(3)
-                elseif checkEnabled() then
-                    -- ========== STEP 6: Trigger auction + bid ==========
-                    setState("Triggering Auction", "Starting auction...")
+            -- ========== STEP 5: Move to bid zone ==========
+            setState("Walking to Bid", "Walking to " .. target.garageType)
+            local arrived = Movement:GoTo(CFrame.new(target.position + Vector3.new(0, 3, 0)), { timeout = 60 })
+            if not arrived and checkEnabled() then
+                setState("Walking to Bid", "Failed to reach, retrying...")
+                task.wait(3)
+            elseif checkEnabled() then
+                -- ========== STEP 6: Trigger auction + bid ==========
+                setState("Triggering Auction", "Starting auction...")
+                triggerPrompt(target.prompt)
+                task.wait(1)
+
+                local gui       = LocalPlayer.PlayerGui:FindFirstChild("UIControllerGui")
+                local container = gui and gui:FindFirstChild("AuctionBiddingContainer")
+                if not (container and container.Visible) then
                     triggerPrompt(target.prompt)
                     task.wait(1)
+                end
 
-                    local gui       = LocalPlayer.PlayerGui:FindFirstChild("UIControllerGui")
-                    local container = gui and gui:FindFirstChild("AuctionBiddingContainer")
+                setState("Waiting for Bidding", "Auction in progress, bidding...")
+                State_itemsAvailable = false
+
+                local biddingEndTime = tick()
+                local inAuction = true
+
+                while inAuction and checkEnabled() do
+                    task.wait(0.5)
+                    gui       = LocalPlayer.PlayerGui:FindFirstChild("UIControllerGui")
+                    container = gui and gui:FindFirstChild("AuctionBiddingContainer")
                     if not (container and container.Visible) then
-                        triggerPrompt(target.prompt)
+                        if State_itemsAvailable then
+                            inAuction = false
+                        else
+                            if tick() - biddingEndTime > 8 then inAuction = false end
+                        end
+                    else
+                        biddingEndTime = tick()
+                    end
+                    if tick() - biddingEndTime > 180 then
+                        inAuction = false
+                    end
+                end
+
+                if State_itemsAvailable and checkEnabled() then
+                    -- ========== STEP 7: Collect all items ==========
+                    setState("Collecting Items", "Auction won! Collecting items...")
+
+                    local function findGarageModel()
+                        for _, model in ipairs(Workspace:GetChildren()) do
+                            if model.Name == target.garageType or model.Name:find(target.garageType) then
+                                return model
+                            end
+                        end
+                        return nil
+                    end
+
+                    local garageModel = findGarageModel()
+                    local garagePos   = garageModel and garageModel:GetPivot().Position or target.position
+                    local blacklist   = {}
+
+                    local function isBlacklisted(key)
+                        return blacklist[key] and blacklist[key].attempts >= 3
+                    end
+                    local function recordAttempt(key)
+                        blacklist[key] = blacklist[key] or { attempts = 0 }
+                        blacklist[key].attempts = blacklist[key].attempts + 1
+                    end
+
+                    local garageLoopStart = tick()
+                    local garageCleared   = false
+                    local collectedThisCycle = 0
+
+                    while not garageCleared and checkEnabled() do
+                        if tick() - garageLoopStart > 30 then
+                            setState("Collecting Items", "Garage timeout")
+                            break
+                        end
+
+                        local boxes = findPromptsNear(garagePos, 100, "OpenBoxPrompt")
+                        for i, box in ipairs(boxes) do
+                            if not checkEnabled() then break end
+                            local key = tostring(box.prompt)
+                            if not isBlacklisted(key) then
+                                setState("Collecting Items", string.format("Opening box %d/%d", i, #boxes))
+                                local arrived = Movement:GoTo(CFrame.new(box.position + Vector3.new(0, 3, 0)), { timeout = 15 })
+                                if arrived then
+                                    triggerPrompt(box.prompt)
+                                    collectedThisCycle = collectedThisCycle + 1
+                                    task.wait(0.3)
+                                else
+                                    recordAttempt(key)
+                                end
+                            end
+                        end
+
+                        local pickups = findPromptsNear(target.position, 80, "PickupPrompt")
+                        if #pickups == 0 and garageModel then
+                            pickups = findPromptsNear(garagePos, 100, "PickupPrompt")
+                        end
+                        if #pickups == 0 then
+                            for _, desc in ipairs(Workspace:GetDescendants()) do
+                                if desc:IsA("ProximityPrompt") and desc.Name == "PickupPrompt" then
+                                    local parent = desc.Parent
+                                    if parent and parent:IsA("BasePart") then
+                                        table.insert(pickups, { prompt = desc, part = parent, position = parent.Position, distance = 0 })
+                                    end
+                                end
+                            end
+                            table.sort(pickups, function(a, b) return a.distance < b.distance end)
+                        end
+
+                        for i, pickup in ipairs(pickups) do
+                            if not checkEnabled() then break end
+                            local key = tostring(pickup.prompt)
+                            if not isBlacklisted(key) then
+                                setState("Collecting Items", string.format("Collecting item %d/%d", i, #pickups))
+                                local arrived = Movement:GoTo(CFrame.new(pickup.position + Vector3.new(0, 3, 0)), { timeout = 15 })
+                                if arrived then
+                                    triggerPrompt(pickup.prompt)
+                                    collectedThisCycle = collectedThisCycle + 1
+                                    task.wait(0.3)
+                                else
+                                    recordAttempt(key)
+                                end
+                            end
+                        end
+
+                        task.wait(0.3)
+                        local remainingBoxes = findPromptsNear(garagePos, 100, "OpenBoxPrompt")
+                        local remainingItems = findPromptsNear(garagePos, 100, "PickupPrompt")
+                        if #remainingBoxes == 0 and #remainingItems == 0 then
+                            garageCleared = true
+                        end
+                        task.wait(0.5)
+                    end
+
+                    ItemsCollectedCount = ItemsCollectedCount + collectedThisCycle
+                    setState("Collecting Items", string.format("Collected %d items", collectedThisCycle))
+
+                    if not checkEnabled() then break end
+
+                    -- ========== STEP 8: Return to Zone parking spot ==========
+                    setState("Returning to Zone", "Going back to " .. targetArea .. "...")
+                    if selectedZone ~= targetArea then
+                        selectedZone = targetArea
+                    end
+                    local returnPos = getZoneCarParkPosition()
+                    if returnPos then
+                        Movement:GoTo(returnPos, { timeout = 60 })
                         task.wait(1)
                     end
 
-                    setState("Waiting for Bidding", "Auction in progress, bidding...")
-                    State_itemsAvailable = false
+                    if not checkEnabled() then break end
 
-                    local biddingEndTime = tick()
-                    local inAuction = true
+                    -- ========== STEP 9: Seat car for unload ==========
+                    setState("Entering Vehicle", "Pressing E to enter vehicle...")
+                    myVehicle, isSeated = Vehicle:GetMyVehicle()
+                    
+                    if not myVehicle then
+                        setState("Spawning Car", "No vehicle, requesting...")
+                        if RequestSpawnRemote then
+                            Utils:SafeCallRemote(RequestSpawnRemote, "STARTER-DUSTER")
+                            task.wait(2)
+                            local waitStart = tick()
+                            while tick() - waitStart < 10 and checkEnabled() do
+                                task.wait(0.5)
+                                myVehicle, isSeated = Vehicle:GetMyVehicle()
+                                if myVehicle and isSeated then break end
+                            end
+                        end
+                    end
 
-                    while inAuction and checkEnabled() do
-                        task.wait(0.5)
-                        gui       = LocalPlayer.PlayerGui:FindFirstChild("UIControllerGui")
-                        container = gui and gui:FindFirstChild("AuctionBiddingContainer")
-                        if not (container and container.Visible) then
-                            if State_itemsAvailable then
-                                inAuction = false
-                            else
-                                if tick() - biddingEndTime > 8 then inAuction = false end
+                    if myVehicle and checkEnabled() then
+                        local entered = false
+                        for attempt = 1, 3 do
+                            if not checkEnabled() then break end
+                            entered = Vehicle:EnterByPrompt(myVehicle)
+                            if entered then break end
+                            setState("Entering Vehicle", string.format("Attempt %d/3 failed", attempt))
+                            task.wait(1)
+                        end
+
+                        if entered then
+                            task.wait(0.5)
+
+                            setState("Waiting for Items", "Waiting for items to load into trunk...")
+                            local waitStart = tick()
+                            while tick() - waitStart < 5 and checkEnabled() do
+                                task.wait(0.3)
+                            end
+
+                            setState("Unloading Trunk", "Transferring items to inventory...")
+                            local unloadSuccess = false
+                            local unloadAttempts = 0
+
+                            while not unloadSuccess and unloadAttempts < 3 and checkEnabled() do
+                                unloadAttempts = unloadAttempts + 1
+                                
+                                if not Vehicle:IsSeated() then
+                                    Vehicle:EnterByPrompt(myVehicle)
+                                    task.wait(1)
+                                end
+
+                                if Vehicle:IsSeated() and TransferVehicleItemsToInventory then
+                                    local itemUids = getVehicleItems(myVehicle)
+                                    if #itemUids > 0 then
+                                        setState("Unloading Trunk", string.format("Unloading %d items (attempt %d)", #itemUids, unloadAttempts))
+                                        local ok = Utils:SafeCallRemote(TransferVehicleItemsToInventory, itemUids)
+                                        if ok then
+                                            task.wait(2)
+                                            local newItems = getVehicleItems(myVehicle)
+                                            if #newItems == 0 or #newItems < #itemUids then
+                                                unloadSuccess = true
+                                                setState("Unloading Trunk", "Unload complete!")
+                                            end
+                                        end
+                                    else
+                                        unloadSuccess = true
+                                        setState("Unloading Trunk", "No items to unload")
+                                    end
+                                end
+                                task.wait(0.5)
+                            end
+
+                            task.wait(1)
+
+                            setState("Exiting Vehicle", "Pressing E to exit vehicle...")
+                            for attempt = 1, 3 do
+                                if not Vehicle:IsSeated() then break end
+                                Vehicle:ExitByPrompt()
+                                task.wait(0.8)
                             end
                         else
-                            biddingEndTime = tick()
-                        end
-                        if tick() - biddingEndTime > 180 then
-                            inAuction = false
+                            setState("Entering Vehicle", "FAILED to enter, skipping unload")
+                            task.wait(2)
                         end
                     end
 
-                    if State_itemsAvailable and checkEnabled() then
-                        -- ========== STEP 7: Collect all items ==========
-                        setState("Collecting Items", "Auction won! Collecting items...")
+                    if not checkEnabled() then break end
 
-                        local function findGarageModel()
-                            for _, model in ipairs(Workspace:GetChildren()) do
-                                if model.Name == target.garageType or model.Name:find(target.garageType) then
-                                    return model
-                                end
-                            end
-                            return nil
-                        end
+                    -- ========== STEP 10: Walk to base ==========
+                    setState("Walking to Base", "Returning to base...")
 
-                        local garageModel = findGarageModel()
-                        local garagePos   = garageModel and garageModel:GetPivot().Position or target.position
-                        local blacklist   = {}
-
-                        local function isBlacklisted(key)
-                            return blacklist[key] and blacklist[key].attempts >= 3
-                        end
-                        local function recordAttempt(key)
-                            blacklist[key] = blacklist[key] or { attempts = 0 }
-                            blacklist[key].attempts = blacklist[key].attempts + 1
-                        end
-
-                        local garageLoopStart = tick()
-                        local garageCleared   = false
-                        local collectedThisCycle = 0
-
-                        while not garageCleared and checkEnabled() do
-                            if tick() - garageLoopStart > 30 then
-                                setState("Collecting Items", "Garage timeout")
-                                break
-                            end
-
-                            local boxes = findPromptsNear(garagePos, 100, "OpenBoxPrompt")
-                            for i, box in ipairs(boxes) do
-                                if not checkEnabled() then break end
-                                local key = tostring(box.prompt)
-                                if not isBlacklisted(key) then
-                                    setState("Collecting Items", string.format("Opening box %d/%d", i, #boxes))
-                                    local arrived = Movement:GoTo(CFrame.new(box.position + Vector3.new(0, 3, 0)), { timeout = 15 })
-                                    if arrived then
-                                        triggerPrompt(box.prompt)
-                                        collectedThisCycle = collectedThisCycle + 1
-                                        task.wait(0.3)
-                                    else
-                                        recordAttempt(key)
-                                    end
-                                end
-                            end
-
-                            local pickups = findPromptsNear(target.position, 80, "PickupPrompt")
-                            if #pickups == 0 and garageModel then
-                                pickups = findPromptsNear(garagePos, 100, "PickupPrompt")
-                            end
-                            if #pickups == 0 then
-                                for _, desc in ipairs(Workspace:GetDescendants()) do
-                                    if desc:IsA("ProximityPrompt") and desc.Name == "PickupPrompt" then
-                                        local parent = desc.Parent
-                                        if parent and parent:IsA("BasePart") then
-                                            table.insert(pickups, { prompt = desc, part = parent, position = parent.Position, distance = 0 })
-                                        end
-                                    end
-                                end
-                                table.sort(pickups, function(a, b) return a.distance < b.distance end)
-                            end
-
-                            for i, pickup in ipairs(pickups) do
-                                if not checkEnabled() then break end
-                                local key = tostring(pickup.prompt)
-                                if not isBlacklisted(key) then
-                                    setState("Collecting Items", string.format("Collecting item %d/%d", i, #pickups))
-                                    local arrived = Movement:GoTo(CFrame.new(pickup.position + Vector3.new(0, 3, 0)), { timeout = 15 })
-                                    if arrived then
-                                        triggerPrompt(pickup.prompt)
-                                        collectedThisCycle = collectedThisCycle + 1
-                                        task.wait(0.3)
-                                    else
-                                        recordAttempt(key)
-                                    end
-                                end
-                            end
-
-                            task.wait(0.3)
-                            local remainingBoxes = findPromptsNear(garagePos, 100, "OpenBoxPrompt")
-                            local remainingItems = findPromptsNear(garagePos, 100, "PickupPrompt")
-                            if #remainingBoxes == 0 and #remainingItems == 0 then
-                                garageCleared = true
-                            end
+                    local plot = getMyPlot()
+                    if plot then
+                        local plotPivot = Utils:GetSafePivot(plot)
+                        if plotPivot then
+                            Movement:GoTo(plotPivot + Vector3.new(0, 5, 0), { timeout = 60 })
                             task.wait(0.5)
                         end
+                    end
 
-                        ItemsCollectedCount = ItemsCollectedCount + collectedThisCycle
-                        setState("Collecting Items", string.format("Collected %d items", collectedThisCycle))
-
-                        if not checkEnabled() then break end
-
-                        -- ========== STEP 8: Return to Zone parking spot ==========
-                        setState("Returning to Zone", "Going back to " .. targetArea .. "...")
-                        if selectedZone ~= targetArea then
-                            selectedZone = targetArea
+                    local unpackZone = findUnpackZone()
+                    if unpackZone then
+                        local unp = Utils:GetSafePivot(unpackZone)
+                        if unp then
+                            Movement:GoTo(unp + Vector3.new(0, 5, 0), { timeout = 30 })
+                            task.wait(0.5)
                         end
-                        local returnPos = getZoneCarParkPosition()
-                        if returnPos then
-                            Movement:GoTo(returnPos, { timeout = 60 })
-                            task.wait(1)
+                    end
+
+                    if not checkEnabled() then break end
+
+                    -- ========== STEP 11: Place all items ==========
+                    setState("Placing Items", "Placing items at base...")
+                    while checkEnabled() do
+                        plot = getMyPlot()
+                        if not (plot and PlaceStockItem) then break end
+
+                        local success, inventory = false, nil
+                        if GetPlayerInventory then
+                            success, inventory = pcall(function()
+                                if GetPlayerInventory:IsA("RemoteFunction") then
+                                    return GetPlayerInventory:InvokeServer()
+                                end
+                            end)
+                        end
+                        if not success or type(inventory) ~= "table" then
+                            inventory = getLocalInventory()
                         end
 
-                        if not checkEnabled() then break end
-
-                        -- ========== STEP 9: Seat car for unload ==========
-                        setState("Entering Vehicle", "Pressing E to enter vehicle...")
-                        myVehicle, isSeated = Vehicle:GetMyVehicle()
+                        if not inventory or type(inventory) ~= "table" then break end
                         
-                        if not myVehicle then
-                            setState("Spawning Car", "No vehicle, requesting...")
-                            if RequestSpawnRemote then
-                                Utils:SafeCallRemote(RequestSpawnRemote, "STARTER-DUSTER")
-                                task.wait(2)
-                                local waitStart = tick()
-                                while tick() - waitStart < 10 and checkEnabled() do
-                                    task.wait(0.5)
-                                    myVehicle, isSeated = Vehicle:GetMyVehicle()
-                                    if myVehicle and isSeated then break end
-                                end
-                            end
-                        end
+                        local itemCount = 0
+                        for _ in pairs(inventory) do itemCount = itemCount + 1 end
+                        if itemCount == 0 then break end
 
-                        if myVehicle and checkEnabled() then
-                            local entered = false
-                            for attempt = 1, 3 do
-                                if not checkEnabled() then break end
-                                entered = Vehicle:EnterByPrompt(myVehicle)
-                                if entered then break end
-                                setState("Entering Vehicle", string.format("Attempt %d/3 failed", attempt))
-                                task.wait(1)
-                            end
-
-                            if entered then
-                                task.wait(0.5)
-
-                                setState("Waiting for Items", "Waiting for items to load into trunk...")
-                                local waitStart = tick()
-                                while tick() - waitStart < 5 and checkEnabled() do
-                                    task.wait(0.3)
-                                end
-
-                                setState("Unloading Trunk", "Transferring items to inventory...")
-                                local unloadSuccess = false
-                                local unloadAttempts = 0
-
-                                while not unloadSuccess and unloadAttempts < 3 and checkEnabled() do
-                                    unloadAttempts = unloadAttempts + 1
-                                    
-                                    if not Vehicle:IsSeated() then
-                                        Vehicle:EnterByPrompt(myVehicle)
-                                        task.wait(1)
-                                    end
-
-                                    if Vehicle:IsSeated() and TransferVehicleItemsToInventory then
-                                        local itemUids = getVehicleItems(myVehicle)
-                                        if #itemUids > 0 then
-                                            setState("Unloading Trunk", string.format("Unloading %d items (attempt %d)", #itemUids, unloadAttempts))
-                                            local ok = Utils:SafeCallRemote(TransferVehicleItemsToInventory, itemUids)
-                                            if ok then
-                                                task.wait(2)
-                                                local newItems = getVehicleItems(myVehicle)
-                                                if #newItems == 0 or #newItems < #itemUids then
-                                                    unloadSuccess = true
-                                                    setState("Unloading Trunk", "Unload complete!")
-                                                end
-                                            end
-                                        else
-                                            unloadSuccess = true
-                                            setState("Unloading Trunk", "No items to unload")
+                        local emptySnapPoints = {}
+                        for _, desc in ipairs(plot:GetDescendants()) do
+                            if desc:IsA("ProximityPrompt") then
+                                local promptName = desc.Name:lower()
+                                local actionText = desc.ActionText:lower()
+                                if promptName:find("additem") or actionText:find("add item") then
+                                    local snapPoint = desc.Parent
+                                    if snapPoint and (snapPoint:IsA("BasePart") or snapPoint:IsA("Attachment")) then
+                                        local current = snapPoint
+                                        local shelfGUID = nil
+                                        while current and current ~= plot do
+                                            shelfGUID = current:GetAttribute("GUID")
+                                            if shelfGUID then break end
+                                            current = current.Parent
+                                        end
+                                        if shelfGUID then
+                                            local worldCFrame = snapPoint:IsA("Attachment") and snapPoint.WorldCFrame or snapPoint.CFrame
+                                            table.insert(emptySnapPoints, { worldCFrame = worldCFrame, shelfGUID = shelfGUID, name = snapPoint.Name })
                                         end
                                     end
-                                    task.wait(0.5)
                                 end
-
-                                task.wait(1)
-
-                                setState("Exiting Vehicle", "Pressing E to exit vehicle...")
-                                for attempt = 1, 3 do
-                                    if not Vehicle:IsSeated() then break end
-                                    Vehicle:ExitByPrompt()
-                                    task.wait(0.8)
-                                end
-                            else
-                                setState("Entering Vehicle", "FAILED to enter, skipping unload")
-                                task.wait(2)
                             end
                         end
 
-                        if not checkEnabled() then break end
-
-                        -- ========== STEP 13: Walk to base ==========
-                        setState("Walking to Base", "Returning to base...")
-
-                        local plot = getMyPlot()
-                        if plot then
-                            local plotPivot = Utils:GetSafePivot(plot)
-                            if plotPivot then
-                                Movement:GoTo(plotPivot + Vector3.new(0, 5, 0), { timeout = 60 })
-                                task.wait(0.5)
-                            end
+                        if #emptySnapPoints == 0 then
+                            setState("Placing Items", "No more empty snap points!")
+                            break
                         end
 
-                        local unpackZone = findUnpackZone()
-                        if unpackZone then
-                            local unp = Utils:GetSafePivot(unpackZone)
-                            if unp then
-                                Movement:GoTo(unp + Vector3.new(0, 5, 0), { timeout = 30 })
-                                task.wait(0.5)
-                            end
-                        end
-
-                        if not checkEnabled() then break end
-
-                        -- ========== STEP 14: Place all items ==========
-                        setState("Placing Items", "Placing items at base (loop until empty)...")
-                        while checkEnabled() do
-                            plot = getMyPlot()
-                            if not (plot and PlaceStockItem) then break end
-
-                            local success, inventory = false, nil
-                            if GetPlayerInventory then
-                                success, inventory = pcall(function()
-                                    if GetPlayerInventory:IsA("RemoteFunction") then
-                                        return GetPlayerInventory:InvokeServer()
+                        local placedThisRound = 0
+                        for itemUID, itemData in pairs(inventory) do
+                            if not checkEnabled() then break end
+                            if #emptySnapPoints == 0 then break end
+                            local snapPoint = table.remove(emptySnapPoints, 1)
+                            local itemId = type(itemData) == "table" and (itemData.ItemId or itemData.itemId or itemData.Id or itemData.id) or itemData
+                            if itemUID and itemId then
+                                setState("Placing Items", string.format("Placing item %d (snap %d)", placedThisRound + 1, #emptySnapPoints))
+                                Utils:SafeCall(function()
+                                    if PlaceStockItem:IsA("RemoteEvent") then
+                                        PlaceStockItem:FireServer(itemUID, tostring(itemId), snapPoint.worldCFrame, 0, snapPoint.shelfGUID, snapPoint.name)
+                                    elseif PlaceStockItem:IsA("RemoteFunction") then
+                                        PlaceStockItem:InvokeServer(itemUID, tostring(itemId), snapPoint.worldCFrame, 0, snapPoint.shelfGUID, snapPoint.name)
                                     end
                                 end)
+                                placedThisRound = placedThisRound + 1
+                                ItemsPlacedCount = ItemsPlacedCount + 1
+                                task.wait(0.4)
                             end
-                            if not success or type(inventory) ~= "table" then
-                                inventory = getLocalInventory()
-                            end
-
-                            if not inventory or type(inventory) ~= "table" then break end
-                            
-                            local itemCount = 0
-                            for _ in pairs(inventory) do itemCount = itemCount + 1 end
-                            if itemCount == 0 then break end
-
-                            local emptySnapPoints = {}
-                            for _, desc in ipairs(plot:GetDescendants()) do
-                                if desc:IsA("ProximityPrompt") then
-                                    local promptName = desc.Name:lower()
-                                    local actionText = desc.ActionText:lower()
-                                    if promptName:find("additem") or actionText:find("add item") then
-                                        local snapPoint = desc.Parent
-                                        if snapPoint and (snapPoint:IsA("BasePart") or snapPoint:IsA("Attachment")) then
-                                            local current = snapPoint
-                                            local shelfGUID = nil
-                                            while current and current ~= plot do
-                                                shelfGUID = current:GetAttribute("GUID")
-                                                if shelfGUID then break end
-                                                current = current.Parent
-                                            end
-                                            if shelfGUID then
-                                                local worldCFrame = snapPoint:IsA("Attachment") and snapPoint.WorldCFrame or snapPoint.CFrame
-                                                table.insert(emptySnapPoints, { worldCFrame = worldCFrame, shelfGUID = shelfGUID, name = snapPoint.Name })
-                                            end
-                                        end
-                                    end
-                                end
-                            end
-
-                            if #emptySnapPoints == 0 then
-                                setState("Placing Items", "No more empty snap points!")
-                                break
-                            end
-
-                            local placedThisRound = 0
-                            for itemUID, itemData in pairs(inventory) do
-                                if not checkEnabled() then break end
-                                if #emptySnapPoints == 0 then break end
-                                local snapPoint = table.remove(emptySnapPoints, 1)
-                                local itemId = type(itemData) == "table" and (itemData.ItemId or itemData.itemId or itemData.Id or itemData.id) or itemData
-                                if itemUID and itemId then
-                                    setState("Placing Items", string.format("Placing item %d (snap %d)", placedThisRound + 1, #emptySnapPoints))
-                                    Utils:SafeCall(function()
-                                        if PlaceStockItem:IsA("RemoteEvent") then
-                                            PlaceStockItem:FireServer(itemUID, tostring(itemId), snapPoint.worldCFrame, 0, snapPoint.shelfGUID, snapPoint.name)
-                                        elseif PlaceStockItem:IsA("RemoteFunction") then
-                                            PlaceStockItem:InvokeServer(itemUID, tostring(itemId), snapPoint.worldCFrame, 0, snapPoint.shelfGUID, snapPoint.name)
-                                        end
-                                    end)
-                                    placedThisRound = placedThisRound + 1
-                                    ItemsPlacedCount = ItemsPlacedCount + 1
-                                    task.wait(0.4)
-                                end
-                            end
-                            
-                            if placedThisRound == 0 then
-                                setState("Placing Items", "Could not place any items")
-                                break
-                            end
-                            
-                            setState("Placing Items", string.format("Placed %d items, checking for more...", placedThisRound))
-                            task.wait(1)
                         end
-                    else
-                        setState("Bidding", "Auction lost / no items")
-                        task.wait(2)
+                        
+                        if placedThisRound == 0 then
+                            setState("Placing Items", "Could not place any items")
+                            break
+                        end
+                        
+                        setState("Placing Items", string.format("Placed %d items, checking for more...", placedThisRound))
+                        task.wait(1)
                     end
+                else
+                    setState("Bidding", "Auction lost / no items")
+                    task.wait(2)
+                end
 
-                    setState("Loop Delay", "Cycle complete, restarting in 3s...")
-                    local delayStart = tick()
-                    while tick() - delayStart < 3 and checkEnabled() do
-                        task.wait(0.5)
-                    end
+                setState("Loop Delay", "Cycle complete, restarting in 3s...")
+                local delayStart = tick()
+                while tick() - delayStart < 3 and checkEnabled() do
+                    task.wait(0.5)
                 end
             end
         end
