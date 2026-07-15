@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v027.22"
+local ver     = "v028.50"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -25,7 +25,6 @@ local HttpService       = game:GetService("HttpService")
 local TeleportService   = game:GetService("TeleportService")
 local TweenService      = game:GetService("TweenService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local PathfindingService = game:GetService("PathfindingService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
@@ -164,7 +163,7 @@ function Vehicle:GetDistanceFromPlayer(vehicle)
     return (root.Position - vehiclePart.Position).Magnitude
 end
 
--- ขึ้นรถ (สำหรับ pathfinder เท่านั้น - เข้มงวด)
+-- ขึ้นรถ
 function Vehicle:EnterByPrompt(vehicle)
     if not vehicle then return false end
     if self:IsSeated() then return true end
@@ -178,7 +177,6 @@ function Vehicle:EnterByPrompt(vehicle)
     local root = character:FindFirstChild("HumanoidRootPart")
     if not hum or not root then return false end
 
-    -- เดินไปใกล้ที่นั่งก่อน (ไม่ต้องเข้าไปในตัวรถ แค่ใกล้พอ)
     if seat:IsA("BasePart") then
         local dist = (root.Position - seat.Position).Magnitude
         if dist > 15 then
@@ -187,7 +185,6 @@ function Vehicle:EnterByPrompt(vehicle)
         end
     end
 
-    -- หา ProximityPrompt
     local prompt = nil
     for _, child in ipairs(seat:GetChildren()) do
         if child:IsA("ProximityPrompt") then prompt = child; break end
@@ -201,7 +198,6 @@ function Vehicle:EnterByPrompt(vehicle)
         end
     end
 
-    -- ลองกด E
     if prompt then
         pcall(function() fireproximityprompt(prompt) end)
         local start = tick()
@@ -210,7 +206,6 @@ function Vehicle:EnterByPrompt(vehicle)
         end
     end
 
-    -- Fallback hum.Sit
     if not self:IsSeated() then
         pcall(function() hum.Sit = seat end)
         local start = tick()
@@ -231,7 +226,6 @@ function Vehicle:ExitByPrompt()
     local seatedVehicle = self:GetSeatedVehicle()
     local seat = seatedVehicle and seatedVehicle:FindFirstChildWhichIsA("VehicleSeat", true)
 
-    -- กด E
     if seat then
         local prompt = nil
         for _, child in ipairs(seat:GetChildren()) do
@@ -243,14 +237,12 @@ function Vehicle:ExitByPrompt()
         end
     end
 
-    -- hum.Sit = false
     if self:IsSeated() then
         pcall(function() hum.Sit = false end)
         pcall(function() hum.Jump = true end)
         task.wait(0.5)
     end
 
-    -- VIM key E (mobile)
     if self:IsSeated() then
         pcall(function()
             VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
@@ -260,7 +252,6 @@ function Vehicle:ExitByPrompt()
         task.wait(0.5)
     end
 
-    -- Retry loop
     local maxRetries = 3
     local retry = 0
     while self:IsSeated() and retry < maxRetries do
@@ -276,7 +267,7 @@ end
 function Vehicle:Enter(vehicle) return self:EnterByPrompt(vehicle) end
 function Vehicle:Exit() return self:ExitByPrompt() end
 
--- ====================== MOVEMENT SYSTEM ======================
+-- ====================== MOVEMENT SYSTEM (Tween/Teleport only) ======================
 local Movement = {}
 Movement.Mode        = "Tween"
 Movement.Speed       = 200
@@ -290,14 +281,14 @@ function Movement:Cancel()
     end
 end
 
+-- Move character + vehicle together
 function Movement:GoTo(targetCFrame, options)
     options = options or {}
     local character = LocalPlayer.Character
     if not character then return false end
 
     local root = character:FindFirstChild("HumanoidRootPart")
-    local hum  = character:FindFirstChildOfClass("Humanoid")
-    if not root or not hum then return false end
+    if not root then return false end
 
     local vehicle = Vehicle:GetSeatedVehicle()
     local subject = vehicle or character
@@ -310,8 +301,6 @@ function Movement:GoTo(targetCFrame, options)
         return self:Teleport(subject, targetCFrame)
     elseif self.Mode == "Tween" then
         return self:Tween(subject, subjectRoot, targetCFrame, options.timeout or 30)
-    elseif self.Mode == "Walk" then
-        return self:Walk(hum, root, targetCFrame, options.timeout or 60)
     end
     return false
 end
@@ -358,60 +347,6 @@ function Movement:Tween(subject, subjectRoot, targetCFrame, timeout)
         return true
     end
     return tweenComplete
-end
-
-function Movement:Walk(hum, root, targetCFrame, timeout)
-    local targetPos = targetCFrame.Position
-    local startTick = tick()
-    local dist      = (root.Position - targetPos).Magnitude
-
-    if dist < self.ArrivalDist then return true end
-
-    if hum and hum.WalkSpeed ~= self.Speed then
-        hum.WalkSpeed = self.Speed
-    end
-
-    while (tick() - startTick) < (timeout or 60) do
-        local character = LocalPlayer.Character
-        if not character then return false end
-        root = character:FindFirstChild("HumanoidRootPart")
-        hum  = character:FindFirstChildOfClass("Humanoid")
-        if not root or not hum then return false end
-
-        dist = (root.Position - targetPos).Magnitude
-        if dist < self.ArrivalDist then return true end
-
-        local pathParams = {
-            AgentRadius = 2, AgentHeight = 5,
-            AgentCanJump = true, AgentMaxSlope = 45,
-            WaypointSpacing = 6
-        }
-
-        local ok, path = pcall(function()
-            local p = PathfindingService:CreatePath(pathParams)
-            p:ComputeAsync(root.Position, targetPos)
-            return p
-        end)
-
-        if ok and path and path.Status == Enum.PathStatus.Success then
-            local waypoints = path:GetWaypoints()
-            for _, wp in ipairs(waypoints) do
-                if tick() - startTick >= (timeout or 60) then return false end
-                if wp.Action == Enum.PathWaypointAction.Jump then hum.Jump = true end
-                hum:MoveTo(wp.Position)
-                local wpStart = tick()
-                repeat
-                    task.wait(0.1)
-                    root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    if not root then return false end
-                until (root.Position - wp.Position).Magnitude < 6 or (tick() - wpStart) > 4
-            end
-        else
-            hum:MoveTo(targetPos)
-            task.wait(1)
-        end
-    end
-    return false
 end
 
 -- ====================== VERSION CHECK ======================
@@ -819,12 +754,6 @@ local function getRoot()
     local char = LocalPlayer.Character
     if not char then return nil end
     return char:FindFirstChild("HumanoidRootPart")
-end
-
-local function getHumanoidPF()
-    local char = LocalPlayer.Character
-    if not char then return nil end
-    return char:FindFirstChildOfClass("Humanoid")
 end
 
 local function findNearestAuction()
@@ -1487,10 +1416,11 @@ PathfinderTab:Toggle({
 PathfinderTab:Divider()
 PathfinderTab:Section({ Title = "Movement Farm", Icon = "footprints" })
 
+-- CHANGED: ลบ Walk ออก เหลือแค่ Tween กับ Teleport
 PathfinderTab:Dropdown({
     Title  = "Movement Type for Farm",
-    Desc   = "Choose how the bot moves between locations.",
-    Values = { "Tween", "Teleport", "Walk" },
+    Desc   = "Tween moves smoothly, Teleport is instant.",
+    Values = { "Tween", "Teleport" },
     Multi  = false,
     Value  = settings.FarmMovementMode or "Tween",
     Callback = function(v)
@@ -1504,7 +1434,7 @@ PathfinderTab:Dropdown({
 
 PathfinderTab:Slider({
     Title = "Movement Speed (studs/s)",
-    Desc  = "Used by both Walk and Tween modes.",
+    Desc  = "Speed for Tween mode.",
     Value = { Min = 50, Max = 500, Default = settings.MovementSpeed or 200 },
     Step  = 10,
     Callback = function(v)
@@ -1516,7 +1446,7 @@ PathfinderTab:Slider({
 
 PathfinderTab:Paragraph({
     Title = "Movement Info",
-    Desc  = "• Tween: Smooth, fast (uses Movement Speed as studs/s)\n• Teleport: Instant\n• Walk: Real PathfindingService, speed = Movement Speed",
+    Desc  = "• Tween: Smooth movement (uses Movement Speed as studs/s)\n• Teleport: Instant teleport to destination\n• Walk mode has been removed",
 })
 
 PathfinderTab:Divider()
@@ -1626,6 +1556,7 @@ TeleportTab:Button({
 TeleportTab:Divider()
 TeleportTab:Section({ Title = "Zones", Icon = "map" })
 
+-- ZONE LIST (ใช้ทั้ง Teleport และ Pathfinder)
 local zoneList = {
     ["Junk Yard"] = function()
         local areas = Workspace:FindFirstChild("Areas")
@@ -1668,18 +1599,25 @@ TeleportTab:Dropdown({
     end
 })
 
+-- ฟังก์ชันคำนวณจุดจอดรถ (ใช้ร่วมกันระหว่าง Teleport และ Pathfinder)
+local function getZoneCarParkPosition()
+    local finder = zoneList[selectedZone]
+    if not finder then return nil end
+    local part  = finder()
+    local pivot = part and Utils:GetSafePivot(part)
+    if pivot then
+        return pivot + Vector3.new(0, 3, 0)
+    end
+    return nil
+end
+
 TeleportTab:Button({
     Title = "TP to Zone",
-    Desc  = "Teleport to the selected zone.",
+    Desc  = "Teleport to the selected zone. (Same parking spot used by Auto Farm)",
     Callback = function()
-        local finder = zoneList[selectedZone]
-        if not finder then
-            Utils:Notify("Teleport", "Invalid zone selected.", "alert-triangle", 3); return
-        end
-        local part  = finder()
-        local pivot = part and Utils:GetSafePivot(part)
-        if pivot then
-            teleportTo(pivot + Vector3.new(0, 5, 0))
+        local pos = getZoneCarParkPosition()
+        if pos then
+            teleportTo(pos)
         else
             Utils:Notify("Teleport", "Location not found.", "alert-triangle", 3)
         end
@@ -1732,13 +1670,14 @@ if not ui.Creator then ui.Creator = {} end
 Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 Info:Divider()
 Info:Paragraph({
-    Title = "Update: 07/15/2026 | CL: " .. ver,
-    Desc  = [[• [ FIX ] Spawn vehicle only at Bid Zone
-• [ FIX ] Improved vehicle entry for Trunk Unload
-• [ FIX ] Complete Trunk Unload before returning to Base
-• [ FIX ] Enter vehicle from front/door position
-• [ NEW ] Auto Flow: Move → Spawn → Exit → Bid → Collect → Seat → Unload → Exit → Base → Place
-• [ FIX ] Prevent skipping Trunk Unload after seating.]],
+    Title = "Update: 07/16/2026 | CL: " .. ver,
+    Desc  = [[• [ NEW ] Car is parked at Zone teleport location (not at Bid)
+• [ NEW ] Player and vehicle move together to parking spot
+• [ REMOVED ] Walk mode from Farm Movement (Tween/Teleport only)
+• [ FIX ] Prevent entering vehicle at Bid location
+• [ FIX ] Car park position matches Teleport Tab Zone
+• [ NEW ] Auto Flow: Spawn car → Park at zone → Exit → Move to Bid → Collect → Seat → Unload → Exit → Base → Place
+• [ FIX ] Loop continues until toggle is turned off]],
 })
 Info:Divider()
 
@@ -2224,18 +2163,6 @@ local function pathfinderLoop()
         return PathfinderEnabled and not PathfinderStopping
     end
 
-    -- ============== ฟังก์ชันช่วย: เดินไปข้างรถ/หน้ารถ ==============
-    local function goToVehicleSide(vehicle)
-        if not vehicle then return false end
-        local vehiclePart = vehicle.PrimaryPart or vehicle:FindFirstChildWhichIsA("BasePart", true)
-        if not vehiclePart then return false end
-
-        -- เดินไปตำแหน่งข้างรถ (ไม่ใช่บนตัวรถ)
-        local vehiclePos = vehiclePart.Position
-        local sidePos = vehiclePos + Vector3.new(0, 3, 5)  -- หน้ารถ 5 studs
-        return Movement:GoTo(CFrame.new(sidePos), { timeout = 20 })
-    end
-
     while PathfinderEnabled and not PathfinderStopping do
         -- ========== STEP 1: หา auction ==========
         setState("Finding Auction", "Searching for available auctions...")
@@ -2246,65 +2173,76 @@ local function pathfinderLoop()
             local waitStart = tick()
             while tick() - waitStart < 5 and checkEnabled() do task.wait(0.5) end
         else
-            -- ========== STEP 2: Move to bid zone ==========
-            setState("Moving to Bid Zone", "Walking to " .. target.garageType)
-            local arrived = Movement:GoTo(CFrame.new(target.position + Vector3.new(0, 3, 0)), { timeout = 60 })
-            if not arrived and checkEnabled() then
-                setState("Moving to Bid Zone", "Failed to reach, retrying...")
-                task.wait(3)
-            elseif checkEnabled() then
-
-                -- ========== STEP 3: Spawn car (ถ้ายังไม่มี) ==========
-                local myVehicle, isSeated = Vehicle:GetMyVehicle()
-                local needSpawn = false
-                
-                if not myVehicle then
-                    needSpawn = true
-                    setState("Spawning Car", "No vehicle found, requesting STARTER-DUSTER...")
-                elseif not isSeated then
-                    -- มีรถ แต่ยังไม่ได้นั่ง → spawn ใหม่
-                    needSpawn = true
-                    setState("Spawning Car", "Vehicle exists but not seated, requesting new one...")
-                end
-                
-                if needSpawn then
-                    if RequestSpawnRemote then
-                        Utils:SafeCallRemote(RequestSpawnRemote, "STARTER-DUSTER")
-                        task.wait(2)
-                        
-                        -- รอรถมา (สูงสุด 15 วินาที)
-                        local waitStart = tick()
-                        while tick() - waitStart < 15 and checkEnabled() do
-                            task.wait(0.5)
-                            myVehicle, isSeated = Vehicle:GetMyVehicle()
-                            if myVehicle and isSeated then 
-                                setState("Spawning Car", "Vehicle spawned & seated!")
-                                break 
-                            end
-                        end
-                        
-                        -- ถ้ายังไม่ได้นั่ง ลองอีกครั้ง
-                        if not isSeated then
-                            setState("Spawning Car", "Waiting for auto-seat...")
-                            task.wait(3)
-                            myVehicle, isSeated = Vehicle:GetMyVehicle()
-                        end
-                    else
-                        setState("Error", "RequestSpawn remote not ready!")
-                        task.wait(3)
+            -- ========== STEP 2: Spawn car ==========
+            setState("Spawning Car", "Requesting STARTER-DUSTER...")
+            local myVehicle, isSeated = Vehicle:GetMyVehicle()
+            local needSpawn = false
+            
+            if not myVehicle then
+                needSpawn = true
+            elseif not isSeated then
+                needSpawn = true
+            end
+            
+            if needSpawn then
+                if RequestSpawnRemote then
+                    Utils:SafeCallRemote(RequestSpawnRemote, "STARTER-DUSTER")
+                    task.wait(2)
+                    
+                    local waitStart = tick()
+                    while tick() - waitStart < 15 and checkEnabled() do
+                        task.wait(0.5)
+                        myVehicle, isSeated = Vehicle:GetMyVehicle()
+                        if myVehicle and isSeated then break end
                     end
                 end
+            end
 
-                -- ถ้าเรียกรถแล้วเรานั่งอยู่ → ลงก่อน
+            if not checkEnabled() then break end
+
+            -- ========== STEP 3: Move car + player to Zone parking spot ==========
+            setState("Moving to Zone", "Parking car at " .. selectedZone .. " zone...")
+            local parkPos = getZoneCarParkPosition()
+            
+            if parkPos and checkEnabled() then
+                -- ถ้านั่งรถอยู่ ให้ย้ายรถ+ตัวเราไปด้วยกัน
+                -- ถ้ายังไม่นั่ง ก็ย้ายตัวเราไป พอรถ spawn มันจะมาเอง (ถ้าเกมเขาทำงั้น)
                 if Vehicle:IsSeated() then
-                    setState("Exiting Vehicle", "Auto-spawned into vehicle, exiting...")
-                    Vehicle:ExitByPrompt()
-                    task.wait(1.5)
+                    -- นั่งรถอยู่ → ย้ายพร้อมรถ
+                    Movement:GoTo(parkPos, { timeout = 60 })
+                else
+                    -- ยังไม่นั่ง → ย้ายตัวเราก่อน ถ้ารถมาแล้วก็จะตามมาเอง
+                    myVehicle = Vehicle:GetMyVehicle()
+                    if myVehicle and myVehicle.PrimaryPart then
+                        -- ย้ายทั้งคู่
+                        Movement:GoTo(parkPos, { timeout = 60 })
+                    else
+                        -- ไม่มีรถ ก็เดินไปเอง
+                        Movement:GoTo(parkPos, { timeout = 60 })
+                    end
                 end
+                task.wait(1)
+            end
 
-                if not checkEnabled() then break end
+            if not checkEnabled() then break end
 
-                -- ========== STEP 4: Trigger auction ==========
+            -- ========== STEP 4: Exit car (ถ้านั่งอยู่) ==========
+            if Vehicle:IsSeated() then
+                setState("Exiting Car", "Exiting vehicle...")
+                Vehicle:ExitByPrompt()
+                task.wait(1.5)
+            end
+
+            if not checkEnabled() then break end
+
+            -- ========== STEP 5: Move to bid zone ==========
+            setState("Walking to Bid", "Moving to " .. target.garageType)
+            local arrived = Movement:GoTo(CFrame.new(target.position + Vector3.new(0, 3, 0)), { timeout = 60 })
+            if not arrived and checkEnabled() then
+                setState("Walking to Bid", "Failed to reach, retrying...")
+                task.wait(3)
+            elseif checkEnabled() then
+                -- ========== STEP 6: Trigger auction + bid ==========
                 setState("Triggering Auction", "Starting auction...")
                 triggerPrompt(target.prompt)
                 task.wait(1)
@@ -2316,7 +2254,6 @@ local function pathfinderLoop()
                     task.wait(1)
                 end
 
-                -- ========== STEP 5: รอ bidding ==========
                 setState("Waiting for Bidding", "Auction in progress, bidding...")
                 State_itemsAvailable = false
 
@@ -2342,7 +2279,7 @@ local function pathfinderLoop()
                 end
 
                 if State_itemsAvailable and checkEnabled() then
-                    -- ========== STEP 6: เก็บของ ==========
+                    -- ========== STEP 7: Collect all items ==========
                     setState("Collecting Items", "Auction won! Collecting items...")
 
                     local function findGarageModel()
@@ -2439,34 +2376,12 @@ local function pathfinderLoop()
 
                     if not checkEnabled() then break end
 
-                    -- ========== STEP 7: กลับมา entry point ==========
-                    setState("Returning to Entry", "Walking back to entry...")
-                    Movement:GoTo(CFrame.new(target.position + Vector3.new(0, 3, 0)), { timeout = 20 })
-                    task.wait(0.5)
-
-                    -- ========== STEP 8: Walk to vehicle (ข้างรถ) ==========
-                    setState("Walking to Vehicle", "Locating vehicle...")
-                    local myVehicle, isSeated = Vehicle:GetMyVehicle()
-
-                    if not myVehicle then
-                        setState("Spawning Car", "No vehicle, requesting new one...")
-                        if RequestSpawnRemote then
-                            Utils:SafeCallRemote(RequestSpawnRemote, "STARTER-DUSTER")
-                            task.wait(2)
-                            local waitStart = tick()
-                            while tick() - waitStart < 10 and checkEnabled() do
-                                task.wait(0.5)
-                                myVehicle, isSeated = Vehicle:GetMyVehicle()
-                                if myVehicle then break end
-                            end
-                        end
-                    end
-
-                    if myVehicle and checkEnabled() then
-                        -- เดินไปข้างรถ (ไม่ใช่บนตัวรถ)
-                        setState("Walking to Vehicle", "Going to vehicle side...")
-                        goToVehicleSide(myVehicle)
-                        task.wait(0.5)
+                    -- ========== STEP 8: Return to Zone parking spot ==========
+                    setState("Returning to Zone", "Going back to parking spot...")
+                    local returnPos = getZoneCarParkPosition()
+                    if returnPos then
+                        Movement:GoTo(returnPos, { timeout = 60 })
+                        task.wait(1)
                     end
 
                     if not checkEnabled() then break end
@@ -2474,40 +2389,51 @@ local function pathfinderLoop()
                     -- ========== STEP 9: Seat car for unload ==========
                     setState("Entering Vehicle", "Pressing E to enter vehicle...")
                     myVehicle, isSeated = Vehicle:GetMyVehicle()
-                    if myVehicle then
+                    
+                    if not myVehicle then
+                        setState("Spawning Car", "No vehicle, requesting...")
+                        if RequestSpawnRemote then
+                            Utils:SafeCallRemote(RequestSpawnRemote, "STARTER-DUSTER")
+                            task.wait(2)
+                            local waitStart = tick()
+                            while tick() - waitStart < 10 and checkEnabled() do
+                                task.wait(0.5)
+                                myVehicle, isSeated = Vehicle:GetMyVehicle()
+                                if myVehicle and isSeated then break end
+                            end
+                        end
+                    end
+
+                    if myVehicle and checkEnabled() then
+                        -- ลองขึ้นรถ
                         local entered = false
                         for attempt = 1, 3 do
                             if not checkEnabled() then break end
                             entered = Vehicle:EnterByPrompt(myVehicle)
                             if entered then break end
-                            setState("Entering Vehicle", string.format("Attempt %d/3 failed, retrying...", attempt))
+                            setState("Entering Vehicle", string.format("Attempt %d/3 failed", attempt))
                             task.wait(1)
                         end
 
-                        if not entered then
-                            setState("Entering Vehicle", "FAILED to enter vehicle, skipping unload!")
-                            task.wait(2)
-                        else
+                        if entered then
                             task.wait(0.5)
 
-                            -- ========== STEP 10: Wait for items to load ==========
+                            -- ========== STEP 10: Wait for items ==========
                             setState("Waiting for Items", "Waiting for items to load into trunk...")
                             local waitStart = tick()
                             while tick() - waitStart < 5 and checkEnabled() do
                                 task.wait(0.3)
                             end
 
-                            -- ========== STEP 11: Unload trunk (ต้องสำเร็จ!) ==========
+                            -- ========== STEP 11: Unload trunk ==========
                             setState("Unloading Trunk", "Transferring items to inventory...")
                             local unloadSuccess = false
                             local unloadAttempts = 0
 
                             while not unloadSuccess and unloadAttempts < 3 and checkEnabled() do
                                 unloadAttempts = unloadAttempts + 1
-
-                                -- ตรวจสอบว่านั่งรถอยู่
+                                
                                 if not Vehicle:IsSeated() then
-                                    setState("Unloading Trunk", "Not seated, re-entering...")
                                     Vehicle:EnterByPrompt(myVehicle)
                                     task.wait(1)
                                 end
@@ -2515,47 +2441,36 @@ local function pathfinderLoop()
                                 if Vehicle:IsSeated() and TransferVehicleItemsToInventory then
                                     local itemUids = getVehicleItems(myVehicle)
                                     if #itemUids > 0 then
-                                        setState("Unloading Trunk", string.format("Unloading %d items (attempt %d)...", #itemUids, unloadAttempts))
+                                        setState("Unloading Trunk", string.format("Unloading %d items (attempt %d)", #itemUids, unloadAttempts))
                                         local ok = Utils:SafeCallRemote(TransferVehicleItemsToInventory, itemUids)
                                         if ok then
                                             task.wait(2)
-                                            -- ตรวจสอบว่า unload สำเร็จจริง
                                             local newItems = getVehicleItems(myVehicle)
                                             if #newItems == 0 or #newItems < #itemUids then
                                                 unloadSuccess = true
                                                 setState("Unloading Trunk", "Unload complete!")
-                                            else
-                                                setState("Unloading Trunk", "Items still in truck, retrying...")
-                                                task.wait(1)
                                             end
                                         end
                                     else
-                                        -- ไม่มีของในรถ = unload สำเร็จ (หรือไม่มีอะไรต้อง unload)
                                         unloadSuccess = true
                                         setState("Unloading Trunk", "No items to unload")
                                     end
-                                else
-                                    setState("Unloading Trunk", "Cannot unload, not seated or no remote")
-                                    task.wait(1)
                                 end
-                            end
-
-                            if not unloadSuccess then
-                                setState("Unloading Trunk", "FAILED to unload, but continuing...")
-                                task.wait(2)
+                                task.wait(0.5)
                             end
 
                             task.wait(1)
 
-                            if not checkEnabled() then break end
-
-                            -- ========== STEP 12: Exit vehicle ==========
+                            -- ========== STEP 12: Exit car ==========
                             setState("Exiting Vehicle", "Pressing E to exit vehicle...")
                             for attempt = 1, 3 do
                                 if not Vehicle:IsSeated() then break end
                                 Vehicle:ExitByPrompt()
                                 task.wait(0.8)
                             end
+                        else
+                            setState("Entering Vehicle", "FAILED to enter, skipping unload")
+                            task.wait(2)
                         end
                     end
 
@@ -2584,10 +2499,12 @@ local function pathfinderLoop()
 
                     if not checkEnabled() then break end
 
-                    -- ========== STEP 14: Place items ==========
-                    setState("Placing Items", "Placing items at base...")
-                    plot = getMyPlot()
-                    if plot and PlaceStockItem then
+                    -- ========== STEP 14: Place all items (loop until empty) ==========
+                    setState("Placing Items", "Placing items at base (loop until empty)...")
+                    while checkEnabled() do
+                        plot = getMyPlot()
+                        if not (plot and PlaceStockItem) then break end
+
                         local success, inventory = false, nil
                         if GetPlayerInventory then
                             success, inventory = pcall(function()
@@ -2600,53 +2517,70 @@ local function pathfinderLoop()
                             inventory = getLocalInventory()
                         end
 
-                        if inventory and type(inventory) == "table" then
-                            local emptySnapPoints = {}
-                            for _, desc in ipairs(plot:GetDescendants()) do
-                                if desc:IsA("ProximityPrompt") then
-                                    local promptName = desc.Name:lower()
-                                    local actionText = desc.ActionText:lower()
-                                    if promptName:find("additem") or actionText:find("add item") then
-                                        local snapPoint = desc.Parent
-                                        if snapPoint and (snapPoint:IsA("BasePart") or snapPoint:IsA("Attachment")) then
-                                            local current = snapPoint
-                                            local shelfGUID = nil
-                                            while current and current ~= plot do
-                                                shelfGUID = current:GetAttribute("GUID")
-                                                if shelfGUID then break end
-                                                current = current.Parent
-                                            end
-                                            if shelfGUID then
-                                                local worldCFrame = snapPoint:IsA("Attachment") and snapPoint.WorldCFrame or snapPoint.CFrame
-                                                table.insert(emptySnapPoints, { worldCFrame = worldCFrame, shelfGUID = shelfGUID, name = snapPoint.Name })
-                                            end
+                        if not inventory or type(inventory) ~= "table" then break end
+                        
+                        -- นับจำนวน items
+                        local itemCount = 0
+                        for _ in pairs(inventory) do itemCount = itemCount + 1 end
+                        if itemCount == 0 then break end
+
+                        local emptySnapPoints = {}
+                        for _, desc in ipairs(plot:GetDescendants()) do
+                            if desc:IsA("ProximityPrompt") then
+                                local promptName = desc.Name:lower()
+                                local actionText = desc.ActionText:lower()
+                                if promptName:find("additem") or actionText:find("add item") then
+                                    local snapPoint = desc.Parent
+                                    if snapPoint and (snapPoint:IsA("BasePart") or snapPoint:IsA("Attachment")) then
+                                        local current = snapPoint
+                                        local shelfGUID = nil
+                                        while current and current ~= plot do
+                                            shelfGUID = current:GetAttribute("GUID")
+                                            if shelfGUID then break end
+                                            current = current.Parent
+                                        end
+                                        if shelfGUID then
+                                            local worldCFrame = snapPoint:IsA("Attachment") and snapPoint.WorldCFrame or snapPoint.CFrame
+                                            table.insert(emptySnapPoints, { worldCFrame = worldCFrame, shelfGUID = shelfGUID, name = snapPoint.Name })
                                         end
                                     end
                                 end
                             end
-
-                            local placedThisRound = 0
-                            for itemUID, itemData in pairs(inventory) do
-                                if not checkEnabled() then break end
-                                if #emptySnapPoints == 0 then break end
-                                local snapPoint = table.remove(emptySnapPoints, 1)
-                                local itemId = type(itemData) == "table" and (itemData.ItemId or itemData.itemId or itemData.Id or itemData.id) or itemData
-                                if itemUID and itemId then
-                                    setState("Placing Items", string.format("Placing item %d...", placedThisRound + 1))
-                                    Utils:SafeCall(function()
-                                        if PlaceStockItem:IsA("RemoteEvent") then
-                                            PlaceStockItem:FireServer(itemUID, tostring(itemId), snapPoint.worldCFrame, 0, snapPoint.shelfGUID, snapPoint.name)
-                                        elseif PlaceStockItem:IsA("RemoteFunction") then
-                                            PlaceStockItem:InvokeServer(itemUID, tostring(itemId), snapPoint.worldCFrame, 0, snapPoint.shelfGUID, snapPoint.name)
-                                        end
-                                    end)
-                                    placedThisRound = placedThisRound + 1
-                                    ItemsPlacedCount = ItemsPlacedCount + 1
-                                    task.wait(0.5)
-                                end
-                            end
-                            setState("Placing Items", string.format("Placed %d items", placedThisRound))
                         end
+
+                        if #emptySnapPoints == 0 then
+                            setState("Placing Items", "No more empty snap points!")
+                            break
+                        end
+
+                        local placedThisRound = 0
+                        for itemUID, itemData in pairs(inventory) do
+                            if not checkEnabled() then break end
+                            if #emptySnapPoints == 0 then break end
+                            local snapPoint = table.remove(emptySnapPoints, 1)
+                            local itemId = type(itemData) == "table" and (itemData.ItemId or itemData.itemId or itemData.Id or itemData.id) or itemData
+                            if itemUID and itemId then
+                                setState("Placing Items", string.format("Placing item %d (snap %d)", placedThisRound + 1, #emptySnapPoints))
+                                Utils:SafeCall(function()
+                                    if PlaceStockItem:IsA("RemoteEvent") then
+                                        PlaceStockItem:FireServer(itemUID, tostring(itemId), snapPoint.worldCFrame, 0, snapPoint.shelfGUID, snapPoint.name)
+                                    elseif PlaceStockItem:IsA("RemoteFunction") then
+                                        PlaceStockItem:InvokeServer(itemUID, tostring(itemId), snapPoint.worldCFrame, 0, snapPoint.shelfGUID, snapPoint.name)
+                                    end
+                                end)
+                                placedThisRound = placedThisRound + 1
+                                ItemsPlacedCount = ItemsPlacedCount + 1
+                                task.wait(0.4)
+                            end
+                        end
+                        
+                        if placedThisRound == 0 then
+                            setState("Placing Items", "Could not place any items")
+                            break
+                        end
+                        
+                        setState("Placing Items", string.format("Placed %d items, checking for more...", placedThisRound))
+                        task.wait(1)
                     end
                 else
                     setState("Bidding", "Auction lost / no items")
@@ -2746,5 +2680,5 @@ if PathfinderEnabled then
     task.defer(function() setPathfinderEnabled(true) end)
 end
 
-print("[DYHUB] Game loaded " .. version .. " | v028.0.0 loaded successfully!")
+print("[DYHUB] Game loaded " .. version .. " loaded successfully!")
 print("[DYHUB] Auto saving every " .. tostring(settings.AutoSaveDelay) .. "s")
