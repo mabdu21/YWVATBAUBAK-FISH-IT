@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v028.52"
+local ver     = "v028.55"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -265,7 +265,7 @@ end
 function Vehicle:Enter(vehicle) return self:EnterByPrompt(vehicle) end
 function Vehicle:Exit() return self:ExitByPrompt() end
 
--- ====================== MOVEMENT SYSTEM (Tween/Teleport only) ======================
+-- ====================== MOVEMENT SYSTEM ======================
 local Movement = {}
 Movement.Mode        = "Tween"
 Movement.Speed       = 200
@@ -401,22 +401,22 @@ local State_itemsAvailable = false
 local ItemsCollectedCount = 0
 local ItemsPlacedCount    = 0
 
--- CHANGED: ค่าเริ่มต้น false ทั้งหมด
 local AreaToggles = {
     ["Junk Yard"]  = false,
     ["Back Alley"] = false,
     ["Farmyard"]   = false,
     ["Shipyard"]   = false,
     ["Jurassic"]   = false,
+    ["Cargo Ship"] = false,
 }
 
--- CHANGED: แก้ Jurassic เป็น "Jurassic Stable Garage"
 local AREA_GARAGES = {
     ["Junk Yard"]  = { "Scrap Garage" },
     ["Back Alley"] = { "Shop Front" },
     ["Farmyard"]   = { "Stable Garage", "Barn Garage" },
     ["Shipyard"]   = { "Small Container Garage", "Large Container Garage", "Warehouse Garage" },
     ["Jurassic"]   = { "Jurassic Stable Garage" },
+    ["Cargo Ship"] = { "Steel Cargo Container", "Cargo Container", "Luxury Cargo Container", "Wooden Cargo Container" },
 }
 
 local ItemsModule = (function()
@@ -572,6 +572,7 @@ local settings = {
     AreaFarmyard      = Config:Get("AreaFarmyard", false),
     AreaShipyard      = Config:Get("AreaShipyard", false),
     AreaJurassic      = Config:Get("AreaJurassic", false),
+    AreaCargoShip     = Config:Get("AreaCargoShip", false),
     FarmMovementMode  = Config:Get("FarmMovementMode", "Tween"),
     MovementSpeed     = Config:Get("MovementSpeed", 200),
 }
@@ -596,6 +597,7 @@ AreaToggles["Back Alley"] = settings.AreaBackAlley
 AreaToggles["Farmyard"]   = settings.AreaFarmyard
 AreaToggles["Shipyard"]   = settings.AreaShipyard
 AreaToggles["Jurassic"]   = settings.AreaJurassic
+AreaToggles["Cargo Ship"] = settings.AreaCargoShip
 Movement.Mode        = settings.FarmMovementMode
 Movement.Speed       = settings.MovementSpeed
 
@@ -755,52 +757,6 @@ local function getRoot()
     return char:FindFirstChild("HumanoidRootPart")
 end
 
--- CHANGED: หา auction ตาม Area ที่เปิด ไม่สนใจ selectedZone
-local function findNearestAuctionInEnabledAreas()
-    local root = getRoot()
-    if not root then return nil end
-    local rootPos = root.Position
-    local bestDist = math.huge
-    local bestPrompt = nil
-    for _, prompt in ipairs(Workspace:GetDescendants()) do
-        if prompt:IsA("ProximityPrompt") and prompt.Name == "EnterAuction" then
-            local garageType = prompt.ObjectText
-            local areaMatch, areaName = false, nil
-            for area, garages in pairs(AREA_GARAGES) do
-                if AreaToggles[area] then
-                    for _, g in ipairs(garages) do
-                        if g == garageType then
-                            areaMatch = true
-                            areaName = area
-                            break
-                        end
-                    end
-                end
-                if areaMatch then break end
-            end
-            if areaMatch then
-                local promptParent = prompt.Parent
-                if promptParent then
-                    local dist = (promptParent.Position - rootPos).Magnitude
-                    if dist < bestDist then
-                        bestDist = dist
-                        bestPrompt = {
-                            prompt = prompt,
-                            promptParent = promptParent,
-                            position = promptParent.Position,
-                            garageType = garageType,
-                            areaName = areaName,
-                            distance = dist,
-                        }
-                    end
-                end
-            end
-        end
-    end
-    return bestPrompt
-end
-
--- CHANGED: หา auction ใน area เดียวที่กำหนด
 local function findAuctionInArea(areaName)
     local root = getRoot()
     if not root then return nil end
@@ -1446,7 +1402,7 @@ PathfinderTab:Section({ Title = "Farm Option", Icon = "cpu" })
 
 PathfinderTab:Toggle({
     Title    = "Auto Farm",
-    Desc     = "Select zone below. Car spawns, parks at zone, then walks to bid.",
+    Desc     = "Activate full auto auction cycle for Farm",
     Value    = PathfinderEnabled,
     Callback = function(state)
         setPathfinderEnabled(state)
@@ -1459,13 +1415,13 @@ PathfinderTab:Toggle({
 PathfinderTab:Divider()
 PathfinderTab:Section({ Title = "Target Area (Auto Farm)", Icon = "map-pin" })
 
--- CHANGED: Dropdown เลือก Area ตรงนี้ใช้สำหรับทั้ง Teleport และ Pathfinder
+-- CHANGED: ประกาศ farmTargetArea ก่อน dropdown
 local farmTargetArea = settings.selectedZone or "Junk Yard"
 
 PathfinderTab:Dropdown({
     Title  = "Target Area for Farm",
-    Desc   = "Car will park here, then bot walks to bid in same area.",
-    Values = { "Junk Yard", "Back Alley", "Farm Yard", "Shipyard", "Jurassic" },
+    Desc   = "Car will park here, then move to bid in same area.",
+    Values = { "Junk Yard", "Back Alley", "Farm Yard", "Shipyard", "Jurassic", "Cargo Ship" },
     Multi  = false,
     Value  = farmTargetArea,
     Callback = function(v)
@@ -1582,24 +1538,31 @@ local zoneList = {
         local zone = areas and areas:FindFirstChild("Farmyard")
         return zone and zone:FindFirstChild("Lost and Found Box", true)
     end,
-    ["Jurassic"] = function()
-        local areas = Workspace:FindFirstChild("Areas")
-        local zone = areas and areas:FindFirstChild("Jurassic")
-        return zone and zone:FindFirstChild("AreaBoundary", true)
-    end,
     ["Shipyard"] = function()
         local areas = Workspace:FindFirstChild("Areas")
         local zone = areas and areas:FindFirstChild("Shipyard")
         return zone and zone:FindFirstChild("Lost and Found Box", true)
     end,
+    ["Jurassic"] = function()
+        local areas = Workspace:FindFirstChild("Areas")
+        local zone = areas and areas:FindFirstChild("Jurassic")
+        return zone and zone:FindFirstChild("AreaBoundary", true)
+    end,
+    ["Cargo Ship"] = function()
+        local areas = Workspace:FindFirstChild("CargoShip")
+        if areas then
+            return areas:FindFirstChild("AreaBoundary", true) or areas
+        end
+        return Workspace:FindFirstChild("CargoShip", true)
+    end,
 }
 
--- CHANGED: selectedZone เป็น global ใช้ร่วมกัน
+-- ✅ CHANGED: ประกาศ global selectedZone ก่อน dropdown
 selectedZone = settings.selectedZone or "Junk Yard"
 
 TeleportTab:Dropdown({
     Title  = "Select Zone",
-    Values = { "Junk Yard", "Back Alley", "Farm Yard", "Shipyard", "Jurassic" },
+    Values = { "Junk Yard", "Back Alley", "Farm Yard", "Shipyard", "Jurassic", "Cargo Ship" },
     Multi  = false,
     Value  = selectedZone,
     Callback = function(v)
@@ -1682,12 +1645,11 @@ Info:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17
 Info:Divider()
 Info:Paragraph({
     Title = "Update: 07/16/2026 | CL: " .. ver,
-    Desc  = [[• [ FIX ] Auto Farm now uses same Zone as Teleport Tab
-• [ FIX ] Select Junk Yard → car parks at Junk Yard, walks to Junk Yard bid
-• [ FIX ] Zone mismatch bug fixed (no more Jurassic for Junk Yard toggle)
-• [ FIX ] Jurassic garage name changed to Jurassic Stable Garage
-• [ NEW ] Target Area dropdown in Pathfinder Tab (syncs with Teleport)
-• [ NEW ] Auto Farm Flow: Pick area → Spawn car → Park at area → Exit → Walk to bid in same area → Collect → Seat → Unload → Exit → Base → Place]],
+    Desc  = [[• [ FIX ] Auto Accept Offer now works (typo Show → ShowOffer)
+• [ FIX ] Auto Farm now uses correct Target Area
+• [ FIX ] Zone sync between Pathfinder and Teleport tabs
+• [ FIX ] Cargo Ship finder now works
+• [ NEW ] Support Cargo Ship target area]],
 })
 Info:Divider()
 
@@ -1812,13 +1774,14 @@ task.spawn(function()
         end)
     end)
 
+    -- ✅ CHANGED: Auto-Accept Offers hook (FIXED TYPO)
     task.spawn(function()
         local NPCShopper = Events:WaitForChild('NPCShopper')
         if NPCShopper then
             local RespondOffer = NPCShopper:WaitForChild('RespondOffer')
             local ShowOffer    = NPCShopper:WaitForChild('ShowOffer')
             if ShowOffer and RespondOffer then
-                registerConnection(Show.OnClientEvent:Connect(function(...)
+                registerConnection(ShowOffer.OnClientEvent:Connect(function(...)  -- ✅ FIXED: ShowOffer not Show
                     if not AutoAcceptOffers then return end
                     local args = {...}
                     local offerId = args[1]
@@ -1857,6 +1820,7 @@ task.spawn(function()
                         Utils:SafeCallRemote(RespondOffer, offerId, false)
                     end
                 end))
+                Utils:Log("Auto Accept Offer hooked successfully.")
             end
         end
     end)
@@ -2162,7 +2126,7 @@ startAutoSellLoop = function()
     end)
 end
 
--- ====================== PATHFINDER LOOP (NEW LOGIC - FIXED) ======================
+-- ====================== PATHFINDER LOOP (FIXED) ======================
 local function pathfinderLoop()
     local function setState(phase, status)
         PathfinderPhase = phase
@@ -2175,7 +2139,12 @@ local function pathfinderLoop()
 
     while PathfinderEnabled and not PathfinderStopping do
         -- ========== STEP 0: ตรวจสอบ Target Area ==========
-        local targetArea = farmTargetArea  -- ใช้ค่าจาก Pathfinder dropdown
+        local targetArea = farmTargetArea
+
+        -- ✅ CHANGED: sync selectedZone to targetArea BEFORE searching
+        if selectedZone ~= targetArea then
+            selectedZone = targetArea
+        end
 
         if not AreaToggles[targetArea] then
             setState("Error", "Target Area (" .. targetArea .. ") is not enabled! Enable it first.")
@@ -2217,19 +2186,13 @@ local function pathfinderLoop()
 
                 if not checkEnabled() then break end
 
-                -- ========== STEP 3: Move car + player to Zone parking spot (targetArea) ==========
-                setState("Moving to Zone", "Parking car at " .. targetArea .. " zone...")
+                -- ========== STEP 3: Move car + player to Zone parking spot ==========
+                setState("Moving to Zone", "Parking car at " .. targetArea .. "...")
                 local parkPos = getZoneCarParkPosition()
                 
                 if parkPos and checkEnabled() then
-                    -- Sync selectedZone to targetArea for getZoneCarParkPosition
-                    if selectedZone ~= targetArea then
-                        selectedZone = targetArea
-                    end
-                    local correctParkPos = getZoneCarParkPosition()
-                    
-                    if correctParkPos then
-                        Movement:GoTo(correctParkPos, { timeout = 60 })
+                    if Vehicle:IsSeated() then
+                        Movement:GoTo(parkPos, { timeout = 60 })
                     else
                         Movement:GoTo(parkPos, { timeout = 60 })
                     end
@@ -2238,20 +2201,20 @@ local function pathfinderLoop()
 
                 if not checkEnabled() then break end
 
-                -- ========== STEP 4: Exit car (ถ้านั่งอยู่) ==========
+                -- ========== STEP 4: Exit car ==========
                 if Vehicle:IsSeated() then
-                    setState("Exiting Car", "Exiting vehicle at " .. targetArea .. "...")
+                    setState("Exiting Car", "Exiting vehicle...")
                     Vehicle:ExitByPrompt()
                     task.wait(1.5)
                 end
 
                 if not checkEnabled() then break end
 
-                -- ========== STEP 5: Move to bid zone (ใน targetArea เท่านั้น) ==========
-                setState("Walking to Bid", "Walking to " .. target.garageType .. " in " .. targetArea)
+                -- ========== STEP 5: Move to bid zone ==========
+                setState("Walking to Bid", "Walking to " .. target.garageType)
                 local arrived = Movement:GoTo(CFrame.new(target.position + Vector3.new(0, 3, 0)), { timeout = 60 })
                 if not arrived and checkEnabled() then
-                    setState("Walking to Bid", "Failed to reach bid, retrying...")
+                    setState("Walking to Bid", "Failed to reach, retrying...")
                     task.wait(3)
                 elseif checkEnabled() then
                     -- ========== STEP 6: Trigger auction + bid ==========
@@ -2389,7 +2352,7 @@ local function pathfinderLoop()
                         if not checkEnabled() then break end
 
                         -- ========== STEP 8: Return to Zone parking spot ==========
-                        setState("Returning to Zone", "Going back to " .. targetArea .. " parking spot...")
+                        setState("Returning to Zone", "Going back to " .. targetArea .. "...")
                         if selectedZone ~= targetArea then
                             selectedZone = targetArea
                         end
@@ -2432,14 +2395,12 @@ local function pathfinderLoop()
                             if entered then
                                 task.wait(0.5)
 
-                                -- ========== STEP 10: Wait for items ==========
                                 setState("Waiting for Items", "Waiting for items to load into trunk...")
                                 local waitStart = tick()
                                 while tick() - waitStart < 5 and checkEnabled() do
                                     task.wait(0.3)
                                 end
 
-                                -- ========== STEP 11: Unload trunk ==========
                                 setState("Unloading Trunk", "Transferring items to inventory...")
                                 local unloadSuccess = false
                                 local unloadAttempts = 0
@@ -2475,7 +2436,6 @@ local function pathfinderLoop()
 
                                 task.wait(1)
 
-                                -- ========== STEP 12: Exit car ==========
                                 setState("Exiting Vehicle", "Pressing E to exit vehicle...")
                                 for attempt = 1, 3 do
                                     if not Vehicle:IsSeated() then break end
@@ -2513,7 +2473,7 @@ local function pathfinderLoop()
 
                         if not checkEnabled() then break end
 
-                        -- ========== STEP 14: Place all items (loop until empty) ==========
+                        -- ========== STEP 14: Place all items ==========
                         setState("Placing Items", "Placing items at base (loop until empty)...")
                         while checkEnabled() do
                             plot = getMyPlot()
@@ -2600,7 +2560,6 @@ local function pathfinderLoop()
                         task.wait(2)
                     end
 
-                    -- ========== STEP 15: Loop delay ==========
                     setState("Loop Delay", "Cycle complete, restarting in 3s...")
                     local delayStart = tick()
                     while tick() - delayStart < 3 and checkEnabled() do
