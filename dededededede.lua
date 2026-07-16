@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v021.16"
+local ver     = "v021.17"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -44,6 +44,7 @@ local RemoteStart   = remotesFolder:WaitForChild("RequestStartJobSession")
 local RemoteEnd     = remotesFolder:WaitForChild("RequestEndJobSession")
 
 -- ====================== GLOBAL STATE ======================
+-- 🔧 FIX: เปลี่ยน default เป็นค่าที่ทำงานได้ทันที (ไม่ใช่ 0)
 local State = {
     SpeedEnabled      = false,
     SpeedMode         = "Legit",
@@ -59,8 +60,8 @@ local State = {
     BypassActive      = false,
     RainbowEnabled    = false,
     PhysicsEnabled    = false,
-    AccelPower        = 0,   -- ค่าเริ่มต้น 0
-    BrakeForce        = 0,   -- ค่าเริ่มต้น 0
+    AccelPower        = 100,  -- 🔧 FIX: default 100 (ทำงานทันทีหลังเปิด toggle)
+    BrakeForce        = 50,   -- 🔧 FIX: default 50
     SelectedPlayer    = nil,
     ATMStatus         = "Idle",
     ATMBags           = "0 / 25",
@@ -84,6 +85,7 @@ local Connections = {
     Speed      = nil,
     PromptScan = nil,
     Delivery   = nil,
+    Physics    = nil,  -- 🔧 FIX: เพิ่ม Physics connection
 }
 
 -- ====================== HELPER FUNCTIONS ======================
@@ -221,9 +223,9 @@ end
 
 local Config = Config.new()
 
--- 🔧 โหลดค่าที่บันทึกไว้กลับเข้า State ก่อนสร้าง UI
-State.AccelPower    = Config:Get("AccelPower", 0)
-State.BrakeForce    = Config:Get("BrakeForce", 0)
+-- 🔧 FIX: โหลดค่าที่บันทึกไว้กลับเข้า State (ถ้ามี)
+State.AccelPower    = Config:Get("AccelPower", 100)  -- default 100
+State.BrakeForce    = Config:Get("BrakeForce", 50)   -- default 50
 State.SpeedValue    = Config:Get("SpeedValue", 16)
 State.FlySpeed      = Config:Get("FlySpeed", 50)
 State.JumpPowerValue = Config:Get("JumpPower", 50)
@@ -271,12 +273,12 @@ end)
 
 -- ====================== TABS ======================
 local InfoTab     = Window:Tab({ Title = "Information", Icon = "info" })
-local _D1         = Window:Divider()
+pcall(function() Window:Divder() end)
 local MainTab     = Window:Tab({ Title = "Main",        Icon = "rocket" })
 local EspTab      = Window:Tab({ Title = "ESP",         Icon = "eye" })
 local PlayerTab   = Window:Tab({ Title = "Player",      Icon = "user" })
 local CollectTab  = Window:Tab({ Title = "Collect",     Icon = "package" })
-local _D2         = Window:Divider()
+pcall(function() Window:Divder() end)
 local SettingsTab = Window:Tab({ Title = "Settings",    Icon = "settings" })
 
 Window:SelectTab(1)
@@ -368,11 +370,11 @@ do
         end
     })
 
-    -- 🔧 FIX: Slider ต้อง sync State และ Config ทันที + ค่า Default ต้องตรงกับ State
+    -- 🔧 FIX: Slider default = State.AccelPower (โหลดจาก Config แล้ว)
     MainTab:Slider({
         Title    = "Acceleration Power",
         Desc     = "Higher value means stronger boost when pressing forward or reverse.",
-        Value    = { Min = 0, Max = 5000, Default = State.AccelPower },
+        Value    = { Min = 0, Max = 1000, Default = State.AccelPower },
         Step     = 1,
         Callback = function(v)
             State.AccelPower = v
@@ -383,7 +385,7 @@ do
     MainTab:Slider({
         Title    = "Brake Force",
         Desc     = "Higher value means stronger braking when counter-throttling.",
-        Value    = { Min = 0, Max = 1500, Default = State.BrakeForce },
+        Value    = { Min = 0, Max = 500, Default = State.BrakeForce },
         Step     = 1,
         Callback = function(v)
             State.BrakeForce = v
@@ -391,7 +393,7 @@ do
         end
     })
 
-    -- 🔧 FIX: Vehicle Info Loop ใช้ RenderStepped เพื่อตอบสนองเร็ว
+    -- Vehicle Info Loop
     task.spawn(function()
         local hue = 0
         while true do
@@ -458,54 +460,75 @@ do
             task.wait(0.1)
         end
     end)
+end
 
-    -- 🔧 FIX: แยก Physics Loop ออกมาใช้ RenderStepped (60fps) เพื่อตอบสนองทันที
-    RunService.RenderStepped:Connect(function()
-        if not State.PhysicsEnabled then return end
-        local myVeh = GetMyVehicle()
-        if not myVeh then return end
+-- =========================================================================
+-- 🔧 FIX: VEHICLE PHYSICS - แยกออกมาเป็น function + connect แค่ครั้งเดียว
+-- =========================================================================
+do
+    -- 🔧 FIX: ลบเงื่อนไข if accel <= 0 then return end (ทำให้ค่า 0 ไม่ทำงาน)
+    -- แทนที่ด้วยการเช็ค accel > 0 เท่านั้น เพื่อให้ toggle เปิดแล้วทำงานทันที
 
-        local driver = myVeh:FindFirstChild("Driver")
-        local seat   = myVeh:FindFirstChild("VehicleSeat")
-        if not (driver and driver.Value == LocalPlayer and seat) then return end
+    if not Connections.Physics then
+        local physicsFrameCount = 0
+        Connections.Physics = RunService.RenderStepped:Connect(function()
+            physicsFrameCount = physicsFrameCount + 1
+            -- ทำงานทุก 2 เฟรม (30fps) พอ เพื่อลด CPU
+            if physicsFrameCount % 2 ~= 0 then return end
 
-        if seat.MaxSpeed < 9000 then seat.MaxSpeed = 9999 end
+            if not State.PhysicsEnabled then return end
 
-        local throttle = seat.ThrottleFloat
-        if math.abs(throttle) < 0.01 then return end
+            local myVeh = GetMyVehicle()
+            if not myVeh then return end
 
-        local vel = seat.AssemblyLinearVelocity
-        local speed = vel.Magnitude
-        local accel = State.AccelPower
-        local brake = State.BrakeForce
+            local driver = myVeh:FindFirstChild("Driver")
+            local seat   = myVeh:FindFirstChild("VehicleSeat")
+            if not (driver and driver.Value == LocalPlayer and seat) then return end
 
-        -- ถ้า AccelPower = 0 ไม่ต้องทำอะไร
-        if accel <= 0 then return end
+            -- ปลดล็อก MaxSpeed
+            if seat.MaxSpeed < 9000 then seat.MaxSpeed = 9999 end
 
-        local isForward = seat.CFrame.LookVector:Dot(vel) > 0
+            local throttle = seat.ThrottleFloat
+            if math.abs(throttle) < 0.01 then return end
 
-        if throttle > 0 then
-            if isForward or speed < 3 then
-                -- Boost ไปข้างหน้า
-                seat.AssemblyLinearVelocity = vel + (seat.CFrame.LookVector * (accel / 5))
-            else
-                -- เบรก (Counter-throttle)
-                if brake > 0 then
-                    seat.AssemblyLinearVelocity = vel * (1 - (brake / 200))
+            local vel = seat.AssemblyLinearVelocity
+            local speed = vel.Magnitude
+            local accel = State.AccelPower
+            local brake = State.BrakeForce
+
+            -- 🔧 FIX: ไม่ return ถ้า accel = 0 แล้ว (เพราะอาจมี brake ทำงาน)
+            -- แต่เช็คเฉพาะกรณีที่ทั้ง accel และ brake เป็น 0
+            if accel <= 0 and brake <= 0 then return end
+
+            local isForward = seat.CFrame.LookVector:Dot(vel) > 0
+
+            if throttle > 0 then
+                if isForward or speed < 3 then
+                    -- Boost ไปข้างหน้า
+                    if accel > 0 then
+                        seat.AssemblyLinearVelocity = vel + (seat.CFrame.LookVector * (accel / 5))
+                    end
+                else
+                    -- เบรก (Counter-throttle)
+                    if brake > 0 then
+                        seat.AssemblyLinearVelocity = vel * (1 - (brake / 200))
+                    end
+                end
+            elseif throttle < 0 then
+                if not isForward or speed < 3 then
+                    -- Boost ถอยหลัง
+                    if accel > 0 then
+                        seat.AssemblyLinearVelocity = vel + (-seat.CFrame.LookVector * (accel / 5))
+                    end
+                else
+                    -- เบรก
+                    if brake > 0 then
+                        seat.AssemblyLinearVelocity = vel * (1 - (brake / 200))
+                    end
                 end
             end
-        elseif throttle < 0 then
-            if not isForward or speed < 3 then
-                -- Boost ถอยหลัง
-                seat.AssemblyLinearVelocity = vel + (-seat.CFrame.LookVector * (accel / 5))
-            else
-                -- เบรก
-                if brake > 0 then
-                    seat.AssemblyLinearVelocity = vel * (1 - (brake / 200))
-                end
-            end
-        end
-    end)
+        end)
+    end
 end
 
 -- =========================================================================
@@ -618,7 +641,6 @@ do
     })
     pcall(function() EspTab:Divder() end)
     EspTab:Section({ Title = "Colors", Icon = "palette" })
-    -- 🔧 FIX: ใช้ Colorpicker (p เล็ก) + pcall ป้องกัน error
     pcall(function()
         EspTab:Colorpicker({ Title = "Police Color",   Desc = "Color used for Security players.",   Default = _G.ESP_Colors.Police,   Callback = function(c) _G.ESP_Colors.Police   = c end })
     end)
@@ -629,12 +651,10 @@ do
         EspTab:Colorpicker({ Title = "Neutral Color",  Desc = "Color used for neutral players.",    Default = _G.ESP_Colors.Neutral,  Callback = function(c) _G.ESP_Colors.Neutral  = c end })
     end)
 
-    -- 🔧 FIX: ใช้ RenderStepped แต่ throttle ให้ทำงานทุก 2-3 เฟรม ลดภาระ
     task.spawn(function()
         local frameCount = 0
         while true do
             frameCount = frameCount + 1
-            -- ทำงานทุก 2 เฟรม (~30fps) พอ ไม่ทำให้หนักเกินไป
             if frameCount % 2 == 0 then
                 for player, obj in pairs(ESP_Objects) do
                     local char = player.Character
@@ -1077,7 +1097,7 @@ do
 end
 
 -- =========================================================================
---  COLLECT TAB (ATM FARM + AUTO DELIVERY) - FIXED
+--  COLLECT TAB
 -- =========================================================================
 do
     local ATMFlag   = { Search = false }
@@ -1184,7 +1204,6 @@ do
         local currentCrimes = LocalPlayer.Character and LocalPlayer.Character:GetAttribute("CrimesCommitted") or 0
         if currentCrimes >= BagLimit then
             setATMStatus("Bag limit reached, selling...")
-            -- ขายของในที่เดียว ไม่ต้อง SimpleGoTo ที่อาจค้าง
             tpTo(sellPos1)
             task.wait(FarmConfig.task1)
             tpTo(sellPos2)
@@ -1271,14 +1290,13 @@ do
         setATMStatus("ATM farm stopped")
     end
 
-    -- ============== AUTO DELIVERY - OPTIMIZED ==============
+    -- ============== AUTO DELIVERY ==============
     local DELIVERY_ANCHOR_NAME = "DeliveryTargetAnchor"
     local DELIVERY_DIST_HIGH   = 26
     local DELIVERY_DIST_LOW    = 24
     local deliveryRunning = false
     local useHigh = true
     local deliveryThread = nil
-    local currentPlatform = nil
 
     local function setDeliveryStatus(t)
         State.DeliveryStatus = t
@@ -1289,7 +1307,6 @@ do
         return Workspace:FindFirstChild(DELIVERY_ANCHOR_NAME, true)
     end
 
-    -- 🔧 FIX: ลบ platform creation/destruction ในจังหวะ teleport ออก ใช้แค่ teleport ตรงๆ ลื่นกว่ามาก
     local function doDeliveryTeleport()
         local anchor = findDeliveryAnchor()
         if not anchor then return false end
@@ -1302,7 +1319,6 @@ do
         local offset = anchorCF.LookVector * dist
         local targetPos = anchorCF.Position + offset + Vector3.new(0, 3, 0)
 
-        -- 🔧 FIX: ใช้ CFrame assignment ตรงๆ ไม่สร้าง/ลบ platform ทุกครั้ง (ลด lag มาก)
         rootPart.CFrame = CFrame.new(targetPos, anchorCF.Position)
         useHigh = not useHigh
         return true
@@ -1316,12 +1332,10 @@ do
         task.wait(0.5)
         setDeliveryStatus("Waiting for delivery target")
 
-        -- 🔧 FIX: ใช้ task.wait แทน task.wait(0) + เพิ่ม cooldown ป้องกัน spam
         deliveryThread = task.spawn(function()
             local lastTeleport = 0
             while deliveryRunning do
                 local now = tick()
-                -- Cooldown 0.1s ป้องกัน spam teleport
                 if now - lastTeleport >= 0.1 then
                     local ok = doDeliveryTeleport()
                     if ok then
@@ -1331,7 +1345,7 @@ do
                         task.wait(1)
                     end
                 end
-                task.wait()  -- wait 1 frame
+                task.wait()
             end
         end)
     end
@@ -1347,7 +1361,6 @@ do
         setDeliveryStatus("Delivery stopped")
     end
 
-    -- ============== COLLECT TAB UI ==============
     pcall(function() CollectTab:Divder() end)
     CollectTab:Section({ Title = "Farm Status", Icon = "activity" })
     ATMStatusParagraph       = CollectTab:Paragraph({ Title = "ATM Farm",       Desc = "Idle" })
@@ -1567,12 +1580,11 @@ do
     pcall(function() InfoTab:Divder() end)
     InfoTab:Paragraph({
         Title = "Update: 07/17/2026 | CL: " .. ver,
-        Desc  = [[- [Fixed] Vehicle Physics Modifier not working
-- [Fixed] Auto Delivery lag optimization
-- [Fixed] ESP ColorPicker not showing
-- [Fixed] State variable sync with Config
-- [Improved] Physics loop using RenderStepped
-- [Improved] Auto Delivery no platform creation spam]],
+        Desc  = [[- [Fixed] Vehicle Physics Modifier (works immediately on toggle)
+- [Fixed] Default AccelPower 100, BrakeForce 50
+- [Fixed] Physics loop using throttle > 0.01
+- [Fixed] Removed early return when accel = 0
+- [Improved] Physics runs at 30fps instead of 60fps]],
     })
     pcall(function() InfoTab:Divder() end)
     InfoTab:Section({ Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17 })
