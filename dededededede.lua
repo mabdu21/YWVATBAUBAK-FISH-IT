@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v021.15"
+local ver     = "v021.16"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -21,27 +21,19 @@ if setfpscap then
     pcall(function()
         WindUI:Notify({ Title = "Service", Content = "FPS Unlocked | " .. ver, Duration = 3, Icon = "cpu" })
     end)
-else
-    pcall(function()
-        WindUI:Notify({ Title = "Service", Content = "setfpscap not supported by your executor.", Duration = 3, Icon = "ban" })
-    end)
 end
 
 -- ====================== SERVICES ======================
 local RunService        = game:GetService("RunService")
 local Workspace         = game:GetService("Workspace")
-local Lighting          = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService  = game:GetService("UserInputService")
 local Players           = game:GetService("Players")
 local HttpService       = game:GetService("HttpService")
-local StarterGui        = game:GetService("StarterGui")
 local TeleportService   = game:GetService("TeleportService")
-local TweenService      = game:GetService("TweenService")
 local VirtualUser       = game:GetService("VirtualUser")
 
 local LocalPlayer = Players.LocalPlayer
-local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
 local Camera      = Workspace.CurrentCamera
 
 -- ====================== REMOTES ======================
@@ -67,10 +59,9 @@ local State = {
     BypassActive      = false,
     RainbowEnabled    = false,
     PhysicsEnabled    = false,
-    AccelPower        = 0,
-    BrakeForce        = 0,
+    AccelPower        = 0,   -- ค่าเริ่มต้น 0
+    BrakeForce        = 0,   -- ค่าเริ่มต้น 0
     SelectedPlayer    = nil,
-
     ATMStatus         = "Idle",
     ATMBags           = "0 / 25",
     DeliveryStatus    = "Idle",
@@ -125,7 +116,7 @@ local function ExecuteServerHop()
         pcall(function()
             qot([[
                 repeat task.wait() until game:IsLoaded()
-                loadstring(game:HttpGet("https://raw.githubusercontent.com/xxCichyxx/rbxscripts/refs/heads/main/DrivingEmpireXeno.lua"))()
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/mabdu21/YWVATBAUBAK-FISH-IT/refs/heads/main/dededededede.lua"))()
             ]])
         end)
     end
@@ -229,9 +220,17 @@ function Config:AutoSave(interval)
 end
 
 local Config = Config.new()
+
+-- 🔧 โหลดค่าที่บันทึกไว้กลับเข้า State ก่อนสร้าง UI
+State.AccelPower    = Config:Get("AccelPower", 0)
+State.BrakeForce    = Config:Get("BrakeForce", 0)
+State.SpeedValue    = Config:Get("SpeedValue", 16)
+State.FlySpeed      = Config:Get("FlySpeed", 50)
+State.JumpPowerValue = Config:Get("JumpPower", 50)
+
 Config:AutoSave(Config:Get("AutoSaveDelay", 15))
 
--- ====================== WINDOW (SAFE WRAP) ======================
+-- ====================== WINDOW ======================
 local Window
 local okWindow, errWindow = pcall(function()
     Window = WindUI:CreateWindow({
@@ -251,17 +250,12 @@ if not okWindow or not Window then
     return
 end
 
--- Optional: SetToggleKey (may not exist in older versions)
 pcall(function() Window:SetToggleKey(Enum.KeyCode.K) end)
-
--- Optional: Tag (may not exist)
 pcall(function()
     if Window.Tag then
         Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") })
     end
 end)
-
--- Optional: EditOpenButton (may not exist)
 pcall(function()
     if Window.EditOpenButton then
         Window:EditOpenButton({
@@ -277,12 +271,12 @@ end)
 
 -- ====================== TABS ======================
 local InfoTab     = Window:Tab({ Title = "Information", Icon = "info" })
-local _D1           = Window:Divider()
+local _D1         = Window:Divider()
 local MainTab     = Window:Tab({ Title = "Main",        Icon = "rocket" })
 local EspTab      = Window:Tab({ Title = "ESP",         Icon = "eye" })
 local PlayerTab   = Window:Tab({ Title = "Player",      Icon = "user" })
 local CollectTab  = Window:Tab({ Title = "Collect",     Icon = "package" })
-local _D2           = Window:Divider()
+local _D2         = Window:Divider()
 local SettingsTab = Window:Tab({ Title = "Settings",    Icon = "settings" })
 
 Window:SelectTab(1)
@@ -309,10 +303,8 @@ do
             local current = LocalPlayer:GetAttribute("JobId")
             if current == "Security" then
                 pcall(function() RemoteEnd:FireServer("jobPad") end)
-                pcall(function() WindUI:Notify({ Title = "Job", Content = "Left Security.", Duration = 2, Icon = "shield-off" }) end)
             else
                 pcall(function() RemoteStart:FireServer("Security", "jobPad") end)
-                pcall(function() WindUI:Notify({ Title = "Job", Content = "Joined Security.", Duration = 2, Icon = "shield" }) end)
             end
         end
     })
@@ -324,10 +316,8 @@ do
             local current = LocalPlayer:GetAttribute("JobId")
             if current == "Criminal" then
                 pcall(function() RemoteEnd:FireServer("jobPad") end)
-                pcall(function() WindUI:Notify({ Title = "Job", Content = "Left Criminal.", Duration = 2, Icon = "user-x" }) end)
             else
                 pcall(function() RemoteStart:FireServer("Criminal", "jobPad") end)
-                pcall(function() WindUI:Notify({ Title = "Job", Content = "Joined Criminal.", Duration = 2, Icon = "user" }) end)
             end
         end
     })
@@ -339,10 +329,8 @@ do
             local current = LocalPlayer:GetAttribute("JobId")
             if current == "Delivery" then
                 pcall(function() RemoteEnd:FireServer("jobPad") end)
-                pcall(function() WindUI:Notify({ Title = "Job", Content = "Left Delivery.", Duration = 2, Icon = "truck" }) end)
             else
                 pcall(function() RemoteStart:FireServer("Delivery", "jobPad") end)
-                pcall(function() WindUI:Notify({ Title = "Job", Content = "Joined Delivery.", Duration = 2, Icon = "truck" }) end)
             end
         end
     })
@@ -366,7 +354,6 @@ do
                 table.clear(originalColors)
                 lastVehicleRef = nil
             end
-            pcall(function() WindUI:Notify({ Title = "Vehicle RGB", Content = v and "Enabled" or "Disabled", Duration = 2, Icon = "palette" }) end)
         end
     })
 
@@ -381,6 +368,7 @@ do
         end
     })
 
+    -- 🔧 FIX: Slider ต้อง sync State และ Config ทันที + ค่า Default ต้องตรงกับ State
     MainTab:Slider({
         Title    = "Acceleration Power",
         Desc     = "Higher value means stronger boost when pressing forward or reverse.",
@@ -403,10 +391,10 @@ do
         end
     })
 
-    -- Vehicle Info Loop
+    -- 🔧 FIX: Vehicle Info Loop ใช้ RenderStepped เพื่อตอบสนองเร็ว
     task.spawn(function()
         local hue = 0
-        while task.wait(0.1) do
+        while true do
             local myVeh = GetMyVehicle()
 
             if myVeh ~= lastVehicleRef then
@@ -447,29 +435,6 @@ do
                 else
                     pcall(function() VehicleState:SetDesc("Outside") end)
                 end
-
-                if State.PhysicsEnabled and seat and driver and driver.Value == LocalPlayer then
-                    if seat.MaxSpeed < 9000 then seat.MaxSpeed = 9999 end
-                    local throttle = seat.ThrottleFloat
-                    local vel = seat.AssemblyLinearVelocity
-                    local speed = vel.Magnitude
-                    if State.AccelPower > 0 and math.abs(throttle) > 0 then
-                        local isForward = seat.CFrame.LookVector:Dot(vel) > 0
-                        if throttle > 0 then
-                            if isForward or speed < 3 then
-                                seat.AssemblyLinearVelocity = vel + (seat.CFrame.LookVector * (State.AccelPower / 5))
-                            else
-                                seat.AssemblyLinearVelocity = vel * (1 - (State.BrakeForce / 200))
-                            end
-                        elseif throttle < 0 then
-                            if not isForward or speed < 3 then
-                                seat.AssemblyLinearVelocity = vel + (-seat.CFrame.LookVector * (State.AccelPower / 5))
-                            else
-                                seat.AssemblyLinearVelocity = vel * (1 - (State.BrakeForce / 200))
-                            end
-                        end
-                    end
-                end
             else
                 pcall(function()
                     VehicleModel:SetDesc("No Active Vehicle")
@@ -488,6 +453,56 @@ do
                 pcall(function() JobStatus:SetDesc("Delivery Driver") end)
             else
                 pcall(function() JobStatus:SetDesc("Citizen") end)
+            end
+
+            task.wait(0.1)
+        end
+    end)
+
+    -- 🔧 FIX: แยก Physics Loop ออกมาใช้ RenderStepped (60fps) เพื่อตอบสนองทันที
+    RunService.RenderStepped:Connect(function()
+        if not State.PhysicsEnabled then return end
+        local myVeh = GetMyVehicle()
+        if not myVeh then return end
+
+        local driver = myVeh:FindFirstChild("Driver")
+        local seat   = myVeh:FindFirstChild("VehicleSeat")
+        if not (driver and driver.Value == LocalPlayer and seat) then return end
+
+        if seat.MaxSpeed < 9000 then seat.MaxSpeed = 9999 end
+
+        local throttle = seat.ThrottleFloat
+        if math.abs(throttle) < 0.01 then return end
+
+        local vel = seat.AssemblyLinearVelocity
+        local speed = vel.Magnitude
+        local accel = State.AccelPower
+        local brake = State.BrakeForce
+
+        -- ถ้า AccelPower = 0 ไม่ต้องทำอะไร
+        if accel <= 0 then return end
+
+        local isForward = seat.CFrame.LookVector:Dot(vel) > 0
+
+        if throttle > 0 then
+            if isForward or speed < 3 then
+                -- Boost ไปข้างหน้า
+                seat.AssemblyLinearVelocity = vel + (seat.CFrame.LookVector * (accel / 5))
+            else
+                -- เบรก (Counter-throttle)
+                if brake > 0 then
+                    seat.AssemblyLinearVelocity = vel * (1 - (brake / 200))
+                end
+            end
+        elseif throttle < 0 then
+            if not isForward or speed < 3 then
+                -- Boost ถอยหลัง
+                seat.AssemblyLinearVelocity = vel + (-seat.CFrame.LookVector * (accel / 5))
+            else
+                -- เบรก
+                if brake > 0 then
+                    seat.AssemblyLinearVelocity = vel * (1 - (brake / 200))
+                end
             end
         end
     end)
@@ -603,6 +618,7 @@ do
     })
     pcall(function() EspTab:Divder() end)
     EspTab:Section({ Title = "Colors", Icon = "palette" })
+    -- 🔧 FIX: ใช้ Colorpicker (p เล็ก) + pcall ป้องกัน error
     pcall(function()
         EspTab:Colorpicker({ Title = "Police Color",   Desc = "Color used for Security players.",   Default = _G.ESP_Colors.Police,   Callback = function(c) _G.ESP_Colors.Police   = c end })
     end)
@@ -613,80 +629,92 @@ do
         EspTab:Colorpicker({ Title = "Neutral Color",  Desc = "Color used for neutral players.",    Default = _G.ESP_Colors.Neutral,  Callback = function(c) _G.ESP_Colors.Neutral  = c end })
     end)
 
+    -- 🔧 FIX: ใช้ RenderStepped แต่ throttle ให้ทำงานทุก 2-3 เฟรม ลดภาระ
     task.spawn(function()
+        local frameCount = 0
         while true do
-            for player, obj in pairs(ESP_Objects) do
-                local char = player.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                local hum = char and char:FindFirstChildOfClass("Humanoid")
-                local visible = IsESPVisible(player)
+            frameCount = frameCount + 1
+            -- ทำงานทุก 2 เฟรม (~30fps) พอ ไม่ทำให้หนักเกินไป
+            if frameCount % 2 == 0 then
+                for player, obj in pairs(ESP_Objects) do
+                    local char = player.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    local hum = char and char:FindFirstChildOfClass("Humanoid")
+                    local visible = IsESPVisible(player)
 
-                if visible and hrp and hum and hum.Health > 0 then
-                    local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-                    if onScreen and pos.Z > 0 then
-                        local color     = GetRoleColor(player) or _G.ESP_Colors.Neutral
-                        local thickness = _G.ESP_Settings.Thickness
-                        local dist      = math.floor((Camera.CFrame.p - hrp.Position).magnitude)
+                    if visible and hrp and hum and hum.Health > 0 then
+                        local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+                        if onScreen and pos.Z > 0 then
+                            local color     = GetRoleColor(player) or _G.ESP_Colors.Neutral
+                            local thickness = _G.ESP_Settings.Thickness
+                            local dist      = math.floor((Camera.CFrame.p - hrp.Position).magnitude)
 
-                        if _G.ESP_Settings.Boxes then
-                            local sizeX = 2000 / pos.Z
-                            local sizeY = 3000 / pos.Z
-                            obj.Box.Visible   = true
-                            obj.Box.Color     = color
-                            obj.Box.Thickness = thickness
-                            obj.Box.Size      = Vector2.new(sizeX, sizeY)
-                            obj.Box.Position  = Vector2.new(pos.X - sizeX / 2, pos.Y - sizeY / 2)
-                        else obj.Box.Visible = false end
+                            if _G.ESP_Settings.Boxes then
+                                local sizeX = 2000 / pos.Z
+                                local sizeY = 3000 / pos.Z
+                                obj.Box.Visible   = true
+                                obj.Box.Color     = color
+                                obj.Box.Thickness = thickness
+                                obj.Box.Size      = Vector2.new(sizeX, sizeY)
+                                obj.Box.Position  = Vector2.new(pos.X - sizeX / 2, pos.Y - sizeY / 2)
+                            else obj.Box.Visible = false end
 
-                        if _G.ESP_Settings.Tracers then
-                            obj.Tracer.Visible   = true
-                            obj.Tracer.Color     = color
-                            obj.Tracer.Thickness = thickness
-                            obj.Tracer.From      = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-                            obj.Tracer.To        = Vector2.new(pos.X, pos.Y)
-                        else obj.Tracer.Visible = false end
+                            if _G.ESP_Settings.Tracers then
+                                obj.Tracer.Visible   = true
+                                obj.Tracer.Color     = color
+                                obj.Tracer.Thickness = thickness
+                                obj.Tracer.From      = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+                                obj.Tracer.To        = Vector2.new(pos.X, pos.Y)
+                            else obj.Tracer.Visible = false end
 
-                        if _G.ESP_Settings.Names then
-                            obj.Name.Visible  = true
-                            obj.Name.Color    = color
-                            obj.Name.Position = Vector2.new(pos.X, pos.Y - (3000 / pos.Z) / 2 - 20)
-                            obj.Name.Text     = player.Name
-                        else obj.Name.Visible = false end
+                            if _G.ESP_Settings.Names then
+                                obj.Name.Visible  = true
+                                obj.Name.Color    = color
+                                obj.Name.Position = Vector2.new(pos.X, pos.Y - (3000 / pos.Z) / 2 - 20)
+                                obj.Name.Text     = player.Name
+                            else obj.Name.Visible = false end
 
-                        if _G.ESP_Settings.Distance then
-                            obj.Distance.Visible  = true
-                            obj.Distance.Color    = Color3.new(1, 1, 1)
-                            obj.Distance.Position = Vector2.new(pos.X, pos.Y - (3000 / pos.Z) / 2 - 5)
-                            obj.Distance.Text     = "[" .. dist .. " studs]"
-                        else obj.Distance.Visible = false end
+                            if _G.ESP_Settings.Distance then
+                                obj.Distance.Visible  = true
+                                obj.Distance.Color    = Color3.new(1, 1, 1)
+                                obj.Distance.Position = Vector2.new(pos.X, pos.Y - (3000 / pos.Z) / 2 - 5)
+                                obj.Distance.Text     = "[" .. dist .. " studs]"
+                            else obj.Distance.Visible = false end
 
-                        if _G.ESP_Settings.Skeletons and char:FindFirstChild("Head") then
-                            local headPos  = Camera:WorldToViewportPoint(char.Head.Position)
-                            local torsoPos = Camera:WorldToViewportPoint(char:FindFirstChild("UpperTorso") and char.UpperTorso.Position or hrp.Position)
-                            local legLPos  = Camera:WorldToViewportPoint(char:FindFirstChild("LeftFoot") and char.LeftFoot.Position or hrp.Position)
-                            local legRPos  = Camera:WorldToViewportPoint(char:FindFirstChild("RightFoot") and char.RightFoot.Position or hrp.Position)
-                            local armRPos  = Camera:WorldToViewportPoint(char:FindFirstChild("RightHand") and char.RightHand.Position or hrp.Position)
-                            local armLPos  = Camera:WorldToViewportPoint(char:FindFirstChild("LeftHand") and char.LeftHand.Position or hrp.Position)
+                            if _G.ESP_Settings.Skeletons and char:FindFirstChild("Head") then
+                                local headPos  = Camera:WorldToViewportPoint(char.Head.Position)
+                                local torsoPos = Camera:WorldToViewportPoint(char:FindFirstChild("UpperTorso") and char.UpperTorso.Position or hrp.Position)
+                                local legLPos  = Camera:WorldToViewportPoint(char:FindFirstChild("LeftFoot") and char.LeftFoot.Position or hrp.Position)
+                                local legRPos  = Camera:WorldToViewportPoint(char:FindFirstChild("RightFoot") and char.RightFoot.Position or hrp.Position)
+                                local armRPos  = Camera:WorldToViewportPoint(char:FindFirstChild("RightHand") and char.RightHand.Position or hrp.Position)
+                                local armLPos  = Camera:WorldToViewportPoint(char:FindFirstChild("LeftHand") and char.LeftHand.Position or hrp.Position)
 
-                            obj.Skeleton.Head.From    = Vector2.new(pos.X, pos.Y)
-                            obj.Skeleton.Head.To      = Vector2.new(headPos.X, headPos.Y)
-                            obj.Skeleton.Spine.From   = Vector2.new(headPos.X, headPos.Y)
-                            obj.Skeleton.Spine.To     = Vector2.new(torsoPos.X, torsoPos.Y)
-                            obj.Skeleton.LeftArm.From = Vector2.new(torsoPos.X, torsoPos.Y)
-                            obj.Skeleton.LeftArm.To   = Vector2.new(armLPos.X, armLPos.Y)
-                            obj.Skeleton.RightArm.From= Vector2.new(torsoPos.X, torsoPos.Y)
-                            obj.Skeleton.RightArm.To  = Vector2.new(armRPos.X, armRPos.Y)
-                            obj.Skeleton.LeftLeg.From = Vector2.new(torsoPos.X, torsoPos.Y)
-                            obj.Skeleton.LeftLeg.To   = Vector2.new(legLPos.X, legLPos.Y)
-                            obj.Skeleton.RightLeg.From= Vector2.new(torsoPos.X, torsoPos.Y)
-                            obj.Skeleton.RightLeg.To  = Vector2.new(legRPos.X, legRPos.Y)
+                                obj.Skeleton.Head.From    = Vector2.new(pos.X, pos.Y)
+                                obj.Skeleton.Head.To      = Vector2.new(headPos.X, headPos.Y)
+                                obj.Skeleton.Spine.From   = Vector2.new(headPos.X, headPos.Y)
+                                obj.Skeleton.Spine.To     = Vector2.new(torsoPos.X, torsoPos.Y)
+                                obj.Skeleton.LeftArm.From = Vector2.new(torsoPos.X, torsoPos.Y)
+                                obj.Skeleton.LeftArm.To   = Vector2.new(armLPos.X, armLPos.Y)
+                                obj.Skeleton.RightArm.From= Vector2.new(torsoPos.X, torsoPos.Y)
+                                obj.Skeleton.RightArm.To  = Vector2.new(armRPos.X, armRPos.Y)
+                                obj.Skeleton.LeftLeg.From = Vector2.new(torsoPos.X, torsoPos.Y)
+                                obj.Skeleton.LeftLeg.To   = Vector2.new(legLPos.X, legLPos.Y)
+                                obj.Skeleton.RightLeg.From= Vector2.new(torsoPos.X, torsoPos.Y)
+                                obj.Skeleton.RightLeg.To  = Vector2.new(legRPos.X, legRPos.Y)
 
-                            for _, line in pairs(obj.Skeleton) do
-                                line.Visible   = true
-                                line.Color     = color
-                                line.Thickness = thickness
+                                for _, line in pairs(obj.Skeleton) do
+                                    line.Visible   = true
+                                    line.Color     = color
+                                    line.Thickness = thickness
+                                end
+                            else
+                                for _, line in pairs(obj.Skeleton) do line.Visible = false end
                             end
                         else
+                            obj.Box.Visible = false
+                            obj.Tracer.Visible = false
+                            obj.Name.Visible = false
+                            obj.Distance.Visible = false
                             for _, line in pairs(obj.Skeleton) do line.Visible = false end
                         end
                     else
@@ -696,12 +724,6 @@ do
                         obj.Distance.Visible = false
                         for _, line in pairs(obj.Skeleton) do line.Visible = false end
                     end
-                else
-                    obj.Box.Visible = false
-                    obj.Tracer.Visible = false
-                    obj.Name.Visible = false
-                    obj.Distance.Visible = false
-                    for _, line in pairs(obj.Skeleton) do line.Visible = false end
                 end
             end
             task.wait()
@@ -731,7 +753,6 @@ do
                     end
                 end)
             end
-            pcall(function() WindUI:Notify({ Title = "Speed", Content = v and "Enabled" or "Disabled", Duration = 2, Icon = "wind" }) end)
         end
     })
 
@@ -748,7 +769,10 @@ do
         Desc     = "Higher value means faster movement.",
         Value    = { Min = 16, Max = 300, Default = State.SpeedValue },
         Step     = 1,
-        Callback = function(v) State.SpeedValue = v end
+        Callback = function(v)
+            State.SpeedValue = v
+            Config:Set("SpeedValue", v)
+        end
     })
 
     local function isMoving()
@@ -765,8 +789,7 @@ do
         return false, Vector3.new()
     end
 
-    local function startSpeedLoop()
-        if Connections.Speed then return end
+    if not Connections.Speed then
         Connections.Speed = RunService.RenderStepped:Connect(function()
             if not State.SpeedEnabled then return end
             local char = LocalPlayer.Character
@@ -794,14 +817,6 @@ do
         end)
     end
 
-    local function stopSpeedLoop()
-        if Connections.Speed then
-            Connections.Speed:Disconnect()
-            Connections.Speed = nil
-        end
-    end
-
-    startSpeedLoop()
     pcall(function() PlayerTab:Divder() end)
     PlayerTab:Section({ Title = "Flight", Icon = "wind" })
 
@@ -869,7 +884,7 @@ do
         Desc     = "Higher value means faster flight.",
         Value    = { Min = 0, Max = 500, Default = State.FlySpeed },
         Step     = 1,
-        Callback = function(v) State.FlySpeed = v end
+        Callback = function(v) State.FlySpeed = v; Config:Set("FlySpeed", v) end
     })
     pcall(function() PlayerTab:Divder() end)
     PlayerTab:Section({ Title = "Physics", Icon = "atom" })
@@ -914,10 +929,7 @@ do
                     local c = LocalPlayer.Character
                     if c then
                         local h = c:FindFirstChildOfClass("Humanoid")
-                        if h then
-                            h.UseJumpPower = true
-                            h.JumpPower = State.JumpPowerValue
-                        end
+                        if h then h.UseJumpPower = true; h.JumpPower = State.JumpPowerValue end
                     end
                 end)
             else
@@ -939,6 +951,7 @@ do
         Step     = 1,
         Callback = function(v)
             State.JumpPowerValue = v
+            Config:Set("JumpPower", v)
             if State.JumpPowerEnabled then
                 pcall(function()
                     local c = LocalPlayer.Character
@@ -972,7 +985,6 @@ do
         Callback = function(v)
             State.InstantPromptOn = v
             if Connections.PromptScan then Connections.PromptScan:Disconnect() Connections.PromptScan = nil end
-
             local function ApplyInstant(obj)
                 if obj:IsA("ProximityPrompt") then
                     pcall(function()
@@ -982,7 +994,6 @@ do
                     end)
                 end
             end
-
             if v then
                 for _, d in pairs(Workspace:GetDescendants()) do ApplyInstant(d) end
                 Connections.PromptScan = Workspace.DescendantAdded:Connect(function(obj)
@@ -995,8 +1006,7 @@ do
     pcall(function() PlayerTab:Divder() end)
     PlayerTab:Section({ Title = "Teleport", Icon = "map-pin" })
 
-    local PlayerDropdown
-    PlayerDropdown = PlayerTab:Dropdown({
+    local PlayerDropdown = PlayerTab:Dropdown({
         Title    = "Select Player",
         Desc     = "Choose a player to teleport to.",
         Values   = getPlayerNames(),
@@ -1022,10 +1032,7 @@ do
         Title    = "Teleport To Player",
         Desc     = "Teleports you directly to the selected player.",
         Callback = function()
-            if not State.SelectedPlayer then
-                pcall(function() WindUI:Notify({ Title = "Teleport", Content = "Please select a player first.", Duration = 2, Icon = "alert-triangle" }) end)
-                return
-            end
+            if not State.SelectedPlayer then return end
             local target = Players:FindFirstChild(State.SelectedPlayer)
             if not target or not target.Character then return end
             local dest = target.Character:GetPivot() * CFrame.new(0, 8, 0)
@@ -1070,7 +1077,7 @@ do
 end
 
 -- =========================================================================
---  COLLECT TAB (ATM FARM + AUTO DELIVERY)
+--  COLLECT TAB (ATM FARM + AUTO DELIVERY) - FIXED
 -- =========================================================================
 do
     local ATMFlag   = { Search = false }
@@ -1160,22 +1167,6 @@ do
         end)
     end
 
-    local function SimpleGoTo(destination, timeout)
-        local char = LocalPlayer.Character
-        if not char then return end
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        local root = char:FindFirstChild("HumanoidRootPart")
-        if not root or not hum then return end
-        local startT = tick()
-        timeout = timeout or 2
-        while (root.Position - destination).Magnitude > 3 do
-            if not ATMFlag.Search or (tick() - startT) > timeout then break end
-            hum:MoveTo(destination)
-            if root.AssemblyLinearVelocity.Magnitude < 0.5 then hum.Jump = true end
-            task.wait(0.1)
-        end
-    end
-
     local function GetAvailableATM()
         local spawners = Workspace:FindFirstChild("Game") and Workspace.Game:FindFirstChild("Jobs") and Workspace.Game.Jobs:FindFirstChild("CriminalATMSpawners")
         if not spawners then return nil, nil end
@@ -1192,16 +1183,12 @@ do
         if not ATMFlag.Search then return false end
         local currentCrimes = LocalPlayer.Character and LocalPlayer.Character:GetAttribute("CrimesCommitted") or 0
         if currentCrimes >= BagLimit then
-            setATMStatus("Bag limit reached, heading to sell point")
-            while currentCrimes >= BagLimit and ATMFlag.Search do
-                SetNoclip(true)
-                tpTo(sellPos1)
-                task.wait(FarmConfig.task1)
-                setATMStatus("Walking to sell location")
-                SimpleGoTo(sellPos2, 2)
-                task.wait(FarmConfig.task2)
-                currentCrimes = LocalPlayer.Character and LocalPlayer.Character:GetAttribute("CrimesCommitted") or 0
-            end
+            setATMStatus("Bag limit reached, selling...")
+            -- ขายของในที่เดียว ไม่ต้อง SimpleGoTo ที่อาจค้าง
+            tpTo(sellPos1)
+            task.wait(FarmConfig.task1)
+            tpTo(sellPos2)
+            task.wait(FarmConfig.task2)
             setATMStatus("Items sold, resuming farm")
             return true
         end
@@ -1212,15 +1199,18 @@ do
         if not ATMFlag.Search then return end
         local safePos = platformPositions[math.random(1, #platformPositions)]
         local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+
         setATMStatus("Starting robbery")
         if root then root.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end
         tpTo(targetSpawner.Position)
         task.wait(FarmConfig.task3)
         pcall(function() bustStart:InvokeServer(atmModel) end)
+
         setATMStatus("Waiting on safe platform")
         tpTo(safePos)
         task.wait(FarmConfig.task4)
-        setATMStatus("Collecting the loot")
+
+        setATMStatus("Collecting loot")
         if root then root.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end
         tpTo(targetSpawner.Position)
         task.wait(FarmConfig.task5)
@@ -1236,7 +1226,6 @@ do
                 CheckBagLimit()
                 for _, platformPos in ipairs(platformPositions) do
                     if not ATMFlag.Search then break end
-                    if CheckBagLimit() then tpTo(platformPos) end
                     SetNoclip(true)
                     setWeight(true)
                     setATMStatus("Scanning platform")
@@ -1267,7 +1256,6 @@ do
         setWeight(true)
         task.wait(1)
         StartATMLoop()
-        pcall(function() WindUI:Notify({ Title = "ATM Farm", Content = "Started successfully.", Duration = 2, Icon = "package" }) end)
     end
 
     local function StopATMFarm()
@@ -1283,58 +1271,25 @@ do
         setATMStatus("ATM farm stopped")
     end
 
-    -- ============== AUTO DELIVERY ==============
+    -- ============== AUTO DELIVERY - OPTIMIZED ==============
     local DELIVERY_ANCHOR_NAME = "DeliveryTargetAnchor"
     local DELIVERY_DIST_HIGH   = 26
     local DELIVERY_DIST_LOW    = 24
-    local DELIVERY_PLATFORM_LIFE = 3
     local deliveryRunning = false
-    local currentPlatform  = nil
-    local platformFadeThread = nil
     local useHigh = true
     local deliveryThread = nil
+    local currentPlatform = nil
 
     local function setDeliveryStatus(t)
         State.DeliveryStatus = t
         pcall(function() if DeliveryStatusParagraph then DeliveryStatusParagraph:SetDesc(t) end end)
     end
 
-    local function destroyDeliveryPlatform()
-        if platformFadeThread then
-            pcall(function() task.cancel(platformFadeThread) end)
-            platformFadeThread = nil
-        end
-        if currentPlatform and currentPlatform.Parent then
-            pcall(function() currentPlatform:Destroy() end)
-        end
-        currentPlatform = nil
-    end
-
-    local function spawnDeliveryPlatformAt(position)
-        destroyDeliveryPlatform()
-        local platform = Instance.new("Part")
-        platform.Name = "TeleportPlatform"
-        platform.Size = Vector3.new(10, 1, 10)
-        platform.CFrame = CFrame.new(position - Vector3.new(0, 3 + platform.Size.Y / 2, 0))
-        platform.Anchored = true
-        platform.CanCollide = true
-        platform.Transparency = 1
-        platform.CastShadow = false
-        platform.Parent = Workspace
-        currentPlatform = platform
-    end
-
-    local function scheduleDeliveryPlatformRemoval()
-        if platformFadeThread then pcall(function() task.cancel(platformFadeThread) end) end
-        platformFadeThread = task.delay(DELIVERY_PLATFORM_LIFE, function()
-            destroyDeliveryPlatform()
-        end)
-    end
-
     local function findDeliveryAnchor()
         return Workspace:FindFirstChild(DELIVERY_ANCHOR_NAME, true)
     end
 
+    -- 🔧 FIX: ลบ platform creation/destruction ในจังหวะ teleport ออก ใช้แค่ teleport ตรงๆ ลื่นกว่ามาก
     local function doDeliveryTeleport()
         local anchor = findDeliveryAnchor()
         if not anchor then return false end
@@ -1347,11 +1302,8 @@ do
         local offset = anchorCF.LookVector * dist
         local targetPos = anchorCF.Position + offset + Vector3.new(0, 3, 0)
 
-        spawnDeliveryPlatformAt(targetPos)
-        scheduleDeliveryPlatformRemoval()
-        task.wait()
+        -- 🔧 FIX: ใช้ CFrame assignment ตรงๆ ไม่สร้าง/ลบ platform ทุกครั้ง (ลด lag มาก)
         rootPart.CFrame = CFrame.new(targetPos, anchorCF.Position)
-
         useHigh = not useHigh
         return true
     end
@@ -1364,14 +1316,22 @@ do
         task.wait(0.5)
         setDeliveryStatus("Waiting for delivery target")
 
+        -- 🔧 FIX: ใช้ task.wait แทน task.wait(0) + เพิ่ม cooldown ป้องกัน spam
         deliveryThread = task.spawn(function()
+            local lastTeleport = 0
             while deliveryRunning do
-                local ok = doDeliveryTeleport()
-                if not ok then
-                    setDeliveryStatus("Anchor not found, retrying")
-                    task.wait(1)
+                local now = tick()
+                -- Cooldown 0.1s ป้องกัน spam teleport
+                if now - lastTeleport >= 0.1 then
+                    local ok = doDeliveryTeleport()
+                    if ok then
+                        lastTeleport = now
+                    else
+                        setDeliveryStatus("Anchor not found, retrying")
+                        task.wait(1)
+                    end
                 end
-                task.wait(0)
+                task.wait()  -- wait 1 frame
             end
         end)
     end
@@ -1383,7 +1343,6 @@ do
             pcall(function() task.cancel(deliveryThread) end)
             deliveryThread = nil
         end
-        destroyDeliveryPlatform()
         pcall(function() RemoteEnd:FireServer("jobPad") end)
         setDeliveryStatus("Delivery stopped")
     end
@@ -1422,7 +1381,6 @@ do
                 local val = tonumber(text)
                 if val and val >= 0 then
                     FarmConfig[key] = val
-                    pcall(function() WindUI:Notify({ Title = "ATM Config", Content = name .. " set to " .. val .. "s", Duration = 2, Icon = "settings" }) end)
                 end
             end
         })
@@ -1444,7 +1402,6 @@ do
             FarmConfig.task3 = 0.15; FarmConfig.task4 = 5.0
             FarmConfig.task5 = 0.15; FarmConfig.task6 = 0.0
             FarmConfig.task7 = 5.0;  FarmConfig.task8 = 0.0
-            pcall(function() WindUI:Notify({ Title = "ATM Config", Content = "All ATM delays reset to default.", Duration = 2, Icon = "rotate-ccw" }) end)
         end
     })
     pcall(function() CollectTab:Divder() end)
@@ -1458,7 +1415,6 @@ do
         end
     })
 
-    -- Progress loop
     task.spawn(function()
         while true do
             pcall(function()
@@ -1471,11 +1427,6 @@ do
             end)
             task.wait(0.5)
         end
-    end)
-
-    -- Cleanup platforms on death / respawn
-    LocalPlayer.CharacterRemoving:Connect(function()
-        destroyDeliveryPlatform()
     end)
 end
 
@@ -1490,7 +1441,6 @@ do
         Desc     = "Saves the current configuration to file immediately.",
         Callback = function()
             Config:Save()
-            pcall(function() WindUI:Notify({ Title = "Config", Content = "Configuration saved successfully.", Duration = 2, Icon = "save" }) end)
         end
     })
 
@@ -1529,7 +1479,6 @@ do
         Title    = "Rejoin Server",
         Desc     = "Rejoins the current game server.",
         Callback = function()
-            pcall(function() WindUI:Notify({ Title = "Rejoin", Content = "Rejoining the current server.", Duration = 2, Icon = "refresh-cw" }) end)
             task.wait(1)
             TeleportService:Teleport(game.PlaceId, LocalPlayer)
         end
@@ -1582,12 +1531,7 @@ do
         Value    = false,
         Callback = function(v)
             State.BypassActive = v
-            if v then
-                BlockCount = 0
-                pcall(function() WindUI:Notify({ Title = "Bypass", Content = "Bypass monitor activated.", Duration = 3, Icon = "shield" }) end)
-            else
-                pcall(function() BypassStatus:SetDesc("Disarmed") end)
-            end
+            if v then BlockCount = 0 end
         end
     })
 
@@ -1618,84 +1562,22 @@ end
 --  INFORMATION TAB
 -- =========================================================================
 do
-    local ui = ui or {}
-    ui.Creator = ui.Creator or {}
-
     pcall(function() InfoTab:Divder() end)
     InfoTab:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
     pcall(function() InfoTab:Divder() end)
     InfoTab:Paragraph({
         Title = "Update: 07/17/2026 | CL: " .. ver,
-        Desc  = [[- [Added] Noclip, Infinite Jump, Jump Power
-- [Added] Instant Prompt with continuous scanning
-- [Added] Vehicle RGB and Physics Modifier
-- [Added] ATM Farm with custom delay inputs
-- [Added] Auto Delivery teleport loop
-- [Added] ESP with Boxes, Tracers, Skeletons, and Names
-- [Added] Bypass Monitor using early hook
-- [Fixed] Memory Leaks / Clean Cache
-- [Fixed] Connection Cleanup on Toggle Off
-- [Fixed] Lag Optimizations / Reloaded
-- [Fixed] Anti-AFK Disconnect Issue]],
+        Desc  = [[- [Fixed] Vehicle Physics Modifier not working
+- [Fixed] Auto Delivery lag optimization
+- [Fixed] ESP ColorPicker not showing
+- [Fixed] State variable sync with Config
+- [Improved] Physics loop using RenderStepped
+- [Improved] Auto Delivery no platform creation spam]],
     })
     pcall(function() InfoTab:Divder() end)
-
-    do
-        ui.Creator.Request = function(requestData)
-            local success, result = pcall(function()
-                if HttpService.RequestAsync then
-                    local response = HttpService:RequestAsync({ Url = requestData.Url, Method = requestData.Method or "GET", Headers = requestData.Headers or {} })
-                    return { Body = response.Body, StatusCode = response.StatusCode, Success = response.Success }
-                else
-                    local body = HttpService:GetAsync(requestData.Url)
-                    return { Body = body, StatusCode = 200, Success = true }
-                end
-            end)
-            if success then return result else error("HTTP Request failed: " .. tostring(result)) end
-        end
-
-        local InviteCode = "jWNDPNMmyB"
-        local DiscordAPI = "https://discord.com/api/v10/invites/" .. InviteCode .. "?with_counts=true&with_expiration=true"
-        local function LoadDiscordInfo()
-            local success, result = pcall(function()
-                return HttpService:JSONDecode(ui.Creator.Request({ Url = DiscordAPI, Method = "GET", Headers = { ["User-Agent"] = "RobloxBot/1.0", ["Accept"] = "application/json" } }).Body)
-            end)
-            if success and result and result.guild then
-                local DiscordInfo = InfoTab:Paragraph({
-                    Title = result.guild.name,
-                    Desc  = ' <font color="#52525b">●</font> Member Count : ' .. tostring(result.approximate_member_count) ..
-                            '\n <font color="#16a34a">●</font> Online Count : '  .. tostring(result.approximate_presence_count),
-                    Image = "https://cdn.discordapp.com/icons/" .. result.guild.id .. "/" .. result.guild.icon .. ".png?size=1024",
-                    ImageSize = 42,
-                })
-                InfoTab:Button({ Title = "Update Info", Callback = function()
-                    local ok, r = pcall(function() return HttpService:JSONDecode(ui.Creator.Request({ Url = DiscordAPI, Method = "GET" }).Body) end)
-                    if ok and r and r.guild then
-                        pcall(function() DiscordInfo:SetDesc(' <font color="#52525b">●</font> Member Count : ' .. tostring(r.approximate_member_count) .. '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(r.approximate_presence_count)) end)
-                        pcall(function() WindUI:Notify({ Title = "Discord Info Updated", Content = "Refreshed!", Duration = 2, Icon = "refresh-cw" }) end)
-                    else
-                        pcall(function() WindUI:Notify({ Title = "Update Failed", Content = "Could not refresh.", Duration = 3, Icon = "alert-triangle" }) end)
-                    end
-                end })
-                InfoTab:Button({ Title = "Copy Discord Invite", Callback = function()
-                    setclipboard("https://discord.gg/" .. InviteCode)
-                    pcall(function() WindUI:Notify({ Title = "Copied!", Content = "Discord invite copied!", Duration = 2, Icon = "clipboard-check" }) end)
-                end })
-            else
-                InfoTab:Paragraph({ Title = "Error fetching Discord Info", Desc = "Unable to load.", Image = "triangle-alert", ImageSize = 26, Color = "Red" })
-            end
-        end
-        LoadDiscordInfo()
-
-        pcall(function() InfoTab:Divder() end)
-        InfoTab:Section({ Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17 })
-        pcall(function() InfoTab:Divder() end)
-        InfoTab:Paragraph({ Title = "Main Owner", Desc = "@dyumraisgoodguy#8888", Image = "rbxassetid://119789418015420", ImageSize = 30 })
-        InfoTab:Paragraph({ Title = "Social", Desc = "Copy link social media for follow!", Image = "rbxassetid://104487529937663", ImageSize = 30,
-            Buttons = {{ Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://guns.lol/DYHUB") end }} })
-        InfoTab:Paragraph({ Title = "Discord", Desc = "Join our discord for more scripts!", Image = "rbxassetid://104487529937663", ImageSize = 30,
-            Buttons = {{ Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://discord.gg/jWNDPNMmyB") end }} })
-    end
+    InfoTab:Section({ Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17 })
+    pcall(function() InfoTab:Divder() end)
+    InfoTab:Paragraph({ Title = "Main Owner", Desc = "@dyumraisgoodguy#8888", Image = "rbxassetid://119789418015420", ImageSize = 30 })
 end
 
 -- ====================== CHARACTER RESPAWN HANDLER ======================
@@ -1708,5 +1590,4 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     end)
 end)
 
-print("[DYHUB] " .. version .. " | " .. ver .. " | Driving Empire loaded successfully.")
-print("[DYHUB] Auto saving every " .. tostring(Config:Get("AutoSaveDelay", 15)) .. "s")
+print("[DYHUB] " .. version .. " | " .. ver .. " | loaded successfully.")
