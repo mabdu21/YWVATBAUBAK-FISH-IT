@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v021.12"
+local ver     = "v021.13"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -228,23 +228,25 @@ local Window = WindUI:CreateWindow({
 
 Window:SetToggleKey(Enum.KeyCode.K)
 pcall(function() Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") }) end)
-Window:EditOpenButton({
-    Title           = "DYHUB - Open",
-    Icon            = "monitor",
-    CornerRadius    = UDim.new(0, 6),
-    StrokeThickness = 2,
-    Color           = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255)),
-    Draggable       = true,
-})
+pcall(function()
+    Window:EditOpenButton({
+        Title           = "DYHUB - Open",
+        Icon            = "monitor",
+        CornerRadius    = UDim.new(0, 6),
+        StrokeThickness = 2,
+        Color           = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255)),
+        Draggable       = true,
+    })
+end)
 
 -- ====================== TABS ======================
 local InfoTab     = Window:Tab({ Title = "Information", Icon = "info" })
-local _D1         = Window:Divider()
+Window:Divder()
 local MainTab     = Window:Tab({ Title = "Main",        Icon = "rocket" })
 local EspTab      = Window:Tab({ Title = "ESP",         Icon = "eye" })
 local PlayerTab   = Window:Tab({ Title = "Player",      Icon = "user" })
 local CollectTab  = Window:Tab({ Title = "Collect",     Icon = "package" })
-local _D2         = Window:Divider()
+Window:Divder()
 local SettingsTab = Window:Tab({ Title = "Settings",    Icon = "settings" })
 
 Window:SelectTab(1)
@@ -253,7 +255,7 @@ Window:SelectTab(1)
 --  MAIN TAB
 -- =========================================================================
 do
-    MainTab:Divider()
+    MainTab:Divder()
     MainTab:Section({ Title = "Current Status", Icon = "activity" })
 
     local JobStatus     = MainTab:Paragraph({ Title = "Current Job",      Desc = "Loading" })
@@ -261,7 +263,7 @@ do
     local VehicleSpeed  = MainTab:Paragraph({ Title = "Vehicle Speed",    Desc = "0 SPS" })
     local VehicleParts  = MainTab:Paragraph({ Title = "Parts Detected",   Desc = "0" })
     local VehicleState  = MainTab:Paragraph({ Title = "Vehicle Status",   Desc = "On Foot" })
-    MainTab:Divider()
+    MainTab:Divder()
     MainTab:Section({ Title = "Job System", Icon = "briefcase" })
 
     MainTab:Button({
@@ -308,7 +310,7 @@ do
             end
         end
     })
-    MainTab:Divider()
+    MainTab:Divder()
     MainTab:Section({ Title = "Vehicle Mods", Icon = "car" })
 
     local originalColors = {}
@@ -373,7 +375,6 @@ do
 
             -- Vehicle change detected -> reset original colors
             if myVeh ~= lastVehicleRef then
-                -- restore previous vehicle's colors
                 for part, color in pairs(originalColors) do
                     pcall(function() if part and part.Parent then part.Color = color end end)
                 end
@@ -538,7 +539,7 @@ do
         return false
     end
 
-    EspTab:Divider()
+    EspTab:Divder()
     EspTab:Section({ Title = "Master Control", Icon = "power" })
     EspTab:Toggle({
         Title    = "Enable ESP",
@@ -546,12 +547,12 @@ do
         Value    = _G.ESP_Enabled,
         Callback = function(v) _G.ESP_Enabled = v end
     })
-    EspTab:Divider()
+    EspTab:Divder()
     EspTab:Section({ Title = "Targets", Icon = "target" })
     EspTab:Toggle({ Title = "Players (Neutral)", Desc = "Display ESP for neutral players.", Value = _G.ESP_Targets.Players,   Callback = function(v) _G.ESP_Targets.Players   = v end })
     EspTab:Toggle({ Title = "Police (Security)", Desc = "Display ESP for Security players.", Value = _G.ESP_Targets.Police,   Callback = function(v) _G.ESP_Targets.Police   = v end })
     EspTab:Toggle({ Title = "Criminals",         Desc = "Display ESP for Criminal players.",  Value = _G.ESP_Targets.Criminals, Callback = function(v) _G.ESP_Targets.Criminals = v end })
-    EspTab:Divider()
+    EspTab:Divder()
     EspTab:Section({ Title = "Visuals", Icon = "layers" })
     EspTab:Toggle({ Title = "Boxes 2D",   Desc = "Draw a 2D box around each player.",     Value = _G.ESP_Settings.Boxes,     Callback = function(v) _G.ESP_Settings.Boxes     = v end })
     EspTab:Toggle({ Title = "Tracers",    Desc = "Draw a line from screen center to player.", Value = _G.ESP_Settings.Tracers,   Callback = function(v) _G.ESP_Settings.Tracers   = v end })
@@ -565,11 +566,11 @@ do
         Step     = 0.5,
         Callback = function(v) _G.ESP_Settings.Thickness = v end
     })
-    EspTab:Divider()
+    EspTab:Divder()
     EspTab:Section({ Title = "Colors", Icon = "palette" })
-    EspTab:ColorPicker({ Title = "Police Color",   Desc = "Color used for Security players.",   Default = _G.ESP_Colors.Police,   Callback = function(c) _G.ESP_Colors.Police   = c end })
-    EspTab:ColorPicker({ Title = "Criminal Color", Desc = "Color used for Criminal players.",   Default = _G.ESP_Colors.Criminal, Callback = function(c) _G.ESP_Colors.Criminal = c end })
-    EspTab:ColorPicker({ Title = "Neutral Color",  Desc = "Color used for neutral players.",    Default = _G.ESP_Colors.Neutral,  Callback = function(c) _G.ESP_Colors.Neutral  = c end })
+    EspTab:Colorpicker({ Title = "Police Color",   Desc = "Color used for Security players.",   Default = _G.ESP_Colors.Police,   Callback = function(c) _G.ESP_Colors.Police   = c end })
+    EspTab:Colorpicker({ Title = "Criminal Color", Desc = "Color used for Criminal players.",   Default = _G.ESP_Colors.Criminal, Callback = function(c) _G.ESP_Colors.Criminal = c end })
+    EspTab:Colorpicker({ Title = "Neutral Color",  Desc = "Color used for neutral players.",    Default = _G.ESP_Colors.Neutral,  Callback = function(c) _G.ESP_Colors.Neutral  = c end })
 
     task.spawn(function()
         while true do
@@ -671,7 +672,7 @@ end
 --  PLAYER TAB
 -- =========================================================================
 do
-    PlayerTab:Divider()
+    PlayerTab:Divder()
     PlayerTab:Section({ Title = "Movement", Icon = "footprints" })
 
     PlayerTab:Toggle({
@@ -760,7 +761,7 @@ do
     end
 
     startSpeedLoop()
-    PlayerTab:Divider()
+    PlayerTab:Divder()
     PlayerTab:Section({ Title = "Flight", Icon = "wind" })
 
     PlayerTab:Toggle({
@@ -829,7 +830,7 @@ do
         Step     = 1,
         Callback = function(v) State.FlySpeed = v end
     })
-    PlayerTab:Divider()
+    PlayerTab:Divder()
     PlayerTab:Section({ Title = "Physics", Icon = "atom" })
 
     PlayerTab:Toggle({
@@ -920,7 +921,7 @@ do
             end)
         end
     end)
-    PlayerTab:Divider()
+    PlayerTab:Divder()
     PlayerTab:Section({ Title = "World", Icon = "globe" })
 
     PlayerTab:Toggle({
@@ -950,7 +951,7 @@ do
             end
         end
     })
-    PlayerTab:Divider()
+    PlayerTab:Divder()
     PlayerTab:Section({ Title = "Teleport", Icon = "map-pin" })
 
     local PlayerDropdown
@@ -1005,7 +1006,7 @@ do
             end
         end
     })
-    PlayerTab:Divider()
+    PlayerTab:Divder()
     PlayerTab:Section({ Title = "Safety", Icon = "shield" })
 
     PlayerTab:Toggle({
@@ -1347,12 +1348,12 @@ do
     end
 
     -- ============== COLLECT TAB UI ==============
-    CollectTab:Divider()
+    CollectTab:Divder()
     CollectTab:Section({ Title = "Farm Status", Icon = "activity" })
     ATMStatusParagraph       = CollectTab:Paragraph({ Title = "ATM Farm",       Desc = "Idle" })
     ATMBagsParagraph         = CollectTab:Paragraph({ Title = "ATM Bags",       Desc = "0 / 25" })
     DeliveryStatusParagraph  = CollectTab:Paragraph({ Title = "Auto Delivery",  Desc = "Idle" })
-    CollectTab:Divider()
+    CollectTab:Divder()
     CollectTab:Section({ Title = "ATM Farm", Icon = "package" })
     CollectTab:Toggle({
         Title    = "Auto ATM",
@@ -1369,7 +1370,7 @@ do
         Step     = 1,
         Callback = function(v) BagLimit = v end
     })
-    CollectTab:Divider()
+    CollectTab:Divder()
     CollectTab:Section({ Title = "ATM Delay Configuration", Icon = "settings" })
     local function addATMTaskInput(name, key)
         CollectTab:Input({
@@ -1405,7 +1406,7 @@ do
             WindUI:Notify({ Title = "ATM Config", Content = "All ATM delays reset to default.", Duration = 2, Icon = "rotate-ccw" })
         end
     })
-    CollectTab:Divider()
+    CollectTab:Divder()
     CollectTab:Section({ Title = "Delivery Farm", Icon = "truck" })
     CollectTab:Toggle({
         Title    = "Auto Delivery",
@@ -1441,7 +1442,7 @@ end
 --  SETTINGS TAB
 -- =========================================================================
 do
-    SettingsTab:Divider()
+    SettingsTab:Divder()
     SettingsTab:Section({ Title = "Save Config", Icon = "save" })
     SettingsTab:Button({
         Title    = "Save Config Now",
@@ -1476,7 +1477,7 @@ do
             end
         end
     })
-    SettingsTab:Divider()
+    SettingsTab:Divder()
     SettingsTab:Section({ Title = "Server", Icon = "server" })
     SettingsTab:Button({
         Title    = "Server Hop",
@@ -1492,7 +1493,7 @@ do
             TeleportService:Teleport(game.PlaceId, LocalPlayer)
         end
     })
-    SettingsTab:Divider()
+    SettingsTab:Divder()
     SettingsTab:Section({ Title = "Bypass Monitor", Icon = "shield" })
     local BypassStatus = SettingsTab:Paragraph({ Title = "Bypass Status", Desc = "Disarmed" })
     local BlockCount = 0
@@ -1561,9 +1562,9 @@ do
                                 TargetRemotes[n] = true
                             end
                         end
-                        BypassStatus:SetDesc("Active (" .. BlockCount .. " blocked)")
+                        pcall(function() BypassStatus:SetDesc("Active (" .. BlockCount .. " blocked)") end)
                     else
-                        BypassStatus:SetDesc("Waiting for the game engine to load")
+                        pcall(function() BypassStatus:SetDesc("Waiting for the game engine to load") end)
                     end
                 end
             end)
@@ -1579,9 +1580,9 @@ do
     local ui = ui or {}
     ui.Creator = ui.Creator or {}
 
-    InfoTab:Divider()
+    InfoTab:Divder()
     InfoTab:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
-    InfoTab:Divider()
+    InfoTab:Divder()
     InfoTab:Paragraph({
         Title = "Update: 07/17/2026 | CL: " .. ver,
         Desc  = [[- [Added] Noclip, Infinite Jump, Jump Power
@@ -1596,7 +1597,7 @@ do
 - [Fixed] Lag Optimizations / Reloaded
 - [Fixed] Anti-AFK Disconnect Issue]],
     })
-    InfoTab:Divider()
+    InfoTab:Divder()
 
     do
         ui.Creator.Request = function(requestData)
@@ -1629,7 +1630,7 @@ do
                 InfoTab:Button({ Title = "Update Info", Callback = function()
                     local ok, r = pcall(function() return HttpService:JSONDecode(ui.Creator.Request({ Url = DiscordAPI, Method = "GET" }).Body) end)
                     if ok and r and r.guild then
-                        DiscordInfo:SetDesc(' <font color="#52525b">●</font> Member Count : ' .. tostring(r.approximate_member_count) .. '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(r.approximate_presence_count))
+                        pcall(function() DiscordInfo:SetDesc(' <font color="#52525b">●</font> Member Count : ' .. tostring(r.approximate_member_count) .. '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(r.approximate_presence_count)) end)
                         WindUI:Notify({ Title = "Discord Info Updated", Content = "Refreshed!", Duration = 2, Icon = "refresh-cw" })
                     else
                         WindUI:Notify({ Title = "Update Failed", Content = "Could not refresh.", Duration = 3, Icon = "alert-triangle" })
@@ -1645,9 +1646,9 @@ do
         end
         LoadDiscordInfo()
 
-        InfoTab:Divider()
+        InfoTab:Divder()
         InfoTab:Section({ Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17 })
-        InfoTab:Divider()
+        InfoTab:Divder()
         InfoTab:Paragraph({ Title = "Main Owner", Desc = "@dyumraisgoodguy#8888", Image = "rbxassetid://119789418015420", ImageSize = 30 })
         InfoTab:Paragraph({ Title = "Social", Desc = "Copy link social media for follow!", Image = "rbxassetid://104487529937663", ImageSize = 30,
             Buttons = {{ Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://guns.lol/DYHUB") end }} })
