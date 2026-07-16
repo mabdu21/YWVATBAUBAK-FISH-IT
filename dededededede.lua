@@ -1,6 +1,6 @@
 -- =========================
 local version = "BETA"
-local ver     = "v021.13"
+local ver     = "v021.14"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -241,12 +241,12 @@ end)
 
 -- ====================== TABS ======================
 local InfoTab     = Window:Tab({ Title = "Information", Icon = "info" })
-Window:Divder()
+local Info1       = Window:Divder()
 local MainTab     = Window:Tab({ Title = "Main",        Icon = "rocket" })
 local EspTab      = Window:Tab({ Title = "ESP",         Icon = "eye" })
 local PlayerTab   = Window:Tab({ Title = "Player",      Icon = "user" })
 local CollectTab  = Window:Tab({ Title = "Collect",     Icon = "package" })
-Window:Divder()
+local Info2       = Window:Divder()
 local SettingsTab = Window:Tab({ Title = "Settings",    Icon = "settings" })
 
 Window:SelectTab(1)
