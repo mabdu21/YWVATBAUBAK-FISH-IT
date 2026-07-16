@@ -1,18 +1,30 @@
 -- =========================
 local version = "BETA"
-local ver     = "v021.14"
+local ver     = "v021.15"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
 
 -- ====================== LOAD UI ======================
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+local WindUI
+local successLoad, errLoad = pcall(function()
+    WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+end)
+
+if not successLoad or not WindUI then
+    warn("[DYHUB] Failed to load WindUI: " .. tostring(errLoad))
+    return
+end
 
 if setfpscap then
     pcall(function() setfpscap(1000) end)
-    WindUI:Notify({ Title = "Service", Content = "FPS Unlocked | " .. ver, Duration = 3, Icon = "cpu" })
+    pcall(function()
+        WindUI:Notify({ Title = "Service", Content = "FPS Unlocked | " .. ver, Duration = 3, Icon = "cpu" })
+    end)
 else
-    WindUI:Notify({ Title = "Service", Content = "setfpscap not supported by your executor.", Duration = 3, Icon = "ban" })
+    pcall(function()
+        WindUI:Notify({ Title = "Service", Content = "setfpscap not supported by your executor.", Duration = 3, Icon = "ban" })
+    end)
 end
 
 -- ====================== SERVICES ======================
@@ -118,7 +130,9 @@ local function ExecuteServerHop()
         end)
     end
 
-    WindUI:Notify({ Title = "Server Hop", Content = "Searching for another server.", Duration = 2, Icon = "server" })
+    pcall(function()
+        WindUI:Notify({ Title = "Server Hop", Content = "Searching for another server.", Duration = 2, Icon = "server" })
+    end)
 
     local success = false
     local attempts = 0
@@ -149,7 +163,9 @@ local function ExecuteServerHop()
     end
 
     if not success then
-        WindUI:Notify({ Title = "Server Hop", Content = "Failed to find a suitable server.", Duration = 3, Icon = "alert-triangle" })
+        pcall(function()
+            WindUI:Notify({ Title = "Server Hop", Content = "Failed to find a suitable server.", Duration = 3, Icon = "alert-triangle" })
+        end)
     end
 end
 
@@ -164,8 +180,10 @@ function Config.new()
     local self = setmetatable({}, Config)
     self.data = {}
     self.autoSaveThread = nil
-    if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
-    self:Load()
+    pcall(function()
+        if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
+    end)
+    pcall(function() self:Load() end)
     return self
 end
 
@@ -183,14 +201,16 @@ function Config:Save()
 end
 
 function Config:Load()
-    if isfile(ConfigPath) then
-        local ok, result = pcall(function()
-            return HttpService:JSONDecode(readfile(ConfigPath))
-        end)
-        if ok and type(result) == "table" then
-            self.data = result
+    pcall(function()
+        if isfile(ConfigPath) then
+            local ok, result = pcall(function()
+                return HttpService:JSONDecode(readfile(ConfigPath))
+            end)
+            if ok and type(result) == "table" then
+                self.data = result
+            end
         end
-    end
+    end)
 end
 
 function Config:AutoSave(interval)
@@ -211,42 +231,58 @@ end
 local Config = Config.new()
 Config:AutoSave(Config:Get("AutoSaveDelay", 15))
 
--- ====================== WINDOW ======================
-local Window = WindUI:CreateWindow({
-    Title      = "DYHUB",
-    IconThemed = true,
-    Icon       = "rbxassetid://104487529937663",
-    Author     = "Driving Empire | Paid Version",
-    Folder     = "DYHUB_DE",
-    Size       = UDim2.fromOffset(560, 420),
-    Theme      = "Dark",
-    BackgroundImageTransparency = 0.8,
-    HideSearchBar    = false,
-    ScrollBarEnabled = true,
-    User = { Enabled = true, Anonymous = false },
-})
-
-Window:SetToggleKey(Enum.KeyCode.K)
-pcall(function() Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") }) end)
-pcall(function()
-    Window:EditOpenButton({
-        Title           = "DYHUB - Open",
-        Icon            = "monitor",
-        CornerRadius    = UDim.new(0, 6),
-        StrokeThickness = 2,
-        Color           = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255)),
-        Draggable       = true,
+-- ====================== WINDOW (SAFE WRAP) ======================
+local Window
+local okWindow, errWindow = pcall(function()
+    Window = WindUI:CreateWindow({
+        Title      = "DYHUB",
+        Icon       = "rbxassetid://104487529937663",
+        Author     = "Driving Empire | Paid Version",
+        Folder     = "DYHUB_DE",
+        Size       = UDim2.fromOffset(560, 420),
+        Theme      = "Dark",
+        HideSearchBar    = false,
+        ScrollBarEnabled = true,
     })
+end)
+
+if not okWindow or not Window then
+    warn("[DYHUB] Failed to create window: " .. tostring(errWindow))
+    return
+end
+
+-- Optional: SetToggleKey (may not exist in older versions)
+pcall(function() Window:SetToggleKey(Enum.KeyCode.K) end)
+
+-- Optional: Tag (may not exist)
+pcall(function()
+    if Window.Tag then
+        Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") })
+    end
+end)
+
+-- Optional: EditOpenButton (may not exist)
+pcall(function()
+    if Window.EditOpenButton then
+        Window:EditOpenButton({
+            Title           = "DYHUB - Open",
+            Icon            = "monitor",
+            CornerRadius    = UDim.new(0, 6),
+            StrokeThickness = 2,
+            Color           = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255)),
+            Draggable       = true,
+        })
+    end
 end)
 
 -- ====================== TABS ======================
 local InfoTab     = Window:Tab({ Title = "Information", Icon = "info" })
-local Info1       = Window:Divder()
+local _D1           = Window:Divider()
 local MainTab     = Window:Tab({ Title = "Main",        Icon = "rocket" })
 local EspTab      = Window:Tab({ Title = "ESP",         Icon = "eye" })
 local PlayerTab   = Window:Tab({ Title = "Player",      Icon = "user" })
 local CollectTab  = Window:Tab({ Title = "Collect",     Icon = "package" })
-local Info2       = Window:Divder()
+local _D2           = Window:Divider()
 local SettingsTab = Window:Tab({ Title = "Settings",    Icon = "settings" })
 
 Window:SelectTab(1)
@@ -255,7 +291,7 @@ Window:SelectTab(1)
 --  MAIN TAB
 -- =========================================================================
 do
-    MainTab:Divder()
+    pcall(function() MainTab:Divder() end)
     MainTab:Section({ Title = "Current Status", Icon = "activity" })
 
     local JobStatus     = MainTab:Paragraph({ Title = "Current Job",      Desc = "Loading" })
@@ -263,7 +299,7 @@ do
     local VehicleSpeed  = MainTab:Paragraph({ Title = "Vehicle Speed",    Desc = "0 SPS" })
     local VehicleParts  = MainTab:Paragraph({ Title = "Parts Detected",   Desc = "0" })
     local VehicleState  = MainTab:Paragraph({ Title = "Vehicle Status",   Desc = "On Foot" })
-    MainTab:Divder()
+    pcall(function() MainTab:Divder() end)
     MainTab:Section({ Title = "Job System", Icon = "briefcase" })
 
     MainTab:Button({
@@ -273,10 +309,10 @@ do
             local current = LocalPlayer:GetAttribute("JobId")
             if current == "Security" then
                 pcall(function() RemoteEnd:FireServer("jobPad") end)
-                WindUI:Notify({ Title = "Job", Content = "Left Security.", Duration = 2, Icon = "shield-off" })
+                pcall(function() WindUI:Notify({ Title = "Job", Content = "Left Security.", Duration = 2, Icon = "shield-off" }) end)
             else
                 pcall(function() RemoteStart:FireServer("Security", "jobPad") end)
-                WindUI:Notify({ Title = "Job", Content = "Joined Security.", Duration = 2, Icon = "shield" })
+                pcall(function() WindUI:Notify({ Title = "Job", Content = "Joined Security.", Duration = 2, Icon = "shield" }) end)
             end
         end
     })
@@ -288,10 +324,10 @@ do
             local current = LocalPlayer:GetAttribute("JobId")
             if current == "Criminal" then
                 pcall(function() RemoteEnd:FireServer("jobPad") end)
-                WindUI:Notify({ Title = "Job", Content = "Left Criminal.", Duration = 2, Icon = "user-x" })
+                pcall(function() WindUI:Notify({ Title = "Job", Content = "Left Criminal.", Duration = 2, Icon = "user-x" }) end)
             else
                 pcall(function() RemoteStart:FireServer("Criminal", "jobPad") end)
-                WindUI:Notify({ Title = "Job", Content = "Joined Criminal.", Duration = 2, Icon = "user" })
+                pcall(function() WindUI:Notify({ Title = "Job", Content = "Joined Criminal.", Duration = 2, Icon = "user" }) end)
             end
         end
     })
@@ -303,14 +339,14 @@ do
             local current = LocalPlayer:GetAttribute("JobId")
             if current == "Delivery" then
                 pcall(function() RemoteEnd:FireServer("jobPad") end)
-                WindUI:Notify({ Title = "Job", Content = "Left Delivery.", Duration = 2, Icon = "truck" })
+                pcall(function() WindUI:Notify({ Title = "Job", Content = "Left Delivery.", Duration = 2, Icon = "truck" }) end)
             else
                 pcall(function() RemoteStart:FireServer("Delivery", "jobPad") end)
-                WindUI:Notify({ Title = "Job", Content = "Joined Delivery.", Duration = 2, Icon = "truck" })
+                pcall(function() WindUI:Notify({ Title = "Job", Content = "Joined Delivery.", Duration = 2, Icon = "truck" }) end)
             end
         end
     })
-    MainTab:Divder()
+    pcall(function() MainTab:Divder() end)
     MainTab:Section({ Title = "Vehicle Mods", Icon = "car" })
 
     local originalColors = {}
@@ -330,7 +366,7 @@ do
                 table.clear(originalColors)
                 lastVehicleRef = nil
             end
-            WindUI:Notify({ Title = "Vehicle RGB", Content = v and "Enabled" or "Disabled", Duration = 2, Icon = "palette" })
+            pcall(function() WindUI:Notify({ Title = "Vehicle RGB", Content = v and "Enabled" or "Disabled", Duration = 2, Icon = "palette" }) end)
         end
     })
 
@@ -341,7 +377,7 @@ do
         Callback = function(v)
             State.PhysicsEnabled = v
             Config:Set("Physics", v)
-            WindUI:Notify({ Title = "Physics", Content = v and "Enabled" or "Disabled", Duration = 2, Icon = "gauge" })
+            pcall(function() WindUI:Notify({ Title = "Physics", Content = v and "Enabled" or "Disabled", Duration = 2, Icon = "gauge" }) end)
         end
     })
 
@@ -373,7 +409,6 @@ do
         while task.wait(0.1) do
             local myVeh = GetMyVehicle()
 
-            -- Vehicle change detected -> reset original colors
             if myVeh ~= lastVehicleRef then
                 for part, color in pairs(originalColors) do
                     pcall(function() if part and part.Parent then part.Color = color end end)
@@ -539,7 +574,7 @@ do
         return false
     end
 
-    EspTab:Divder()
+    pcall(function() EspTab:Divder() end)
     EspTab:Section({ Title = "Master Control", Icon = "power" })
     EspTab:Toggle({
         Title    = "Enable ESP",
@@ -547,12 +582,12 @@ do
         Value    = _G.ESP_Enabled,
         Callback = function(v) _G.ESP_Enabled = v end
     })
-    EspTab:Divder()
+    pcall(function() EspTab:Divder() end)
     EspTab:Section({ Title = "Targets", Icon = "target" })
     EspTab:Toggle({ Title = "Players (Neutral)", Desc = "Display ESP for neutral players.", Value = _G.ESP_Targets.Players,   Callback = function(v) _G.ESP_Targets.Players   = v end })
     EspTab:Toggle({ Title = "Police (Security)", Desc = "Display ESP for Security players.", Value = _G.ESP_Targets.Police,   Callback = function(v) _G.ESP_Targets.Police   = v end })
     EspTab:Toggle({ Title = "Criminals",         Desc = "Display ESP for Criminal players.",  Value = _G.ESP_Targets.Criminals, Callback = function(v) _G.ESP_Targets.Criminals = v end })
-    EspTab:Divder()
+    pcall(function() EspTab:Divder() end)
     EspTab:Section({ Title = "Visuals", Icon = "layers" })
     EspTab:Toggle({ Title = "Boxes 2D",   Desc = "Draw a 2D box around each player.",     Value = _G.ESP_Settings.Boxes,     Callback = function(v) _G.ESP_Settings.Boxes     = v end })
     EspTab:Toggle({ Title = "Tracers",    Desc = "Draw a line from screen center to player.", Value = _G.ESP_Settings.Tracers,   Callback = function(v) _G.ESP_Settings.Tracers   = v end })
@@ -566,11 +601,17 @@ do
         Step     = 0.5,
         Callback = function(v) _G.ESP_Settings.Thickness = v end
     })
-    EspTab:Divder()
+    pcall(function() EspTab:Divder() end)
     EspTab:Section({ Title = "Colors", Icon = "palette" })
-    EspTab:Colorpicker({ Title = "Police Color",   Desc = "Color used for Security players.",   Default = _G.ESP_Colors.Police,   Callback = function(c) _G.ESP_Colors.Police   = c end })
-    EspTab:Colorpicker({ Title = "Criminal Color", Desc = "Color used for Criminal players.",   Default = _G.ESP_Colors.Criminal, Callback = function(c) _G.ESP_Colors.Criminal = c end })
-    EspTab:Colorpicker({ Title = "Neutral Color",  Desc = "Color used for neutral players.",    Default = _G.ESP_Colors.Neutral,  Callback = function(c) _G.ESP_Colors.Neutral  = c end })
+    pcall(function()
+        EspTab:Colorpicker({ Title = "Police Color",   Desc = "Color used for Security players.",   Default = _G.ESP_Colors.Police,   Callback = function(c) _G.ESP_Colors.Police   = c end })
+    end)
+    pcall(function()
+        EspTab:Colorpicker({ Title = "Criminal Color", Desc = "Color used for Criminal players.",   Default = _G.ESP_Colors.Criminal, Callback = function(c) _G.ESP_Colors.Criminal = c end })
+    end)
+    pcall(function()
+        EspTab:Colorpicker({ Title = "Neutral Color",  Desc = "Color used for neutral players.",    Default = _G.ESP_Colors.Neutral,  Callback = function(c) _G.ESP_Colors.Neutral  = c end })
+    end)
 
     task.spawn(function()
         while true do
@@ -672,7 +713,7 @@ end
 --  PLAYER TAB
 -- =========================================================================
 do
-    PlayerTab:Divder()
+    pcall(function() PlayerTab:Divder() end)
     PlayerTab:Section({ Title = "Movement", Icon = "footprints" })
 
     PlayerTab:Toggle({
@@ -690,7 +731,7 @@ do
                     end
                 end)
             end
-            WindUI:Notify({ Title = "Speed", Content = v and "Enabled" or "Disabled", Duration = 2, Icon = "wind" })
+            pcall(function() WindUI:Notify({ Title = "Speed", Content = v and "Enabled" or "Disabled", Duration = 2, Icon = "wind" }) end)
         end
     })
 
@@ -761,7 +802,7 @@ do
     end
 
     startSpeedLoop()
-    PlayerTab:Divder()
+    pcall(function() PlayerTab:Divder() end)
     PlayerTab:Section({ Title = "Flight", Icon = "wind" })
 
     PlayerTab:Toggle({
@@ -830,7 +871,7 @@ do
         Step     = 1,
         Callback = function(v) State.FlySpeed = v end
     })
-    PlayerTab:Divder()
+    pcall(function() PlayerTab:Divder() end)
     PlayerTab:Section({ Title = "Physics", Icon = "atom" })
 
     PlayerTab:Toggle({
@@ -921,7 +962,7 @@ do
             end)
         end
     end)
-    PlayerTab:Divder()
+    pcall(function() PlayerTab:Divder() end)
     PlayerTab:Section({ Title = "World", Icon = "globe" })
 
     PlayerTab:Toggle({
@@ -951,7 +992,7 @@ do
             end
         end
     })
-    PlayerTab:Divder()
+    pcall(function() PlayerTab:Divder() end)
     PlayerTab:Section({ Title = "Teleport", Icon = "map-pin" })
 
     local PlayerDropdown
@@ -982,7 +1023,7 @@ do
         Desc     = "Teleports you directly to the selected player.",
         Callback = function()
             if not State.SelectedPlayer then
-                WindUI:Notify({ Title = "Teleport", Content = "Please select a player first.", Duration = 2, Icon = "alert-triangle" })
+                pcall(function() WindUI:Notify({ Title = "Teleport", Content = "Please select a player first.", Duration = 2, Icon = "alert-triangle" }) end)
                 return
             end
             local target = Players:FindFirstChild(State.SelectedPlayer)
@@ -1006,7 +1047,7 @@ do
             end
         end
     })
-    PlayerTab:Divder()
+    pcall(function() PlayerTab:Divder() end)
     PlayerTab:Section({ Title = "Safety", Icon = "shield" })
 
     PlayerTab:Toggle({
@@ -1226,7 +1267,7 @@ do
         setWeight(true)
         task.wait(1)
         StartATMLoop()
-        WindUI:Notify({ Title = "ATM Farm", Content = "Started successfully.", Duration = 2, Icon = "package" })
+        pcall(function() WindUI:Notify({ Title = "ATM Farm", Content = "Started successfully.", Duration = 2, Icon = "package" }) end)
     end
 
     local function StopATMFarm()
@@ -1348,12 +1389,12 @@ do
     end
 
     -- ============== COLLECT TAB UI ==============
-    CollectTab:Divder()
+    pcall(function() CollectTab:Divder() end)
     CollectTab:Section({ Title = "Farm Status", Icon = "activity" })
     ATMStatusParagraph       = CollectTab:Paragraph({ Title = "ATM Farm",       Desc = "Idle" })
     ATMBagsParagraph         = CollectTab:Paragraph({ Title = "ATM Bags",       Desc = "0 / 25" })
     DeliveryStatusParagraph  = CollectTab:Paragraph({ Title = "Auto Delivery",  Desc = "Idle" })
-    CollectTab:Divder()
+    pcall(function() CollectTab:Divder() end)
     CollectTab:Section({ Title = "ATM Farm", Icon = "package" })
     CollectTab:Toggle({
         Title    = "Auto ATM",
@@ -1370,7 +1411,7 @@ do
         Step     = 1,
         Callback = function(v) BagLimit = v end
     })
-    CollectTab:Divder()
+    pcall(function() CollectTab:Divder() end)
     CollectTab:Section({ Title = "ATM Delay Configuration", Icon = "settings" })
     local function addATMTaskInput(name, key)
         CollectTab:Input({
@@ -1381,7 +1422,7 @@ do
                 local val = tonumber(text)
                 if val and val >= 0 then
                     FarmConfig[key] = val
-                    WindUI:Notify({ Title = "ATM Config", Content = name .. " set to " .. val .. "s", Duration = 2, Icon = "settings" })
+                    pcall(function() WindUI:Notify({ Title = "ATM Config", Content = name .. " set to " .. val .. "s", Duration = 2, Icon = "settings" }) end)
                 end
             end
         })
@@ -1403,10 +1444,10 @@ do
             FarmConfig.task3 = 0.15; FarmConfig.task4 = 5.0
             FarmConfig.task5 = 0.15; FarmConfig.task6 = 0.0
             FarmConfig.task7 = 5.0;  FarmConfig.task8 = 0.0
-            WindUI:Notify({ Title = "ATM Config", Content = "All ATM delays reset to default.", Duration = 2, Icon = "rotate-ccw" })
+            pcall(function() WindUI:Notify({ Title = "ATM Config", Content = "All ATM delays reset to default.", Duration = 2, Icon = "rotate-ccw" }) end)
         end
     })
-    CollectTab:Divder()
+    pcall(function() CollectTab:Divder() end)
     CollectTab:Section({ Title = "Delivery Farm", Icon = "truck" })
     CollectTab:Toggle({
         Title    = "Auto Delivery",
@@ -1442,14 +1483,14 @@ end
 --  SETTINGS TAB
 -- =========================================================================
 do
-    SettingsTab:Divder()
+    pcall(function() SettingsTab:Divder() end)
     SettingsTab:Section({ Title = "Save Config", Icon = "save" })
     SettingsTab:Button({
         Title    = "Save Config Now",
         Desc     = "Saves the current configuration to file immediately.",
         Callback = function()
             Config:Save()
-            WindUI:Notify({ Title = "Config", Content = "Configuration saved successfully.", Duration = 2, Icon = "save" })
+            pcall(function() WindUI:Notify({ Title = "Config", Content = "Configuration saved successfully.", Duration = 2, Icon = "save" }) end)
         end
     })
 
@@ -1477,7 +1518,7 @@ do
             end
         end
     })
-    SettingsTab:Divder()
+    pcall(function() SettingsTab:Divder() end)
     SettingsTab:Section({ Title = "Server", Icon = "server" })
     SettingsTab:Button({
         Title    = "Server Hop",
@@ -1488,12 +1529,12 @@ do
         Title    = "Rejoin Server",
         Desc     = "Rejoins the current game server.",
         Callback = function()
-            WindUI:Notify({ Title = "Rejoin", Content = "Rejoining the current server.", Duration = 2, Icon = "refresh-cw" })
+            pcall(function() WindUI:Notify({ Title = "Rejoin", Content = "Rejoining the current server.", Duration = 2, Icon = "refresh-cw" }) end)
             task.wait(1)
             TeleportService:Teleport(game.PlaceId, LocalPlayer)
         end
     })
-    SettingsTab:Divder()
+    pcall(function() SettingsTab:Divder() end)
     SettingsTab:Section({ Title = "Bypass Monitor", Icon = "shield" })
     local BypassStatus = SettingsTab:Paragraph({ Title = "Bypass Status", Desc = "Disarmed" })
     local BlockCount = 0
@@ -1543,7 +1584,7 @@ do
             State.BypassActive = v
             if v then
                 BlockCount = 0
-                WindUI:Notify({ Title = "Bypass", Content = "Bypass monitor activated.", Duration = 3, Icon = "shield" })
+                pcall(function() WindUI:Notify({ Title = "Bypass", Content = "Bypass monitor activated.", Duration = 3, Icon = "shield" }) end)
             else
                 pcall(function() BypassStatus:SetDesc("Disarmed") end)
             end
@@ -1580,9 +1621,9 @@ do
     local ui = ui or {}
     ui.Creator = ui.Creator or {}
 
-    InfoTab:Divder()
+    pcall(function() InfoTab:Divder() end)
     InfoTab:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
-    InfoTab:Divder()
+    pcall(function() InfoTab:Divder() end)
     InfoTab:Paragraph({
         Title = "Update: 07/17/2026 | CL: " .. ver,
         Desc  = [[- [Added] Noclip, Infinite Jump, Jump Power
@@ -1597,7 +1638,7 @@ do
 - [Fixed] Lag Optimizations / Reloaded
 - [Fixed] Anti-AFK Disconnect Issue]],
     })
-    InfoTab:Divder()
+    pcall(function() InfoTab:Divder() end)
 
     do
         ui.Creator.Request = function(requestData)
@@ -1631,14 +1672,14 @@ do
                     local ok, r = pcall(function() return HttpService:JSONDecode(ui.Creator.Request({ Url = DiscordAPI, Method = "GET" }).Body) end)
                     if ok and r and r.guild then
                         pcall(function() DiscordInfo:SetDesc(' <font color="#52525b">●</font> Member Count : ' .. tostring(r.approximate_member_count) .. '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(r.approximate_presence_count)) end)
-                        WindUI:Notify({ Title = "Discord Info Updated", Content = "Refreshed!", Duration = 2, Icon = "refresh-cw" })
+                        pcall(function() WindUI:Notify({ Title = "Discord Info Updated", Content = "Refreshed!", Duration = 2, Icon = "refresh-cw" }) end)
                     else
-                        WindUI:Notify({ Title = "Update Failed", Content = "Could not refresh.", Duration = 3, Icon = "alert-triangle" })
+                        pcall(function() WindUI:Notify({ Title = "Update Failed", Content = "Could not refresh.", Duration = 3, Icon = "alert-triangle" }) end)
                     end
                 end })
                 InfoTab:Button({ Title = "Copy Discord Invite", Callback = function()
                     setclipboard("https://discord.gg/" .. InviteCode)
-                    WindUI:Notify({ Title = "Copied!", Content = "Discord invite copied!", Duration = 2, Icon = "clipboard-check" })
+                    pcall(function() WindUI:Notify({ Title = "Copied!", Content = "Discord invite copied!", Duration = 2, Icon = "clipboard-check" }) end)
                 end })
             else
                 InfoTab:Paragraph({ Title = "Error fetching Discord Info", Desc = "Unable to load.", Image = "triangle-alert", ImageSize = 26, Color = "Red" })
@@ -1646,9 +1687,9 @@ do
         end
         LoadDiscordInfo()
 
-        InfoTab:Divder()
+        pcall(function() InfoTab:Divder() end)
         InfoTab:Section({ Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17 })
-        InfoTab:Divder()
+        pcall(function() InfoTab:Divder() end)
         InfoTab:Paragraph({ Title = "Main Owner", Desc = "@dyumraisgoodguy#8888", Image = "rbxassetid://119789418015420", ImageSize = 30 })
         InfoTab:Paragraph({ Title = "Social", Desc = "Copy link social media for follow!", Image = "rbxassetid://104487529937663", ImageSize = 30,
             Buttons = {{ Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://guns.lol/DYHUB") end }} })
