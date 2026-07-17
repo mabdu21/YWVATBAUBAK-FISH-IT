@@ -2,7 +2,7 @@
 
 -- =========================
 local version = "BETA"
-local ver     = "v021.22"
+local ver     = "v021.23"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -1671,11 +1671,11 @@ do
 	InfoTab:Paragraph({
 		Title = "Update: 07/18/2026 | CL: " .. ver,
 		Desc  = [[- [Fixed] Vehicle Physics Modifier not working
-	- [Fixed] Auto Delivery lag optimization
-	- [Fixed] ESP ColorPicker not showing
-	- [Fixed] State variable sync with Config
-	- [Improved] Physics loop using RenderStepped
-	- [Improved] Auto Delivery no platform creation spam]],
+- [Fixed] Auto Delivery lag optimization
+- [Fixed] ESP ColorPicker not showing
+- [Fixed] State variable sync with Config
+- [Improved] Physics loop using RenderStepped
+- [Improved] Auto Delivery no platform creation spam]],
 	})
 	pcall(function() InfoTab:Divder() end)
 
