@@ -2,7 +2,7 @@
 
 -- =========================
 local version = "BETA"
-local ver     = "v021.21"
+local ver     = "v021.18"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -189,68 +189,114 @@ function Config.new()
 end
 
 function Config:Set(k, v) self.data[k] = v end
-function Config:Get(k, def) return self.data[k] ~= nil and self.data[k] or def end
-function Config:Load()
-    pcall(function()
-        local content = readfile(ConfigPath)
-        self.data = HttpService:JSONDecode(content) or {}
-    end)
+function Config:Get(k, d)
+    local v = self.data[k]
+    if v == nil then return d end
+    return v
 end
 
 function Config:Save()
     pcall(function()
-        local content = HttpService:JSONEncode(self.data)
-        writefile(ConfigPath, content)
+        writefile(ConfigPath, HttpService:JSONEncode(self.data))
     end)
 end
 
-function Config:AutoSave(interval)
-    if self.autoSaveThread then task.cancel(self.autoSaveThread) end
-    self.autoSaveThread = task.spawn(function()
-        while true do
-            task.wait(interval or 60)
-            self:Save()
+function Config:Load()
+    pcall(function()
+        if isfile(ConfigPath) then
+            local ok, result = pcall(function()
+                return HttpService:JSONDecode(readfile(ConfigPath))
+            end)
+            if ok and type(result) == "table" then
+                self.data = result
+            end
         end
     end)
 end
 
-local settings = Config.new()
-
--- ====================== WINDOW SETUP ======================
-local function CreateWindow()
-    if syn and syn.queue_on_teleport then
-        pcall(function()
-            syn.queue_on_teleport([[
-                repeat task.wait() until game:IsLoaded()
-                loadstring(game:HttpGet("https://raw.githubusercontent.com/mabdu21/YWVATBAUBAK-FISH-IT/refs/heads/main/dededededede.lua"))()
-            ]])
+function Config:AutoSave(interval)
+    if self.autoSaveThread then
+        task.cancel(self.autoSaveThread)
+        self.autoSaveThread = nil
+    end
+    if interval and interval > 0 then
+        self.autoSaveThread = task.spawn(function()
+            while true do
+                task.wait(interval)
+                self:Save()
+            end
         end)
     end
-
-    local keyBind = settings:Get("ToggleKeybind", Enum.KeyCode.RightShift)
-    local Window = WindUI:CreateWindow({
-        Title = "DYHUB | " .. ver,
-        Desc  = "All in one script",
-        Icon  = "rbxassetid://104487529937663",
-        Folder = "DyHub",
-    })
-
-    Window:BindToggleKey(keyBind)
-
-    local MainTab     = Window:CreateTab({ Title = "Main", Icon = "home" })
-    local PlayerTab   = Window:CreateTab({ Title = "Player", Icon = "user" })
-    local EspTab      = Window:CreateTab({ Title = "ESP", Icon = "eye" })
-    local CollectTab  = Window:CreateTab({ Title = "Collect", Icon = "package" })
-    local InfoTab     = Window:CreateTab({ Title = "Info", Icon = "info" })
-    local SettingsTab = Window:CreateTab({ Title = "Settings", Icon = "sliders" })
-
-    return Window, MainTab, PlayerTab, EspTab, CollectTab, InfoTab, SettingsTab
 end
 
-local Window, MainTab, PlayerTab, EspTab, CollectTab, InfoTab, SettingsTab = CreateWindow()
+local Config = Config.new()
 
--- ====================== MAIN TAB ======================
+-- ?? ??????????????????????????? State ????????? UI
+State.AccelPower    = Config:Get("AccelPower", 0)
+State.BrakeForce    = Config:Get("BrakeForce", 0)
+State.SpeedValue    = Config:Get("SpeedValue", 16)
+State.FlySpeed      = Config:Get("FlySpeed", 50)
+State.JumpPowerValue = Config:Get("JumpPower", 50)
+
+Config:AutoSave(Config:Get("AutoSaveDelay", 15))
+
+-- ====================== WINDOW ======================
+local Window
+local okWindow, errWindow = pcall(function()
+    Window = WindUI:CreateWindow({
+        Title      = "DYHUB",
+        Icon       = "rbxassetid://104487529937663",
+        Author     = "Driving Empire | Paid Version",
+        Folder     = "DYHUB_DE",
+        Size       = UDim2.fromOffset(560, 420),
+        Theme      = "Dark",
+        HideSearchBar    = false,
+        ScrollBarEnabled = true,
+    })
+end)
+
+if not okWindow or not Window then
+    warn("[DYHUB] Failed to create window: " .. tostring(errWindow))
+    return
+end
+
+pcall(function() Window:SetToggleKey(Enum.KeyCode.K) end)
+pcall(function()
+    if Window.Tag then
+        Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") })
+    end
+end)
+pcall(function()
+    if Window.EditOpenButton then
+        Window:EditOpenButton({
+            Title           = "DYHUB - Open",
+            Icon            = "monitor",
+            CornerRadius    = UDim.new(0, 6),
+            StrokeThickness = 2,
+            Color           = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255)),
+            Draggable       = true,
+        })
+    end
+end)
+
+-- ====================== TABS ======================
+local InfoTab     = Window:Tab({ Title = "Information", Icon = "info" })
+local _D1         = Window:Divider()
+local MainTab     = Window:Tab({ Title = "Main",        Icon = "rocket" })
+local EspTab      = Window:Tab({ Title = "ESP",         Icon = "eye" })
+local PlayerTab   = Window:Tab({ Title = "Player",      Icon = "user" })
+local CollectTab  = Window:Tab({ Title = "Collect",     Icon = "package" })
+local StatsTab      = Window:Tab({ Title = "Statistics",   Icon = "bar-chart-2" })
+local _D2         = Window:Divider()
+local SettingsTab = Window:Tab({ Title = "Settings",    Icon = "settings" })
+
+Window:SelectTab(1)
+
+-- =========================================================================
+--  MAIN TAB
+-- =========================================================================
 do
+    MainTab:Divider()
     MainTab:Section({ Title = "Current Status", Icon = "activity" })
 
     local JobStatus     = MainTab:Paragraph({ Title = "Current Job",      Desc = "Loading" })
@@ -333,6 +379,7 @@ do
         end
     })
 
+    -- ?? FIX: Slider ???? sync State ??? Config ????? + ??? Default ?????????? State
     MainTab:Slider({
         Title    = "Acceleration Power",
         Desc     = "Higher value means stronger boost when pressing forward or reverse.",
@@ -355,6 +402,7 @@ do
         end
     })
 
+    -- ?? FIX: Vehicle Info Loop ??? RenderStepped ????????????????
     task.spawn(function()
         local hue = 0
         while true do
@@ -422,6 +470,7 @@ do
         end
     end)
 
+    -- ?? FIX: ??? Physics Loop ???????? RenderStepped (60fps) ?????????????????
     task.spawn(function()
         while true do
             task.wait(0.1)
@@ -573,6 +622,7 @@ do
     })
     EspTab:Divider()
     EspTab:Section({ Title = "Colors", Icon = "palette" })
+    -- ?? FIX: ??? Colorpicker (p ????) + pcall ??????? error
     pcall(function()
         EspTab:Colorpicker({ Title = "Police Color",   Desc = "Color used for Security players.",   Default = _G.ESP_Colors.Police,   Callback = function(c) _G.ESP_Colors.Police   = c end })
     end)
@@ -583,10 +633,12 @@ do
         EspTab:Colorpicker({ Title = "Neutral Color",  Desc = "Color used for neutral players.",    Default = _G.ESP_Colors.Neutral,  Callback = function(c) _G.ESP_Colors.Neutral  = c end })
     end)
 
+    -- ?? FIX: ??? RenderStepped ??? throttle ??????????? 2-3 ???? ??????
     task.spawn(function()
         local frameCount = 0
         while true do
             frameCount = frameCount + 1
+            -- ???????? 2 ???? (~30fps) ?? ??????????????????
             if frameCount % 2 == 0 then
                 for player, obj in pairs(ESP_Objects) do
                     local char = player.Character
@@ -864,122 +916,145 @@ do
 
     PlayerTab:Toggle({
         Title    = "Infinite Jump",
-        Desc     = "Allows you to jump infinitely without cooldown.",
+        Desc     = "Lets you jump in mid air without limits.",
         Value    = State.InfJumpEnabled,
+        Callback = function(v) State.InfJumpEnabled = v end
+    })
+
+    PlayerTab:Toggle({
+        Title    = "Override Jump Power",
+        Desc     = "Replaces the default jump height with a custom value.",
+        Value    = State.JumpPowerEnabled,
         Callback = function(v)
-            State.InfJumpEnabled = v
+            State.JumpPowerEnabled = v
             if v then
-                UserInputService.InputBegan:Connect(function(input, gpe)
-                    if gpe then return end
-                    if input.KeyCode == Enum.KeyCode.Space and State.InfJumpEnabled then
-                        local char = LocalPlayer.Character
-                        local hum = char and char:FindFirstChildOfClass("Humanoid")
-                        if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+                pcall(function()
+                    local c = LocalPlayer.Character
+                    if c then
+                        local h = c:FindFirstChildOfClass("Humanoid")
+                        if h then h.UseJumpPower = true; h.JumpPower = State.JumpPowerValue end
+                    end
+                end)
+            else
+                pcall(function()
+                    local c = LocalPlayer.Character
+                    if c then
+                        local h = c:FindFirstChildOfClass("Humanoid")
+                        if h then h.JumpPower = 50 end
                     end
                 end)
             end
         end
     })
 
-    PlayerTab:Toggle({
+    PlayerTab:Slider({
         Title    = "Jump Power",
-        Desc     = "Increases your jump height based on the value.",
-        Value    = State.JumpPowerEnabled,
+        Desc     = "Higher value means higher jumps.",
+        Value    = { Min = 0, Max = 500, Default = State.JumpPowerValue },
+        Step     = 1,
         Callback = function(v)
-            State.JumpPowerEnabled = v
+            State.JumpPowerValue = v
+            Config:Set("JumpPower", v)
+            if State.JumpPowerEnabled then
+                pcall(function()
+                    local c = LocalPlayer.Character
+                    if c then
+                        local h = c:FindFirstChildOfClass("Humanoid")
+                        if h then h.JumpPower = v end
+                    end
+                end)
+            end
         end
     })
 
-    PlayerTab:Slider({
-        Title    = "Jump Power Value",
-        Desc     = "How high you jump.",
-        Value    = { Min = 0, Max = 200, Default = State.JumpPowerValue },
-        Step     = 1,
-        Callback = function(v) State.JumpPowerValue = v end
-    })
-
-    task.spawn(function()
-        while true do
+    UserInputService.JumpRequest:Connect(function()
+        if State.InfJumpEnabled then
             pcall(function()
-                if State.JumpPowerEnabled then
-                    local char = LocalPlayer.Character
-                    if char then
-                        local hum = char:FindFirstChildOfClass("Humanoid")
-                        if hum then hum.JumpPower = State.JumpPowerValue end
-                    end
+                local c = LocalPlayer.Character
+                if c then
+                    local h = c:FindFirstChildOfClass("Humanoid")
+                    if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
                 end
             end)
-            task.wait(0.1)
         end
     end)
-
     pcall(function() PlayerTab:Divder() end)
-    PlayerTab:Section({ Title = "Teleport", Icon = "arrow-right" })
+    PlayerTab:Section({ Title = "World", Icon = "globe" })
+
+    PlayerTab:Toggle({
+        Title    = "Instant Prompt",
+        Desc     = "Removes the hold time from every ProximityPrompt in the world.",
+        Value    = State.InstantPromptOn,
+        Callback = function(v)
+            State.InstantPromptOn = v
+            if Connections.PromptScan then Connections.PromptScan:Disconnect() Connections.PromptScan = nil end
+            local function ApplyInstant(obj)
+                if obj:IsA("ProximityPrompt") then
+                    pcall(function()
+                        obj.HoldDuration = 0
+                        obj.RequiresLineOfSight = false
+                        obj.MaxActivationDistance = math.max(obj.MaxActivationDistance, 20)
+                    end)
+                end
+            end
+            if v then
+                for _, d in pairs(Workspace:GetDescendants()) do ApplyInstant(d) end
+                Connections.PromptScan = Workspace.DescendantAdded:Connect(function(obj)
+                    task.wait()
+                    ApplyInstant(obj)
+                end)
+            end
+        end
+    })
+    pcall(function() PlayerTab:Divder() end)
+    PlayerTab:Section({ Title = "Teleport", Icon = "map-pin" })
+
+    local PlayerDropdown = PlayerTab:Dropdown({
+        Title    = "Select Player",
+        Desc     = "Choose a player to teleport to.",
+        Values   = getPlayerNames(),
+        Value    = "",
+        Callback = function(v) State.SelectedPlayer = v end
+    })
 
     PlayerTab:Button({
-        Title    = "Teleport to Cursor",
-        Desc     = "Teleports you to where your cursor is pointing.",
+        Title    = "Refresh Player List",
+        Desc     = "Updates the dropdown with the current player list.",
         Callback = function()
-            task.spawn(function()
-                pcall(function()
-                    local char = LocalPlayer.Character
-                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                    if not hrp then return end
-                    local unitRay = Camera:ScreenPointToRay(UserInputService:GetMouseLocation().X, UserInputService:GetMouseLocation().Y)
-                    local raycastParams = RaycastParams.new()
-                    raycastParams.FilterType = Enum.RaycastFilterType.Deny
-                    raycastParams.FilterDescendantsInstances = {char}
-                    local rayResult = Workspace:Raycast(unitRay.Origin, unitRay.Direction * 999, raycastParams)
-                    local dest = rayResult and rayResult.Position or (unitRay.Origin + unitRay.Direction * 999)
-                    hrp.CFrame = CFrame.new(dest + Vector3.new(0, 3, 0))
-                end)
+            pcall(function()
+                if PlayerDropdown and PlayerDropdown.Refresh then
+                    PlayerDropdown:Refresh(getPlayerNames())
+                elseif PlayerDropdown and PlayerDropdown.SetValues then
+                    PlayerDropdown:SetValues(getPlayerNames())
+                end
             end)
         end
     })
 
-    -- ① ประกาศตัวแปรสำหรับเก็บสถานะ
-    local gravityDisabled = false
-    
     PlayerTab:Button({
-        Title    = "Toggle Gravity",
-        Desc     = "Toggles your character gravity on/off.",
+        Title    = "Teleport To Player",
+        Desc     = "Teleports you directly to the selected player.",
         Callback = function()
-            -- ② สลับสถานะ
-            gravityDisabled = not gravityDisabled
-            
-            -- ③ ใช้ pcall เพื่อป้องกัน error
-            pcall(function()
-                local char = LocalPlayer.Character
-                if not char then return end
-                
-                -- ④ วนลูปผ่านทุก Part
-                local allParts = char:GetDescendants()
+            if not State.SelectedPlayer then return end
+            local target = Players:FindFirstChild(State.SelectedPlayer)
+            if not target or not target.Character then return end
+            local dest = target.Character:GetPivot() * CFrame.new(0, 8, 0)
+            local myVeh = GetMyVehicle()
+            local isDriving = myVeh and myVeh:FindFirstChild("Driver") and myVeh.Driver.Value == LocalPlayer
+            if isDriving and myVeh then
+                local allParts = {}
+                for _, p in pairs(myVeh:GetDescendants()) do if p:IsA("BasePart") then table.insert(allParts, p) end end
+                for _, p in pairs(allParts) do p.Anchored = true end
+                myVeh:PivotTo(dest)
+                task.wait(0.2)
                 for _, p in pairs(allParts) do
-                    -- ⑤ ตรวจสอบว่าเป็น BasePart
-                    if p:IsA("BasePart") then
-                        if gravityDisabled then
-                            -- ⑥ ปิดแรงโน้มถ่วง (ลอย)
-                            p.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                            p.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-                            p.CustomPhysicalProperties = PhysicalProperties.new(
-                                0.7, 0.3, 0.5, 1, 1
-                            )
-                        else
-                            -- ⑦ เปิดแรงโน้มถ่วง (ปกติ)
-                            p.CustomPhysicalProperties = nil
-                        end
-                    end
+                    p.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                    p.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                    p.Anchored = false
                 end
-                
-                -- ⑧ แสดง Notification
-                local statusText = gravityDisabled and "Disabled ❌" or "Enabled ✅"
-                WindUI:Notify({ 
-                    Title = "Gravity Mode", 
-                    Content = "Gravity is now " .. statusText, 
-                    Duration = 2, 
-                    Icon = "zap" 
-                })
-            end)
+            else
+                pcall(function() LocalPlayer.Character:PivotTo(dest) end)
+            end
         end
     })
     pcall(function() PlayerTab:Divder() end)
@@ -1112,6 +1187,7 @@ do
         local currentCrimes = LocalPlayer.Character and LocalPlayer.Character:GetAttribute("CrimesCommitted") or 0
         if currentCrimes >= BagLimit then
             setATMStatus("Bag limit reached, selling...")
+            -- ???????????????? ??????? SimpleGoTo ??????????
             tpTo(sellPos1)
             task.wait(FarmConfig.task1)
             tpTo(sellPos2)
@@ -1198,6 +1274,7 @@ do
         setATMStatus("ATM farm stopped")
     end
 
+    -- ============== AUTO DELIVERY - OPTIMIZED ==============
     local DELIVERY_ANCHOR_NAME = "DeliveryTargetAnchor"
     local DELIVERY_DIST_HIGH   = 26
     local DELIVERY_DIST_LOW    = 24
@@ -1215,6 +1292,7 @@ do
         return Workspace:FindFirstChild(DELIVERY_ANCHOR_NAME, true)
     end
 
+    -- ?? FIX: ?? platform creation/destruction ???????? teleport ??? ?????? teleport ???? ???????????
     local function doDeliveryTeleport()
         local anchor = findDeliveryAnchor()
         if not anchor then return false end
@@ -1227,6 +1305,7 @@ do
         local offset = anchorCF.LookVector * dist
         local targetPos = anchorCF.Position + offset + Vector3.new(0, 3, 0)
 
+        -- ?? FIX: ??? CFrame assignment ???? ????????/?? platform ???????? (?? lag ???)
         rootPart.CFrame = CFrame.new(targetPos, anchorCF.Position)
         useHigh = not useHigh
         return true
@@ -1240,10 +1319,12 @@ do
         task.wait(0.5)
         setDeliveryStatus("Waiting for delivery target")
 
+        -- ?? FIX: ??? task.wait ??? task.wait(0) + ????? cooldown ??????? spam
         deliveryThread = task.spawn(function()
             local lastTeleport = 0
             while deliveryRunning do
                 local now = os.clock()
+                -- Cooldown 0.1s ??????? spam teleport
                 if now - lastTeleport >= 0.1 then
                     local ok = doDeliveryTeleport()
                     if ok then
@@ -1253,7 +1334,7 @@ do
                         task.wait(1)
                     end
                 end
-                task.wait()
+                task.wait()  -- wait 1 frame
             end
         end)
     end
@@ -1269,12 +1350,13 @@ do
         setDeliveryStatus("Delivery stopped")
     end
 
+    -- ============== COLLECT TAB UI ==============
     pcall(function() CollectTab:Divder() end)
     CollectTab:Section({ Title = "Farm Status", Icon = "activity" })
     ATMStatusParagraph       = CollectTab:Paragraph({ Title = "ATM Farm",       Desc = "Idle" })
     ATMBagsParagraph         = CollectTab:Paragraph({ Title = "ATM Bags",       Desc = "0 / 25" })
     DeliveryStatusParagraph  = CollectTab:Paragraph({ Title = "Auto Delivery",  Desc = "Idle" })
-
+	
     pcall(function() CollectTab:Divder() end)
     CollectTab:Section({ Title = "Delivery Farm", Icon = "truck" })
     CollectTab:Toggle({
@@ -1285,7 +1367,7 @@ do
             if v then startDeliveryLoop() else stopDeliveryLoop() end
         end
     })
-
+	
     pcall(function() CollectTab:Divder() end)
     CollectTab:Section({ Title = "ATM Farm", Icon = "package" })
     CollectTab:Toggle({
@@ -1354,112 +1436,131 @@ do
 end
 
 -- =========================================================================
---  INFORMATION TAB
+--  STATISTICS TAB
 -- =========================================================================
-local Info = InfoTab
-if not ui then ui = {} end
-if not ui.Creator then ui.Creator = {} end
-
 do
-    pcall(function() InfoTab:Divder() end)
-    InfoTab:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
-    pcall(function() InfoTab:Divder() end)
-    InfoTab:Paragraph({
-        Title = "Update: 07/17/2026 | CL: " .. ver,
-        Desc  = [[- [Fixed] Vehicle Physics Modifier not working
-- [Fixed] Auto Delivery lag optimization
-- [Fixed] ESP ColorPicker not showing
-- [Fixed] State variable sync with Config
-- [Improved] Physics loop using RenderStepped
-- [Improved] Auto Delivery no platform creation spam]],
-    })
-    pcall(function() InfoTab:Divder() end)
+    pcall(function() StatsTab:Divder() end)
+    StatsTab:Section({ Title = "Local Player Attributes", Icon = "user" })
 
-do
-ui.Creator.Request = function(requestData)
-    local success, result = pcall(function()
-        if HttpService.RequestAsync then
-            local response = HttpService:RequestAsync({ Url = requestData.Url, Method = requestData.Method or "GET", Headers = requestData.Headers or {} })
-            return { Body = response.Body, StatusCode = response.StatusCode, Success = response.Success }
-        else
-            local body = HttpService:GetAsync(requestData.Url)
-            return { Body = body, StatusCode = 200, Success = true }
+    local attributesToTrack = {
+        "CurrentChassisType", "CustomizationEntryRefundsCompleted",
+        "CustomizationEntryRefundsProcessing", "CustomizationImmediateRefundsComplete",
+        "CustomizationImmediateRefundsInProgress", "DataManagerIsLoaded",
+        "Device", "FrameworkLoaded", "GachaRolls", "GroupRole",
+        "JobId", "MultiplierCashMultiplier", "PanelsInitialized"
+    }
+    local StatLabels = {}
+    for _, attrName in pairs(attributesToTrack) do
+        StatLabels[attrName] = StatsTab:Paragraph({ Title = attrName, Desc = "Loading..." })
+    end
+
+    task.spawn(function()
+        while true do
+            for _, attrName in pairs(attributesToTrack) do
+                local val = LocalPlayer:GetAttribute(attrName)
+                if val ~= nil then
+                    local displayValue = tostring(val)
+                    if type(val) == "boolean" then displayValue = val and "True" or "False" end
+                    if type(val) == "number" then displayValue = "?? " .. tostring(val) end
+                    if type(val) == "string" then displayValue = "?? " .. val end
+                    pcall(function() StatLabels[attrName]:SetDesc(displayValue) end)
+                else
+                    pcall(function() StatLabels[attrName]:SetDesc("[N/A]") end)
+                end
+            end
+            task.wait(0.5)
         end
     end)
-    if success then return result else error("HTTP Request failed: " .. tostring(result)) end
-end
 
-local InviteCode = "jWNDPNMmyB"
-local DiscordAPI = "https://discord.com/api/v10/invites/" .. InviteCode .. "?with_counts=true&with_expiration=true"
-local function LoadDiscordInfo()
-    local success, result = pcall(function()
-        return HttpService:JSONDecode(ui.Creator.Request({ Url = DiscordAPI, Method = "GET", Headers = { ["User-Agent"] = "RobloxBot/1.0", ["Accept"] = "application/json" } }).Body)
-    end)
-    if success and result and result.guild then
-        local DiscordInfo = Info:Paragraph({
-            Title = result.guild.name,
-            Desc  = ' <font color="#52525b">●</font> Member Count : ' .. tostring(result.approximate_member_count) ..
-                    '\n <font color="#16a34a">●</font> Online Count : '  .. tostring(result.approximate_presence_count),
-            Image = "https://cdn.discordapp.com/icons/" .. result.guild.id .. "/" .. result.guild.icon .. ".png?size=1024",
-            ImageSize = 42,
-        })
-        Info:Button({ Title = "Update Info", Callback = function()
-            local ok, r = pcall(function() return HttpService:JSONDecode(ui.Creator.Request({ Url = DiscordAPI, Method = "GET" }).Body) end)
-            if ok and r and r.guild then
-                DiscordInfo:SetDesc(' <font color="#52525b">●</font> Member Count : ' .. tostring(r.approximate_member_count) .. '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(r.approximate_presence_count))
-                Utils:Notify("Discord Info Updated", "Refreshed!", "refresh-cw", 2)
-            else
-                Utils:Notify("Update Failed", "Could not refresh.", "alert-triangle", 3)
-            end
-        end })
-        Info:Button({ Title = "Copy Discord Invite", Callback = function()
-            setclipboard("https://discord.gg/" .. InviteCode)
-            Utils:Notify("Copied!", "Discord invite copied!", "clipboard-check", 2)
-        end })
-    else
-        Info:Paragraph({ Title = "Error fetching Discord Info", Desc = "Unable to load.", Image = "triangle-alert", ImageSize = 26, Color = "Red" })
+    pcall(function() StatsTab:Divder() end)
+    StatsTab:Section({ Title = "Live Criminal Stats", Icon = "skull" })
+    local crimAttributes = {
+        "ComponentServerId", "CrimesCommitted", "CriminalExpireEpoch", "CurrencyEarned"
+    }
+    local CrimLabels = {}
+    for _, attrName in pairs(crimAttributes) do
+        CrimLabels[attrName] = StatsTab:Paragraph({ Title = attrName, Desc = "---" })
     end
-end
-LoadDiscordInfo()
 
-Info:Divider()
-Info:Section({ Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17 })
-Info:Divider()
-Info:Paragraph({ Title = "Main Owner", Desc = "@dyumraisgoodguy#8888", Image = "rbxassetid://119789418015420", ImageSize = 30 })
-Info:Paragraph({ Title = "Social", Desc = "Copy link social media for follow!", Image = "rbxassetid://104487529937663", ImageSize = 30,
-    Buttons = {{ Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://guns.lol/DYHUB") end }} })
-Info:Paragraph({ Title = "Discord", Desc = "Join our discord for more scripts!", Image = "rbxassetid://104487529937663", ImageSize = 30,
-    Buttons = {{ Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://discord.gg/jWNDPNMmyB") end }} })
-end
+    task.spawn(function()
+        while true do
+            local charInWorkspace = Workspace:FindFirstChild(LocalPlayer.Name)
+            if charInWorkspace then
+                for _, attrName in pairs(crimAttributes) do
+                    local val = charInWorkspace:GetAttribute(attrName)
+                    if val ~= nil then
+                        local display = tostring(val)
+                        if attrName == "CurrencyEarned" then display = "?? $" .. display
+                        elseif attrName == "CrimesCommitted" then display = "?? " .. display
+                        elseif attrName == "ComponentServerId" then display = "?? " .. display end
+                        pcall(function() CrimLabels[attrName]:SetDesc(display) end)
+                    else
+                        pcall(function() CrimLabels[attrName]:SetDesc("[Inactive]") end)
+                    end
+                end
+            else
+                for _, label in pairs(CrimLabels) do pcall(function() label:SetDesc("Character not found") end) end
+            end
+            task.wait(0.5)
+        end
+    end)
+
+    pcall(function() StatsTab:Divder() end)
+    StatsTab:Section({ Title = "Server Online Players", Icon = "users" })
+    local PoliceLabel = StatsTab:Paragraph({ Title = "Police (Security)", Desc = "0" })
+    local CrimeLabel = StatsTab:Paragraph({ Title = "Criminals", Desc = "0" })
+    local CitizenLabel = StatsTab:Paragraph({ Title = "Citizens", Desc = "0" })
+    local TotalLabel = StatsTab:Paragraph({ Title = "Total Players", Desc = "0" })
+
+    task.spawn(function()
+        while true do
+            local countPolice, countCrime, countCitizen = 0, 0, 0
+            local allPlayers = Players:GetPlayers()
+            for _, player in pairs(allPlayers) do
+                local job = player:GetAttribute("JobId")
+                if job == "Security" then countPolice = countPolice + 1
+                elseif job == "Criminal" then countCrime = countCrime + 1
+                elseif job == nil or job == "" or job == "Citizen" then countCitizen = countCitizen + 1 end
+            end
+            pcall(function() PoliceLabel:SetDesc("?? " .. tostring(countPolice)) end)
+            pcall(function() CrimeLabel:SetDesc("?? " .. tostring(countCrime)) end)
+            pcall(function() CitizenLabel:SetDesc("?? " .. tostring(countCitizen)) end)
+            pcall(function() TotalLabel:SetDesc("?? " .. tostring(#allPlayers)) end)
+            task.wait(1)
+        end
+    end)
 end
 
--- ====================== SETTINGS TAB ======================
+-- =========================================================================
+--  SETTINGS TAB
+-- =========================================================================
 do
     pcall(function() SettingsTab:Divder() end)
-    SettingsTab:Section({ Title = "Auto Save", Icon = "save" })
-    local AutoSaveOn = settings:Get("AutoSaveEnabled", false)
-    local AutoSaveD = settings:Get("AutoSaveDelay", 60)
-
-    SettingsTab:Toggle({
-        Title    = "Auto Save Config",
-        Desc     = "Automatically saves the configuration to a file every N seconds.",
-        Value    = AutoSaveOn,
-        Callback = function(v)
-            AutoSaveOn = v
-            Config:Set("AutoSaveEnabled", v)
-            if v then
-                Config:AutoSave(AutoSaveD)
-                WindUI:Notify({ Title = "Auto Save", Content = "Enabled every " .. tostring(AutoSaveD) .. "s", Duration = 2, Icon = "check" })
-            else
-                Config:Save()
-            end
+    SettingsTab:Section({ Title = "Save Config", Icon = "save" })
+    SettingsTab:Button({
+        Title    = "Save Config Now",
+        Desc     = "Saves the current configuration to file immediately.",
+        Callback = function()
+            Config:Save()
         end
     })
 
+    local AutoSaveOn = Config:Get("AutoSaveEnabled", true)
+    local AutoSaveD  = Config:Get("AutoSaveDelay", 15)
+    SettingsTab:Toggle({
+        Title    = "Auto Save Config",
+        Desc     = "Automatically saves the configuration at a set interval.",
+        Value    = AutoSaveOn,
+        Callback = function(v)
+            AutoSaveOn = v; Config:Set("AutoSaveEnabled", v); Config:Save()
+            if v then Config:AutoSave(AutoSaveD) else Config:AutoSave(0) end
+        end
+    })
     SettingsTab:Input({
-        Title    = "Auto Save Interval",
-        Desc     = "Delay in seconds between automatic saves.",
-        Placeholder = "Current: " .. tostring(AutoSaveD),
+        Title    = "Save Delay (Seconds)",
+        Desc     = "Interval in seconds between automatic saves.",
+        Placeholder = "Default: 15",
+        Value = tostring(AutoSaveD),
         Callback = function(text)
             local n = tonumber(text)
             if n and n >= 1 then
@@ -1556,6 +1657,85 @@ do
             task.wait(2)
         end
     end)
+end
+
+-- =========================================================================
+--  INFORMATION TAB
+-- =========================================================================
+local Info = InfoTab
+if not ui then ui = {} end
+if not ui.Creator then ui.Creator = {} end
+
+do
+    pcall(function() InfoTab:Divder() end)
+    InfoTab:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
+    pcall(function() InfoTab:Divder() end)
+    InfoTab:Paragraph({
+        Title = "Update: 07/17/2026 | CL: " .. ver,
+        Desc  = [[- [Fixed] Vehicle Physics Modifier not working
+- [Fixed] Auto Delivery lag optimization
+- [Fixed] ESP ColorPicker not showing
+- [Fixed] State variable sync with Config
+- [Improved] Physics loop using RenderStepped
+- [Improved] Auto Delivery no platform creation spam]],
+    })
+    pcall(function() InfoTab:Divder() end)
+
+do
+ui.Creator.Request = function(requestData)
+    local success, result = pcall(function()
+        if HttpService.RequestAsync then
+            local response = HttpService:RequestAsync({ Url = requestData.Url, Method = requestData.Method or "GET", Headers = requestData.Headers or {} })
+            return { Body = response.Body, StatusCode = response.StatusCode, Success = response.Success }
+        else
+            local body = HttpService:GetAsync(requestData.Url)
+            return { Body = body, StatusCode = 200, Success = true }
+        end
+    end)
+    if success then return result else error("HTTP Request failed: " .. tostring(result)) end
+end
+
+local InviteCode = "jWNDPNMmyB"
+local DiscordAPI = "https://discord.com/api/v10/invites/" .. InviteCode .. "?with_counts=true&with_expiration=true"
+local function LoadDiscordInfo()
+    local success, result = pcall(function()
+        return HttpService:JSONDecode(ui.Creator.Request({ Url = DiscordAPI, Method = "GET", Headers = { ["User-Agent"] = "RobloxBot/1.0", ["Accept"] = "application/json" } }).Body)
+    end)
+    if success and result and result.guild then
+        local DiscordInfo = Info:Paragraph({
+            Title = result.guild.name,
+            Desc  = ' <font color="#52525b">●</font> Member Count : ' .. tostring(result.approximate_member_count) ..
+                    '\n <font color="#16a34a">●</font> Online Count : '  .. tostring(result.approximate_presence_count),
+            Image = "https://cdn.discordapp.com/icons/" .. result.guild.id .. "/" .. result.guild.icon .. ".png?size=1024",
+            ImageSize = 42,
+        })
+        Info:Button({ Title = "Update Info", Callback = function()
+            local ok, r = pcall(function() return HttpService:JSONDecode(ui.Creator.Request({ Url = DiscordAPI, Method = "GET" }).Body) end)
+            if ok and r and r.guild then
+                DiscordInfo:SetDesc(' <font color="#52525b">●</font> Member Count : ' .. tostring(r.approximate_member_count) .. '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(r.approximate_presence_count))
+                Utils:Notify("Discord Info Updated", "Refreshed!", "refresh-cw", 2)
+            else
+                Utils:Notify("Update Failed", "Could not refresh.", "alert-triangle", 3)
+            end
+        end })
+        Info:Button({ Title = "Copy Discord Invite", Callback = function()
+            setclipboard("https://discord.gg/" .. InviteCode)
+            Utils:Notify("Copied!", "Discord invite copied!", "clipboard-check", 2)
+        end })
+    else
+        Info:Paragraph({ Title = "Error fetching Discord Info", Desc = "Unable to load.", Image = "triangle-alert", ImageSize = 26, Color = "Red" })
+    end
+end
+LoadDiscordInfo()
+
+Info:Divider()
+Info:Section({ Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17 })
+Info:Divider()
+Info:Paragraph({ Title = "Main Owner", Desc = "@dyumraisgoodguy#8888", Image = "rbxassetid://119789418015420", ImageSize = 30 })
+Info:Paragraph({ Title = "Social", Desc = "Copy link social media for follow!", Image = "rbxassetid://104487529937663", ImageSize = 30,
+    Buttons = {{ Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://guns.lol/DYHUB") end }} })
+Info:Paragraph({ Title = "Discord", Desc = "Join our discord for more scripts!", Image = "rbxassetid://104487529937663", ImageSize = 30,
+    Buttons = {{ Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://discord.gg/jWNDPNMmyB") end }} })
 end
 
 -- ====================== CHARACTER RESPAWN HANDLER ======================
