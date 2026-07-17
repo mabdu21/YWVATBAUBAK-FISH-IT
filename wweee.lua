@@ -2,7 +2,7 @@
 
 -- =========================
 local version = "PAID"
-local ver     = "v021.19"
+local ver     = "v021.26"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -588,7 +588,7 @@ do
 		if ESP_Objects[player] or not Drawing then return end
 		local ok, obj = pcall(function()
 			return {
-				 = Drawing.new("Square"),
+				Box = Drawing.new("Square"),
 				Tracer = Drawing.new("Line"),
 				Name = Drawing.new("Text"),
 				Distance = Drawing.new("Text"),
