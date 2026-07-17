@@ -2,7 +2,7 @@
 
 -- =========================
 local version = "BETA"
-local ver     = "v021.24"
+local ver     = "v021.25"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -48,6 +48,7 @@ local RemoteEnd     = remotesFolder:WaitForChild("RequestEndJobSession")
 
 -- ====================== GLOBAL STATE ======================
 local State = {
+    MaxSpeed          = 9999,
 	SpeedEnabled      = false,
 	SpeedMode         = "Legit",
 	SpeedValue        = 16,
@@ -279,7 +280,7 @@ function Config:AutoSave(interval)
 end
 
 local Config = Config.new()
-
+State.MaxSpeed      = Config:Get("MaxSpeed", 9999)
 State.AccelPower    = Config:Get("AccelPower", 0)
 State.BrakeForce    = Config:Get("BrakeForce", 0)
 State.SpeedValue    = Config:Get("SpeedValue", 16)
@@ -520,6 +521,18 @@ do
 		end
 	end)
 
+	MainTab:Slider({
+	    Title    = "Max Speed Limit",
+	    Desc     = "Set the car's maximum speed (SPS)",
+	    Value    = { Min = 0, Max = 9999, Default = State.MaxSpeed },
+	    Step     = 10,
+	    Callback = function(v)
+	        State.MaxSpeed = v
+	        Config:Set("MaxSpeed", v)
+	    end
+	})
+	
+	-- แทนที่ task.spawn อันเก่าทั้งหมด ด้วยอันนี้:
 	task.spawn(function()
 		local lastPhysTime = tick()
 		while true do
@@ -533,7 +546,7 @@ do
 				local driverObj = myVeh:FindFirstChild("Driver")
 				if seat and driverObj and driverObj.Value == LocalPlayer then
 					if State.PhysicsEnabled then
-						-- ปลดล็อก MaxSpeed
+						-- ปลดล็อก MaxSpeed ของ VehicleSeat
 						if seat.MaxSpeed < 9000 then
 							seat.MaxSpeed = 9999
 						end
@@ -541,13 +554,12 @@ do
 						local vel = seat.AssemblyLinearVelocity
 						local look = seat.CFrame.LookVector
 						local right = seat.CFrame.RightVector
-						local upVec = Vector3.new(0, 1, 0)
 						
 						-- ===================== INPUT DETECTION =====================
 						local throttle = 0
 						local steerInput = 0
 						
-						-- PC: ใช้ WASD ตรงๆ (ไม่ใช้ hum.MoveDirection อีกแล้ว)
+						-- PC: ใช้ WASD ตรงๆ
 						if UserInputService.KeyboardEnabled then
 							if UserInputService:IsKeyDown(Enum.KeyCode.W) then throttle = 1 end
 							if UserInputService:IsKeyDown(Enum.KeyCode.S) then throttle = -1 end
@@ -570,48 +582,75 @@ do
 						local forwardSpeed = look:Dot(vel)
 						local rightSpeed = right:Dot(vel)
 						local vertVel = vel.Y
+						local horizSpeed = math.sqrt(forwardSpeed^2 + rightSpeed^2)
 						
 						local accel = State.AccelPower
 						local brake = State.BrakeForce
+						local maxSpeed = State.MaxSpeed -- ดึงจาก Slider Max Speed
 						
-						-- Max Speed (ป้องกันเร่งไม่จบ + เลี้ยวง่ายขึ้น)
-						local maxFwd = math.max(accel * 0.8, 100)
-						local maxRev = maxFwd * 0.4
+						-- ป้องกัน Accel/Brake เป็น 0 แล้วค้าง
+						if accel <= 0 then accel = 1 end
+						if brake <= 0 then brake = 1 end
 						
-						if math.abs(throttle) > 0 and accel > 0 then
+						-- ===================== ANTI-FLOAT =====================
+						-- ถ้าความเร็วแนวนอนน้อย + Y > 0 → รถกำลังลอย ให้ดึงลง
+						if horizSpeed < 5 and vertVel > 5 then
+							vertVel = math.max(vertVel - (60 * dt), 0)
+						elseif vertVel > 0 and horizSpeed > 20 then
+							-- ขับเร็ว + กระโดด = ค่อยๆ ลด Y ลง (แต่ไม่หักทันที)
+							vertVel = vertVel * math.max(0, 1 - 0.5 * dt)
+						end
+						
+						-- ===================== THROTTLE LOGIC =====================
+						if math.abs(throttle) > 0 then
 							if throttle > 0 then
-								-- ===== W: เดินหน้า =====
+								-- W: เดินหน้า
 								if forwardSpeed >= 0 then
-									-- กำลังไปข้างหน้าหรือหยุดนิ่ง → เร่ง
-									forwardSpeed = math.min(forwardSpeed + accel * dt, maxFwd)
+									-- เร่ง (เคารพ MaxSpeed)
+									local newSpeed = forwardSpeed + (accel * dt)
+									forwardSpeed = math.min(newSpeed, maxSpeed)
 								else
-									-- กำลังถอยหลังอยู่ → เบรกก่อน
-									forwardSpeed = math.min(forwardSpeed + brake * dt, 0)
+									-- กำลังถอย → เบรกก่อน (เคารพ MaxSpeed)
+									local newSpeed = forwardSpeed + (brake * dt)
+									forwardSpeed = math.min(newSpeed, maxSpeed)
 								end
 							else
-								-- ===== S: เบรก/ถอย =====
-								if forwardSpeed > 1 then
-									-- กำลังไปข้างหน้า → เบรก
-									forwardSpeed = math.max(forwardSpeed - brake * dt, 0)
+								-- S: ถอย/เบรก
+								if forwardSpeed > 2 then
+									-- เบรก (เคารพ MaxSpeed)
+									local newSpeed = forwardSpeed - (brake * dt)
+									forwardSpeed = math.max(newSpeed, -maxSpeed * 0.4)
 								else
-									-- หยุดนิ่ง/ช้าๆ → ถอยหลัง
-									forwardSpeed = math.max(forwardSpeed - accel * dt, -maxRev)
+									-- ถอยหลัง
+									local newSpeed = forwardSpeed - (accel * 0.6 * dt)
+									forwardSpeed = math.max(newSpeed, -maxSpeed * 0.4)
 								end
 							end
 						else
-							-- ===== ไม่กดปุ่ม: ค่อยๆ ชะลอ =====
-							forwardSpeed = forwardSpeed * math.max(0, 1 - 1.5 * dt)
-							rightSpeed = rightSpeed * math.max(0, 1 - 3 * dt) -- Lateral friction ลดการลื่นไถล
+							-- ไม่กดปุ่ม: ค่อยๆ ชะลอ (Coast)
+							forwardSpeed = forwardSpeed * math.max(0, 1 - 1.2 * dt)
+							rightSpeed = rightSpeed * math.max(0, 1 - 3 * dt) -- Lateral friction
 						end
 						
+						-- ===================== HARD CLAMP (Safety Net) =====================
+						-- ป้องกันทุกกรณี ไม่ให้เกิน MaxSpeed แม้แต่ 1 หน่อย
+						if forwardSpeed > maxSpeed then forwardSpeed = maxSpeed end
+						if forwardSpeed < -maxSpeed * 0.4 then forwardSpeed = -maxSpeed * 0.4 end
+						
 						-- ===================== APPLY VELOCITY =====================
-						local newVel = (look * forwardSpeed) + (right * rightSpeed) + (upVec * vertVel)
-						pcall(function() seat.AssemblyLinearVelocity = newVel end)
+						local newVel = (look * forwardSpeed) + (right * rightSpeed) + (Vector3.new(0, 1, 0) * vertVel)
+						
+						-- Sanity Check: ถ้า Velocity ใหม่ระเบิด (NaN/Inf) ให้ใช้ของเก่า
+						if newVel ~= newVel or newVel.Magnitude ~= newVel.Magnitude then
+							-- skip update
+						else
+							pcall(function() seat.AssemblyLinearVelocity = newVel end)
+						end
 					end
 				end
 			end
 			
-			task.wait() -- รอ 1 เฟรม (60fps)
+			task.wait() -- 60 FPS
 		end
 	end)
 end
