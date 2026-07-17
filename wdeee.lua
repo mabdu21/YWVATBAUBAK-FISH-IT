@@ -48,7 +48,7 @@ local RemoteEnd     = remotesFolder:WaitForChild("RequestEndJobSession")
 
 -- ====================== GLOBAL STATE ======================
 local State = {
-    MaxSpeed          = 9999,
+    MaxSpeed          = 1000,
 	SpeedEnabled      = false,
 	SpeedMode         = "Legit",
 	SpeedValue        = 16,
@@ -222,7 +222,7 @@ end
 
 -- ====================== CONFIG SYSTEM ======================
 local ConfigFolder = "DYHUB_DE"
-local ConfigPath   = ConfigFolder .. "/de_config.json"
+local ConfigPath   = ConfigFolder .. "/config_de.json"
 
 local Config = {}
 Config.__index = Config
@@ -280,7 +280,7 @@ function Config:AutoSave(interval)
 end
 
 local Config = Config.new()
-State.MaxSpeed      = Config:Get("MaxSpeed", 9999)
+State.MaxSpeed      = Config:Get("MaxSpeed", 1000)
 State.AccelPower    = Config:Get("AccelPower", 0)
 State.BrakeForce    = Config:Get("BrakeForce", 0)
 State.SpeedValue    = Config:Get("SpeedValue", 16)
@@ -524,7 +524,7 @@ do
 	MainTab:Slider({
 	    Title    = "Max Speed Limit",
 	    Desc     = "Set the car's maximum speed (SPS)",
-	    Value    = { Min = 0, Max = 9999, Default = State.MaxSpeed },
+	    Value    = { Min = 0, Max = 1000, Default = State.MaxSpeed },
 	    Step     = 10,
 	    Callback = function(v)
 	        State.MaxSpeed = v
@@ -532,7 +532,8 @@ do
 	    end
 	})
 	
-	-- แทนที่ task.spawn อันเก่าทั้งหมด ด้วยอันนี้:
+	State.AntiFloatStrength = Config:Get("AntiFloatStrength", 80)
+	
 	task.spawn(function()
 		local lastPhysTime = tick()
 		while true do
@@ -544,12 +545,21 @@ do
 			if myVeh then
 				local seat = myVeh:FindFirstChild("VehicleSeat")
 				local driverObj = myVeh:FindFirstChild("Driver")
+				
+				-- ตรวจสอบว่ากำลังนั่งอยู่ในรถ
 				if seat and driverObj and driverObj.Value == LocalPlayer then
 					if State.PhysicsEnabled then
-						-- ปลดล็อก MaxSpeed ของ VehicleSeat
+						-- ปลดล็อก MaxSpeed
 						if seat.MaxSpeed < 9000 then
-							seat.MaxSpeed = 9999
+							seat.MaxSpeed = 1000
 						end
+						
+						-- ปิดโหมด Auto-Pilot ของเกม (ถ้ามี)
+						pcall(function()
+							if seat:IsA("VehicleSeat") then
+								seat.TogglePhysics = false
+							end
+						end)
 						
 						local vel = seat.AssemblyLinearVelocity
 						local look = seat.CFrame.LookVector
@@ -559,7 +569,7 @@ do
 						local throttle = 0
 						local steerInput = 0
 						
-						-- PC: ใช้ WASD ตรงๆ
+						-- PC: WASD ตรงๆ
 						if UserInputService.KeyboardEnabled then
 							if UserInputService:IsKeyDown(Enum.KeyCode.W) then throttle = 1 end
 							if UserInputService:IsKeyDown(Enum.KeyCode.S) then throttle = -1 end
@@ -567,7 +577,7 @@ do
 							if UserInputService:IsKeyDown(Enum.KeyCode.D) then steerInput = 1 end
 						end
 						
-						-- Mobile: ปุ่มกด override PC (ระบบเดิมยังอยู่ครบ)
+						-- Mobile: ปุ่มกด override
 						if MobileInput.Throttle ~= 0 then
 							throttle = MobileInput.Throttle
 						end
@@ -575,7 +585,7 @@ do
 							steerInput = MobileInput.Steer
 						end
 						
-						-- ส่งค่าเลี้ยวให้เกมจัดการเอง
+						-- ส่งค่าเลี้ยว
 						pcall(function() seat.Steer = steerInput end)
 						
 						-- ===================== PHYSICS CALCULATION =====================
@@ -586,19 +596,24 @@ do
 						
 						local accel = State.AccelPower
 						local brake = State.BrakeForce
-						local maxSpeed = State.MaxSpeed -- ดึงจาก Slider Max Speed
+						local maxSpeed = State.MaxSpeed
+						local antiFloat = State.AntiFloatStrength
 						
-						-- ป้องกัน Accel/Brake เป็น 0 แล้วค้าง
+						-- Fallback
 						if accel <= 0 then accel = 1 end
 						if brake <= 0 then brake = 1 end
+						if maxSpeed <= 0 then maxSpeed = 200 end
 						
-						-- ===================== ANTI-FLOAT =====================
-						-- ถ้าความเร็วแนวนอนน้อย + Y > 0 → รถกำลังลอย ให้ดึงลง
-						if horizSpeed < 5 and vertVel > 5 then
-							vertVel = math.max(vertVel - (60 * dt), 0)
-						elseif vertVel > 0 and horizSpeed > 20 then
-							-- ขับเร็ว + กระโดด = ค่อยๆ ลด Y ลง (แต่ไม่หักทันที)
-							vertVel = vertVel * math.max(0, 1 - 0.5 * dt)
+						-- ===================== ANTI-FLOAT CORE (สำคัญสุด!) =====================
+						-- เงื่อนไข: ถ้าขับอยู่ (horizSpeed > 10) ให้บังคับ Y ให้เป็น 0
+						-- เพื่อไม่ให้รถลอย หรือ ตกแรงเกิน
+						if horizSpeed > 10 then
+							-- แทนที่จะใช้ vertVel เดิม ให้บังคับให้เป็น 0 ทันที
+							-- เพราะเกมจัดการแรงโน้มถ่วงเองแล้ว
+							vertVel = 0
+						elseif horizSpeed < 3 and vertVel > 5 then
+							-- จอดอยู่ + ลอย = ดึงลงแรงๆ
+							vertVel = math.max(vertVel - (antiFloat * dt), 0)
 						end
 						
 						-- ===================== THROTTLE LOGIC =====================
@@ -606,45 +621,45 @@ do
 							if throttle > 0 then
 								-- W: เดินหน้า
 								if forwardSpeed >= 0 then
-									-- เร่ง (เคารพ MaxSpeed)
 									local newSpeed = forwardSpeed + (accel * dt)
 									forwardSpeed = math.min(newSpeed, maxSpeed)
 								else
-									-- กำลังถอย → เบรกก่อน (เคารพ MaxSpeed)
 									local newSpeed = forwardSpeed + (brake * dt)
 									forwardSpeed = math.min(newSpeed, maxSpeed)
 								end
 							else
 								-- S: ถอย/เบรก
 								if forwardSpeed > 2 then
-									-- เบรก (เคารพ MaxSpeed)
 									local newSpeed = forwardSpeed - (brake * dt)
 									forwardSpeed = math.max(newSpeed, -maxSpeed * 0.4)
 								else
-									-- ถอยหลัง
 									local newSpeed = forwardSpeed - (accel * 0.6 * dt)
 									forwardSpeed = math.max(newSpeed, -maxSpeed * 0.4)
 								end
 							end
 						else
-							-- ไม่กดปุ่ม: ค่อยๆ ชะลอ (Coast)
+							-- ไม่กด: Coast
 							forwardSpeed = forwardSpeed * math.max(0, 1 - 1.2 * dt)
-							rightSpeed = rightSpeed * math.max(0, 1 - 3 * dt) -- Lateral friction
+							rightSpeed = rightSpeed * math.max(0, 1 - 3 * dt)
 						end
 						
-						-- ===================== HARD CLAMP (Safety Net) =====================
-						-- ป้องกันทุกกรณี ไม่ให้เกิน MaxSpeed แม้แต่ 1 หน่อย
+						-- ===================== HARD CLAMP =====================
 						if forwardSpeed > maxSpeed then forwardSpeed = maxSpeed end
 						if forwardSpeed < -maxSpeed * 0.4 then forwardSpeed = -maxSpeed * 0.4 end
 						
-						-- ===================== APPLY VELOCITY =====================
+						-- Clamp vertVel เพิ่มเติม
+						if vertVel > 30 then vertVel = 30 end
+						if vertVel < -100 then vertVel = -100 end
+						
+						-- ===================== APPLY =====================
 						local newVel = (look * forwardSpeed) + (right * rightSpeed) + (Vector3.new(0, 1, 0) * vertVel)
 						
-						-- Sanity Check: ถ้า Velocity ใหม่ระเบิด (NaN/Inf) ให้ใช้ของเก่า
-						if newVel ~= newVel or newVel.Magnitude ~= newVel.Magnitude then
-							-- skip update
-						else
-							pcall(function() seat.AssemblyLinearVelocity = newVel end)
+						-- Sanity check
+						if newVel == newVel and newVel.Magnitude == newVel.Magnitude then
+							pcall(function()
+								-- ใช้ Velocity แทน AssemblyLinearVelocity (เร็วกว่า)
+								seat.Velocity = newVel
+							end)
 						end
 					end
 				end
