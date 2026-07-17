@@ -614,6 +614,7 @@ do
 			seat.AssemblyLinearVelocity = newVelocity
 		end
 	end)
+end
 
 -- =========================================================================
 --  ESP TAB
