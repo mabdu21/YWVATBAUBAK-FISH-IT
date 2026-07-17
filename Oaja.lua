@@ -2,7 +2,7 @@
 
 -- =========================
 local version = "BETA"
-local ver     = "v021.19"
+local ver     = "v021.21"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -937,22 +937,49 @@ do
         end
     })
 
+    -- ① ประกาศตัวแปรสำหรับเก็บสถานะ
+    local gravityDisabled = false
+    
     PlayerTab:Button({
-        Title    = "Gravity Mode",
-        Desc     = "Toggles your character gravity.",
+        Title    = "Toggle Gravity",
+        Desc     = "Toggles your character gravity on/off.",
         Callback = function()
+            -- ② สลับสถานะ
+            gravityDisabled = not gravityDisabled
+            
+            -- ③ ใช้ pcall เพื่อป้องกัน error
             pcall(function()
                 local char = LocalPlayer.Character
                 if not char then return end
+                
+                -- ④ วนลูปผ่านทุก Part
                 local allParts = char:GetDescendants()
                 for _, p in pairs(allParts) do
-                    p.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                    p.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-                    p.Anchored = false
+                    -- ⑤ ตรวจสอบว่าเป็น BasePart
+                    if p:IsA("BasePart") then
+                        if gravityDisabled then
+                            -- ⑥ ปิดแรงโน้มถ่วง (ลอย)
+                            p.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                            p.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                            p.CustomPhysicalProperties = PhysicalProperties.new(
+                                0.7, 0.3, 0.5, 1, 1
+                            )
+                        else
+                            -- ⑦ เปิดแรงโน้มถ่วง (ปกติ)
+                            p.CustomPhysicalProperties = nil
+                        end
+                    end
                 end
-            else
-                pcall(function() LocalPlayer.Character:PivotTo(dest) end)
-            end
+                
+                -- ⑧ แสดง Notification
+                local statusText = gravityDisabled and "Disabled ❌" or "Enabled ✅"
+                WindUI:Notify({ 
+                    Title = "Gravity Mode", 
+                    Content = "Gravity is now " .. statusText, 
+                    Duration = 2, 
+                    Icon = "zap" 
+                })
+            end)
         end
     })
     pcall(function() PlayerTab:Divder() end)
