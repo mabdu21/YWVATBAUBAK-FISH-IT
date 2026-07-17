@@ -2,7 +2,7 @@
 
 -- =========================
 local version = "BETA"
-local ver     = "v021.23"
+local ver     = "v021.24"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -520,98 +520,98 @@ do
 		end
 	end)
 
-	-- ====================== VEHICLE PHYSICS MODIFIER (PC + MOBILE) ======================
 	task.spawn(function()
+		local lastPhysTime = tick()
 		while true do
-			task.wait()  -- ทำงานทุกเฟรม
+			local now = tick()
+			local dt = math.clamp(now - lastPhysTime, 0.001, 0.05)
+			lastPhysTime = now
+			
 			local myVeh = GetMyVehicle()
-			if not myVeh then continue end
-
-			local seat = myVeh:FindFirstChild("VehicleSeat")
-			local driverObj = myVeh:FindFirstChild("Driver")
-			if not seat or not driverObj or driverObj.Value ~= LocalPlayer then continue end
-			if not State.PhysicsEnabled then continue end
-
-			-- ปลดล็อก MaxSpeed ของรถ
-			if seat.MaxSpeed < 9000 then seat.MaxSpeed = 9999 end
-
-			local velocity   = seat.AssemblyLinearVelocity
-			local lookVector  = seat.CFrame.LookVector
-			local rightVector = seat.CFrame.RightVector
-
-			-- ============= INPUT (PC + MOBILE) =============
-			local throttle = seat.ThrottleFloat   -- -1 ถึง 1 (จาก W/S)
-			local steering = seat.Steer            -- -1, 0, 1 (จาก A/D)
-
-			-- Override ด้วยปุ่มมือถือ
-			if MobileInput.Throttle ~= 0 then
-				throttle = MobileInput.Throttle
-			end
-			if MobileInput.Steer ~= 0 then
-				steering = MobileInput.Steer
-			end
-
-			-- Fallback: ใช้ทิศทางตัวละคร ถ้ารถไม่รับ input
-			if math.abs(throttle) < 0.05 then
-				local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-				if hum and hum.MoveDirection.Magnitude > 0.1 then
-					local dot = hum.MoveDirection:Dot(lookVector)
-					if math.abs(dot) > 0.1 then
-						throttle = dot
+			if myVeh then
+				local seat = myVeh:FindFirstChild("VehicleSeat")
+				local driverObj = myVeh:FindFirstChild("Driver")
+				if seat and driverObj and driverObj.Value == LocalPlayer then
+					if State.PhysicsEnabled then
+						-- ปลดล็อก MaxSpeed
+						if seat.MaxSpeed < 9000 then
+							seat.MaxSpeed = 9999
+						end
+						
+						local vel = seat.AssemblyLinearVelocity
+						local look = seat.CFrame.LookVector
+						local right = seat.CFrame.RightVector
+						local upVec = Vector3.new(0, 1, 0)
+						
+						-- ===================== INPUT DETECTION =====================
+						local throttle = 0
+						local steerInput = 0
+						
+						-- PC: ใช้ WASD ตรงๆ (ไม่ใช้ hum.MoveDirection อีกแล้ว)
+						if UserInputService.KeyboardEnabled then
+							if UserInputService:IsKeyDown(Enum.KeyCode.W) then throttle = 1 end
+							if UserInputService:IsKeyDown(Enum.KeyCode.S) then throttle = -1 end
+							if UserInputService:IsKeyDown(Enum.KeyCode.A) then steerInput = -1 end
+							if UserInputService:IsKeyDown(Enum.KeyCode.D) then steerInput = 1 end
+						end
+						
+						-- Mobile: ปุ่มกด override PC (ระบบเดิมยังอยู่ครบ)
+						if MobileInput.Throttle ~= 0 then
+							throttle = MobileInput.Throttle
+						end
+						if MobileInput.Steer ~= 0 then
+							steerInput = MobileInput.Steer
+						end
+						
+						-- ส่งค่าเลี้ยวให้เกมจัดการเอง
+						pcall(function() seat.Steer = steerInput end)
+						
+						-- ===================== PHYSICS CALCULATION =====================
+						local forwardSpeed = look:Dot(vel)
+						local rightSpeed = right:Dot(vel)
+						local vertVel = vel.Y
+						
+						local accel = State.AccelPower
+						local brake = State.BrakeForce
+						
+						-- Max Speed (ป้องกันเร่งไม่จบ + เลี้ยวง่ายขึ้น)
+						local maxFwd = math.max(accel * 0.8, 100)
+						local maxRev = maxFwd * 0.4
+						
+						if math.abs(throttle) > 0 and accel > 0 then
+							if throttle > 0 then
+								-- ===== W: เดินหน้า =====
+								if forwardSpeed >= 0 then
+									-- กำลังไปข้างหน้าหรือหยุดนิ่ง → เร่ง
+									forwardSpeed = math.min(forwardSpeed + accel * dt, maxFwd)
+								else
+									-- กำลังถอยหลังอยู่ → เบรกก่อน
+									forwardSpeed = math.min(forwardSpeed + brake * dt, 0)
+								end
+							else
+								-- ===== S: เบรก/ถอย =====
+								if forwardSpeed > 1 then
+									-- กำลังไปข้างหน้า → เบรก
+									forwardSpeed = math.max(forwardSpeed - brake * dt, 0)
+								else
+									-- หยุดนิ่ง/ช้าๆ → ถอยหลัง
+									forwardSpeed = math.max(forwardSpeed - accel * dt, -maxRev)
+								end
+							end
+						else
+							-- ===== ไม่กดปุ่ม: ค่อยๆ ชะลอ =====
+							forwardSpeed = forwardSpeed * math.max(0, 1 - 1.5 * dt)
+							rightSpeed = rightSpeed * math.max(0, 1 - 3 * dt) -- Lateral friction ลดการลื่นไถล
+						end
+						
+						-- ===================== APPLY VELOCITY =====================
+						local newVel = (look * forwardSpeed) + (right * rightSpeed) + (upVec * vertVel)
+						pcall(function() seat.AssemblyLinearVelocity = newVel end)
 					end
 				end
 			end
-
-			-- ============= แยกทิศทาง velocity =============
-			local forwardVel  = velocity:Dot(lookVector)   -- ความเร็วไปข้างหน้า/ถอยหลัง
-			local rightVel    = velocity:Dot(rightVector)  -- ความเร็วด้านข้าง
-			local verticalVel = velocity.Y                 -- แกน Y (กระเด้ง/ตก)
-
-			-- ============= เร่ง/เบรค =============
-			if math.abs(throttle) > 0.05 then
-				if throttle > 0 then
-					-- กด W
-					if forwardVel < -0.1 then
-						-- กำลังถอยหลังอยู่ → เบรค
-						forwardVel = forwardVel + (State.BrakeForce / 4)
-					else
-						-- หยุด/ไปข้างหน้า → เร่ง
-						forwardVel = forwardVel + (State.AccelPower / 5)
-					end
-				else
-					-- กด S
-					if forwardVel > 0.1 then
-						-- กำลังไปข้างหน้า → เบรค
-						forwardVel = forwardVel - (State.BrakeForce / 4)
-					else
-						-- หยุด/ถอยหลัง → ถอย
-						forwardVel = forwardVel - (State.AccelPower / 5)
-					end
-				end
-			end
-
-			-- ============= จำกัดความเร็วสูงสุด =============
-			local maxSpeed = State.AccelPower * 1.2
-			if maxSpeed < 100 then maxSpeed = 100 end
-			if forwardVel >  maxSpeed then forwardVel =  maxSpeed end
-			if forwardVel < -maxSpeed then forwardVel = -maxSpeed end
-
-			-- ============= เลี้ยว =============
-			if math.abs(steering) > 0.05 and velocity.Magnitude > 1 then
-				local steerPower = math.min(State.AccelPower / 100, 5)
-				rightVel = rightVel + (steering * steerPower)
-			end
-
-			-- แรงเสียดทานด้านข้าง กันรถลื่นไถล
-			rightVel = rightVel * 0.92
-
-			-- ============= รวม velocity ใหม่ =============
-			local newVelocity =
-				(lookVector  * forwardVel) +
-				(rightVector * rightVel)   +
-				Vector3.new(0, verticalVel, 0)
-
-			seat.AssemblyLinearVelocity = newVelocity
+			
+			task.wait() -- รอ 1 เฟรม (60fps)
 		end
 	end)
 end
