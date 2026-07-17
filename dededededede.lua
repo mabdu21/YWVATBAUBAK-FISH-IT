@@ -2,7 +2,7 @@
 
 -- =========================
 local version = "BETA"
-local ver     = "v021.18"
+local ver     = "v021.19"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -89,15 +89,23 @@ local Connections = {
 }
 
 -- ====================== HELPER FUNCTIONS ======================
+local cachedVehicle = nil
+
 local function GetMyVehicle()
+    if cachedVehicle and cachedVehicle.Parent and cachedVehicle:FindFirstChild("Owner") and cachedVehicle.Owner.Value == LocalPlayer.Name then
+        return cachedVehicle
+    end
+
     local folder = Workspace:FindFirstChild("Vehicles")
     if not folder then return nil end
     for _, veh in pairs(folder:GetChildren()) do
         local owner = veh:FindFirstChild("Owner")
         if owner and owner.Value == LocalPlayer.Name then
+            cachedVehicle = veh
             return veh
         end
     end
+    cachedVehicle = nil
     return nil
 end
 
@@ -288,7 +296,7 @@ Window:SelectTab(1)
 --  MAIN TAB
 -- =========================================================================
 do
-    pcall(function() MainTab:Divder() end)
+    MainTab:Divider()
     MainTab:Section({ Title = "Current Status", Icon = "activity" })
 
     local JobStatus     = MainTab:Paragraph({ Title = "Current Job",      Desc = "Loading" })
@@ -296,7 +304,7 @@ do
     local VehicleSpeed  = MainTab:Paragraph({ Title = "Vehicle Speed",    Desc = "0 SPS" })
     local VehicleParts  = MainTab:Paragraph({ Title = "Parts Detected",   Desc = "0" })
     local VehicleState  = MainTab:Paragraph({ Title = "Vehicle Status",   Desc = "On Foot" })
-    pcall(function() MainTab:Divder() end)
+    MainTab:Divider()
     MainTab:Section({ Title = "Job System", Icon = "briefcase" })
 
     MainTab:Button({
@@ -337,7 +345,7 @@ do
             end
         end
     })
-    pcall(function() MainTab:Divder() end)
+    MainTab:Divider()
     MainTab:Section({ Title = "Vehicle Mods", Icon = "car" })
 
     local originalColors = {}
@@ -475,6 +483,10 @@ do
                         if seat.MaxSpeed < 9000 then seat.MaxSpeed = 9999 end
                         local velocity = seat.AssemblyLinearVelocity
                         local throttle = seat.ThrottleFloat
+                        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                        if hum and math.abs(throttle) == 0 then
+                            throttle = hum.MoveDirection:Dot(seat.CFrame.LookVector)
+                        end
                         local speed = velocity.Magnitude
 
                         if State.AccelPower > 0 and math.abs(throttle) > 0 then
@@ -581,7 +593,7 @@ do
         return false
     end
 
-    pcall(function() EspTab:Divder() end)
+    EspTab:Divider()
     EspTab:Section({ Title = "Master Control", Icon = "power" })
     EspTab:Toggle({
         Title    = "Enable ESP",
@@ -589,12 +601,12 @@ do
         Value    = _G.ESP_Enabled,
         Callback = function(v) _G.ESP_Enabled = v end
     })
-    pcall(function() EspTab:Divder() end)
+    EspTab:Divider()
     EspTab:Section({ Title = "Targets", Icon = "target" })
     EspTab:Toggle({ Title = "Players (Neutral)", Desc = "Display ESP for neutral players.", Value = _G.ESP_Targets.Players,   Callback = function(v) _G.ESP_Targets.Players   = v end })
     EspTab:Toggle({ Title = "Police (Security)", Desc = "Display ESP for Security players.", Value = _G.ESP_Targets.Police,   Callback = function(v) _G.ESP_Targets.Police   = v end })
     EspTab:Toggle({ Title = "Criminals",         Desc = "Display ESP for Criminal players.",  Value = _G.ESP_Targets.Criminals, Callback = function(v) _G.ESP_Targets.Criminals = v end })
-    pcall(function() EspTab:Divder() end)
+    EspTab:Divider()
     EspTab:Section({ Title = "Visuals", Icon = "layers" })
     EspTab:Toggle({ Title = "Boxes 2D",   Desc = "Draw a 2D box around each player.",     Value = _G.ESP_Settings.Boxes,     Callback = function(v) _G.ESP_Settings.Boxes     = v end })
     EspTab:Toggle({ Title = "Tracers",    Desc = "Draw a line from screen center to player.", Value = _G.ESP_Settings.Tracers,   Callback = function(v) _G.ESP_Settings.Tracers   = v end })
@@ -608,7 +620,7 @@ do
         Step     = 0.5,
         Callback = function(v) _G.ESP_Settings.Thickness = v end
     })
-    pcall(function() EspTab:Divder() end)
+    EspTab:Divider()
     EspTab:Section({ Title = "Colors", Icon = "palette" })
     -- ?? FIX: ??? Colorpicker (p ????) + pcall ??????? error
     pcall(function()
@@ -675,11 +687,11 @@ do
 
                             if _G.ESP_Settings.Skeletons and char:FindFirstChild("Head") then
                                 local headPos  = Camera:WorldToViewportPoint(char.Head.Position)
-                                local torsoPos = Camera:WorldToViewportPoint(char:FindFirstChild("UpperTorso") and char.UpperTorso.Position or hrp.Position)
-                                local legLPos  = Camera:WorldToViewportPoint(char:FindFirstChild("LeftFoot") and char.LeftFoot.Position or hrp.Position)
-                                local legRPos  = Camera:WorldToViewportPoint(char:FindFirstChild("RightFoot") and char.RightFoot.Position or hrp.Position)
-                                local armRPos  = Camera:WorldToViewportPoint(char:FindFirstChild("RightHand") and char.RightHand.Position or hrp.Position)
-                                local armLPos  = Camera:WorldToViewportPoint(char:FindFirstChild("LeftHand") and char.LeftHand.Position or hrp.Position)
+                                local torsoPos = Camera:WorldToViewportPoint((char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso") or hrp).Position)
+                                local legLPos  = Camera:WorldToViewportPoint((char:FindFirstChild("LeftFoot") or char:FindFirstChild("Left Leg") or hrp).Position)
+                                local legRPos  = Camera:WorldToViewportPoint((char:FindFirstChild("RightFoot") or char:FindFirstChild("Right Leg") or hrp).Position)
+                                local armRPos  = Camera:WorldToViewportPoint((char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm") or hrp).Position)
+                                local armLPos  = Camera:WorldToViewportPoint((char:FindFirstChild("LeftHand") or char:FindFirstChild("Left Arm") or hrp).Position)
 
                                 obj.Skeleton.Head.From    = Vector2.new(pos.X, pos.Y)
                                 obj.Skeleton.Head.To      = Vector2.new(headPos.X, headPos.Y)
@@ -769,15 +781,14 @@ do
 
     local function isMoving()
         local character = LocalPlayer.Character
-        if not character or not character:FindFirstChild("HumanoidRootPart") then return false, Vector3.new() end
-        local moveDir = Vector3.new(Camera.CFrame.LookVector.X, 0, Camera.CFrame.LookVector.Z)
-        if moveDir.Magnitude > 0 then moveDir = moveDir.Unit end
-        local movement = Vector3.new()
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then movement = movement + moveDir end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then movement = movement - moveDir end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then movement = movement + Vector3.new(-moveDir.Z, 0, moveDir.X) end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then movement = movement + Vector3.new(moveDir.Z, 0, -moveDir.X) end
-        if movement.Magnitude > 0 then return true, movement.Unit end
+        if not character then return false, Vector3.new() end
+        local hum = character:FindFirstChildOfClass("Humanoid")
+        if not hum then return false, Vector3.new() end
+
+        local moveDir = hum.MoveDirection
+        if moveDir.Magnitude > 0 then
+            return true, moveDir.Unit
+        end
         return false, Vector3.new()
     end
 
@@ -1312,7 +1323,7 @@ do
         deliveryThread = task.spawn(function()
             local lastTeleport = 0
             while deliveryRunning do
-                local now = tick()
+                local now = os.clock()
                 -- Cooldown 0.1s ??????? spam teleport
                 if now - lastTeleport >= 0.1 then
                     local ok = doDeliveryTeleport()
@@ -1345,6 +1356,18 @@ do
     ATMStatusParagraph       = CollectTab:Paragraph({ Title = "ATM Farm",       Desc = "Idle" })
     ATMBagsParagraph         = CollectTab:Paragraph({ Title = "ATM Bags",       Desc = "0 / 25" })
     DeliveryStatusParagraph  = CollectTab:Paragraph({ Title = "Auto Delivery",  Desc = "Idle" })
+	
+    pcall(function() CollectTab:Divder() end)
+    CollectTab:Section({ Title = "Delivery Farm", Icon = "truck" })
+    CollectTab:Toggle({
+        Title    = "Auto Delivery",
+        Desc     = "Toggles automatic delivery teleportation on or off.",
+        Value    = false,
+        Callback = function(v)
+            if v then startDeliveryLoop() else stopDeliveryLoop() end
+        end
+    })
+	
     pcall(function() CollectTab:Divder() end)
     CollectTab:Section({ Title = "ATM Farm", Icon = "package" })
     CollectTab:Toggle({
@@ -1394,16 +1417,6 @@ do
             FarmConfig.task3 = 0.15; FarmConfig.task4 = 5.0
             FarmConfig.task5 = 0.15; FarmConfig.task6 = 0.0
             FarmConfig.task7 = 5.0;  FarmConfig.task8 = 0.0
-        end
-    })
-    pcall(function() CollectTab:Divder() end)
-    CollectTab:Section({ Title = "Delivery Farm", Icon = "truck" })
-    CollectTab:Toggle({
-        Title    = "Auto Delivery",
-        Desc     = "Toggles automatic delivery teleportation on or off.",
-        Value    = false,
-        Callback = function(v)
-            if v then startDeliveryLoop() else stopDeliveryLoop() end
         end
     })
 
@@ -1616,7 +1629,7 @@ do
     SettingsTab:Toggle({
         Title    = "Bypass Monitor Events",
         Desc     = "Blocks telemetry logs, RSP, RPS, and unauthorized remote calls.",
-        Value    = false,
+        Value    = true,
         Callback = function(v)
             State.BypassActive = v
             if v then BlockCount = 0 end
@@ -1649,6 +1662,10 @@ end
 -- =========================================================================
 --  INFORMATION TAB
 -- =========================================================================
+local Info = InfoTab
+if not ui then ui = {} end
+if not ui.Creator then ui.Creator = {} end
+
 do
     pcall(function() InfoTab:Divder() end)
     InfoTab:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
@@ -1663,9 +1680,62 @@ do
 - [Improved] Auto Delivery no platform creation spam]],
     })
     pcall(function() InfoTab:Divder() end)
-    InfoTab:Section({ Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17 })
-    pcall(function() InfoTab:Divder() end)
-    InfoTab:Paragraph({ Title = "Main Owner", Desc = "@dyumraisgoodguy#8888", Image = "rbxassetid://119789418015420", ImageSize = 30 })
+
+do
+ui.Creator.Request = function(requestData)
+    local success, result = pcall(function()
+        if HttpService.RequestAsync then
+            local response = HttpService:RequestAsync({ Url = requestData.Url, Method = requestData.Method or "GET", Headers = requestData.Headers or {} })
+            return { Body = response.Body, StatusCode = response.StatusCode, Success = response.Success }
+        else
+            local body = HttpService:GetAsync(requestData.Url)
+            return { Body = body, StatusCode = 200, Success = true }
+        end
+    end)
+    if success then return result else error("HTTP Request failed: " .. tostring(result)) end
+end
+
+local InviteCode = "jWNDPNMmyB"
+local DiscordAPI = "https://discord.com/api/v10/invites/" .. InviteCode .. "?with_counts=true&with_expiration=true"
+local function LoadDiscordInfo()
+    local success, result = pcall(function()
+        return HttpService:JSONDecode(ui.Creator.Request({ Url = DiscordAPI, Method = "GET", Headers = { ["User-Agent"] = "RobloxBot/1.0", ["Accept"] = "application/json" } }).Body)
+    end)
+    if success and result and result.guild then
+        local DiscordInfo = Info:Paragraph({
+            Title = result.guild.name,
+            Desc  = ' <font color="#52525b">●</font> Member Count : ' .. tostring(result.approximate_member_count) ..
+                    '\n <font color="#16a34a">●</font> Online Count : '  .. tostring(result.approximate_presence_count),
+            Image = "https://cdn.discordapp.com/icons/" .. result.guild.id .. "/" .. result.guild.icon .. ".png?size=1024",
+            ImageSize = 42,
+        })
+        Info:Button({ Title = "Update Info", Callback = function()
+            local ok, r = pcall(function() return HttpService:JSONDecode(ui.Creator.Request({ Url = DiscordAPI, Method = "GET" }).Body) end)
+            if ok and r and r.guild then
+                DiscordInfo:SetDesc(' <font color="#52525b">●</font> Member Count : ' .. tostring(r.approximate_member_count) .. '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(r.approximate_presence_count))
+                Utils:Notify("Discord Info Updated", "Refreshed!", "refresh-cw", 2)
+            else
+                Utils:Notify("Update Failed", "Could not refresh.", "alert-triangle", 3)
+            end
+        end })
+        Info:Button({ Title = "Copy Discord Invite", Callback = function()
+            setclipboard("https://discord.gg/" .. InviteCode)
+            Utils:Notify("Copied!", "Discord invite copied!", "clipboard-check", 2)
+        end })
+    else
+        Info:Paragraph({ Title = "Error fetching Discord Info", Desc = "Unable to load.", Image = "triangle-alert", ImageSize = 26, Color = "Red" })
+    end
+end
+LoadDiscordInfo()
+
+Info:Divider()
+Info:Section({ Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17 })
+Info:Divider()
+Info:Paragraph({ Title = "Main Owner", Desc = "@dyumraisgoodguy#8888", Image = "rbxassetid://119789418015420", ImageSize = 30 })
+Info:Paragraph({ Title = "Social", Desc = "Copy link social media for follow!", Image = "rbxassetid://104487529937663", ImageSize = 30,
+    Buttons = {{ Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://guns.lol/DYHUB") end }} })
+Info:Paragraph({ Title = "Discord", Desc = "Join our discord for more scripts!", Image = "rbxassetid://104487529937663", ImageSize = 30,
+    Buttons = {{ Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://discord.gg/jWNDPNMmyB") end }} })
 end
 
 -- ====================== CHARACTER RESPAWN HANDLER ======================
@@ -1679,6 +1749,4 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 end)
 
 print("[DYHUB] " .. version .. " | " .. ver .. " | loaded successfully.")
-
-
-
+print("[DYHUB] Auto saving every " .. tostring(settings.AutoSaveDelay) .. "s")
