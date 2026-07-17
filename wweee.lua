@@ -2,7 +2,7 @@
 
 -- =========================
 local version = "PAID"
-local ver     = "v021.18"
+local ver     = "v021.19"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -72,7 +72,7 @@ local State = {
 
 _G.ESP_Enabled  = false
 _G.ESP_Targets  = { Players = true, Police = true, Criminals = true }
-_G.ESP_Settings = { Boxes = false, Tracers = false, Skeletons = false, Names = false, Distance = false, Thickness = 1 }
+_G.ESP_Settings = { Boxes = true, Tracers = true, Skeletons = true, Names = true, Distance = true, Thickness = 1 }
 _G.ESP_Colors   = {
 	Police   = Color3.fromRGB(0, 0, 255),
 	Criminal = Color3.fromRGB(255, 0, 0),
@@ -588,7 +588,7 @@ do
 		if ESP_Objects[player] or not Drawing then return end
 		local ok, obj = pcall(function()
 			return {
-				Box = Drawing.new("Square"),
+				 = Drawing.new("Square"),
 				Tracer = Drawing.new("Line"),
 				Name = Drawing.new("Text"),
 				Distance = Drawing.new("Text"),
@@ -603,8 +603,8 @@ do
 			}
 		end)
 		if ok and obj then
-			obj.Box.Filled = false
-			obj.Box.Visible = false
+			obj..Filled = false
+			obj..Visible = false
 			obj.Name.Center = true
 			obj.Name.Outline = true
 			obj.Name.Size = 14
@@ -624,7 +624,7 @@ do
 	local function RemoveESP(player)
 		if ESP_Objects[player] and Drawing then
 			local obj = ESP_Objects[player]
-			pcall(function() obj.Box:Remove() end)
+			pcall(function() obj.:Remove() end)
 			pcall(function() obj.Tracer:Remove() end)
 			pcall(function() obj.Name:Remove() end)
 			pcall(function() obj.Distance:Remove() end)
@@ -664,8 +664,8 @@ do
 	})
 	EspTab:Divider()
 	EspTab:Section({ Title = "Targets", Icon = "target" })
-	EspTab:Toggle({ Title = "Players (Neutral)", Desc = "Display ESP for neutral players.", Value = _G.ESP_Targets.Players,   Callback = function(v) _G.ESP_Targets.Players   = v end })
-	EspTab:Toggle({ Title = "Police (Security)", Desc = "Display ESP for Security players.", Value = _G.ESP_Targets.Police,   Callback = function(v) _G.ESP_Targets.Police   = v end })
+	EspTab:Toggle({ Title = "Players", Desc = "Display ESP for neutral players.", Value = _G.ESP_Targets.Players,   Callback = function(v) _G.ESP_Targets.Players   = v end })
+	EspTab:Toggle({ Title = "Police", Desc = "Display ESP for Security players.", Value = _G.ESP_Targets.Police,   Callback = function(v) _G.ESP_Targets.Police   = v end })
 	EspTab:Toggle({ Title = "Criminals",         Desc = "Display ESP for Criminal players.",  Value = _G.ESP_Targets.Criminals, Callback = function(v) _G.ESP_Targets.Criminals = v end })
 	EspTab:Divider()
 	EspTab:Section({ Title = "Visuals", Icon = "layers" })
@@ -1628,11 +1628,11 @@ do
 	InfoTab:Paragraph({
 		Title = "Update: 07/17/2026 | CL: " .. ver,
 		Desc  = [[- [Fixed] Vehicle Physics Modifier not working
-		- [Fixed] Auto Delivery lag optimization
-		- [Fixed] ESP ColorPicker not showing
-		- [Fixed] State variable sync with Config
-		- [Improved] Physics loop using RenderStepped
-		- [Improved] Auto Delivery no platform creation spam]],
+	- [Fixed] Auto Delivery lag optimization
+	- [Fixed] ESP ColorPicker not showing
+	- [Fixed] State variable sync with Config
+	- [Improved] Physics loop using RenderStepped
+	- [Improved] Auto Delivery no platform creation spam]],
 	})
 	pcall(function() InfoTab:Divder() end)
 
