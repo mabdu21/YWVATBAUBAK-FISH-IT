@@ -292,14 +292,19 @@ Config:AutoSave(Config:Get("AutoSaveDelay", 15))
 local Window
 local okWindow, errWindow = pcall(function()
 	Window = WindUI:CreateWindow({
-		Title      = "DYHUB",
-		Icon       = "rbxassetid://104487529937663",
-		Author     = "Driving Empire | Paid Version",
-		Folder     = "DYHUB_DE",
-		Size       = UDim2.fromOffset(560, 420),
-		Theme      = "Dark",
-		HideSearchBar    = false,
-		ScrollBarEnabled = true,
+	    Title      = "DYHUB",
+	    IconThemed = true,
+	    Icon       = "rbxassetid://104487529937663",
+	    Author     = "Driving Empire | Paid Version",
+	    Folder     = "DYHUB_DE",
+	    Size       = UDim2.fromOffset(580, 440),
+	    Transparent = true,
+	    Theme      = "Dark",
+	    BackgroundImageTransparency = 0.8,
+	    HasOutline = false,
+	    HideSearchBar    = true,
+	    ScrollBarEnabled = true,
+	    User = { Enabled = true, Anonymous = false },
 	})
 end)
 
