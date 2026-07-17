@@ -1,6 +1,6 @@
 -- =========================
 local version = "PAID"
-local ver     = "v013.00"
+local ver     = "v014.00"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -9,10 +9,7 @@ repeat task.wait() until game:IsLoaded()
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
 
 if setfpscap then
-    pcall(function() setfpscap(1000000) end)
-    WindUI:Notify({ Title = "Service", Content = "FPS Unlocked! | " .. ver, Duration = 3, Icon = "cpu" })
-else
-    WindUI:Notify({ Title = "Not Working", Content = "Your exploit does not support setfpscap.", Duration = 3, Icon = "ban" })
+    pcall(function() setfpscap(1000) end)
 end
 
 -- ====================== SERVICES ======================
@@ -28,6 +25,7 @@ local TeleportService   = game:GetService("TeleportService")
 local TweenService      = game:GetService("TweenService")
 local VirtualUser       = game:GetService("VirtualUser")
 local VIM               = game:GetService("VirtualInputManager")
+local Stats             = game:GetService("Stats")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
@@ -44,51 +42,160 @@ if LocalPlayer.Character then bindCharacter(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(function(c)
     task.wait(0.5)
     bindCharacter(c)
+    -- Reset combat state on respawn
+    if ParryEngine then ParryEngine:Reset() end
 end)
 
--- ====================== INPUT SYSTEM (FIXED) ======================
-local VIM_KeyMap = {
-    F = Enum.KeyCode.F,
-    Q = Enum.KeyCode.Q,
-    E = Enum.KeyCode.E,
-}
+-- ====================== INPUT SYSTEM V2 (Multi-API) ======================
+local InputSystem = {}
+InputSystem.__index = InputSystem
 
-local function pressKey(keyChar)
-    local keyCode = VIM_KeyMap[keyChar] or Enum.KeyCode[keyChar]
-    -- Try VIM first
-    local ok = pcall(function()
-        VIM:SendKeyEvent(true, keyCode, false, game)
-    end)
-    -- Fallback to keypress (some exploits)
-    if not ok then
-        pcall(function() keypress(Enum.KeyCode[keyChar].Value) end)
+function InputSystem.new()
+    local self = setmetatable({}, InputSystem)
+    self.KeyStates = {}
+    self.LastSend = {}
+    self.MinDelay = 0.01 -- 10ms anti-spam
+    
+    -- Detect available APIs
+    self.HasVIM        = (VIM and VIM.SendKeyEvent) ~= nil
+    self.HasKeypress   = (type(keypress) == "function")
+    self.HasKeyrelease = (type(keyrelease) == "function")
+    self.HasIsPressed  = (type(isrbxactive) == "function" or type(isrbxactive) == "boolean")
+    self.HasMouse1     = (type(ismouse1pressed) == "function")
+    self.HasMouse2     = (type(mouse2click) == "function")
+    
+    return self
+end
+
+function InputSystem:CanSend(key)
+    local now = os.clock()
+    if self.LastSend[key] and (now - self.LastSend[key]) < self.MinDelay then
+        return false
+    end
+    self.LastSend[key] = now
+    return true
+end
+
+function InputSystem:Press(keyName)
+    if not self:CanSend(keyName) then return end
+    if self.KeyStates[keyName] then return end
+    self.KeyStates[keyName] = true
+    
+    if self.HasVIM then
+        local ok = pcall(function()
+            VIM:SendKeyEvent(true, Enum.KeyCode[keyName], false, game)
+        end)
+        if ok then return end
+    end
+    if self.HasKeypress then
+        pcall(function() keypress(Enum.KeyCode[keyName].Value) end)
     end
 end
 
-local function releaseKey(keyChar)
-    local keyCode = VIM_KeyMap[keyChar] or Enum.KeyCode[keyChar]
-    local ok = pcall(function()
-        VIM:SendKeyEvent(false, keyCode, false, game)
-    end)
-    if not ok then
-        pcall(function() keyrelease(Enum.KeyCode[keyChar].Value) end)
+function InputSystem:Release(keyName)
+    if not self.KeyStates[keyName] then return end
+    self.KeyStates[keyName] = false
+    
+    if self.HasVIM then
+        local ok = pcall(function()
+            VIM:SendKeyEvent(false, Enum.KeyCode[keyName], false, game)
+        end)
+        if ok then return end
+    end
+    if self.HasKeyrelease then
+        pcall(function() keyrelease(Enum.KeyCode[keyName].Value) end)
     end
 end
 
-local function mouseRightClick()
-    pcall(function() VIM:SendMouseButtonEvent(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2, 1, true, game, 1) end)
-    pcall(function() VIM:SendMouseButtonEvent(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2, 1, false, game, 1) end)
-    pcall(function() if mouse2click then mouse2click() end end)
+function InputSystem:Tap(keyName, holdTime)
+    holdTime = holdTime or 0.05
+    self:Press(keyName)
+    task.delay(holdTime, function() self:Release(keyName) end)
 end
 
--- ====================== PING CALCULATION (FIXED) ======================
-local function GetPingSeconds()
+function InputSystem:Mouse2Click()
+    if self.HasVIM then
+        pcall(function()
+            VIM:SendMouseButtonEvent(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2, 1, true, game, 1)
+            VIM:SendMouseButtonEvent(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2, 1, false, game, 1)
+        end)
+    end
+    if self.HasMouse2 then
+        pcall(function() mouse2click() end)
+    end
+end
+
+function InputSystem:Cleanup()
+    for key in pairs(self.KeyStates) do
+        if self.KeyStates[key] then
+            self:Release(key)
+        end
+    end
+end
+
+local Input = InputSystem.new()
+
+-- ====================== PING ENGINE V2 (Adaptive) ======================
+local PingEngine = {}
+PingEngine.__index = PingEngine
+
+function PingEngine.new()
+    local self = setmetatable({}, PingEngine)
+    self.Samples = {}
+    self.MaxSamples = 8
+    self.SampleInterval = 0.25
+    self.LastSample = 0
+    self.CachedPing = 0
+    self.Jitter = 0
+    return self
+end
+
+function PingEngine:Sample()
+    local now = os.clock()
+    if (now - self.LastSample) < self.SampleInterval then
+        return self.CachedPing
+    end
+    self.LastSample = now
+    
     local ok, ping = pcall(function() return LocalPlayer:GetNetworkPing() end)
-    if ok and type(ping) == "number" then
-        return ping / 2 -- one-way latency
+    if not ok or type(ping) ~= "number" then
+        return self.CachedPing
     end
-    return 0
+    
+    -- Calculate jitter (variance from previous sample)
+    if #self.Samples > 0 then
+        local prev = self.Samples[#self.Samples]
+        self.Jitter = math.abs(ping - prev)
+    end
+    
+    table.insert(self.Samples, ping)
+    if #self.Samples > self.MaxSamples then
+        table.remove(self.Samples, 1)
+    end
+    
+    -- Weighted average (more weight on recent samples)
+    local sum = 0
+    local totalWeight = 0
+    for i, sample in ipairs(self.Samples) do
+        local weight = i / #self.Samples -- 0..1
+        sum = sum + (sample * weight)
+        totalWeight = totalWeight + weight
+    end
+    self.CachedPing = (totalWeight > 0) and (sum / totalWeight) or 0
+    
+    return self.CachedPing
 end
+
+function PingEngine:GetOneWayLatency()
+    return self:Sample() / 2
+end
+
+function PingEngine:GetJitterCompensation()
+    -- If jitter is high, add buffer to parry window
+    return math.min(self.Jitter * 0.5, 0.05) -- cap at 50ms
+end
+
+local Ping = PingEngine.new()
 
 -- ====================== VERSION CHECK ======================
 local FreeVersion    = "Free Version"
@@ -115,7 +222,7 @@ local Window = WindUI:CreateWindow({
     Icon       = "rbxassetid://104487529937663",
     Author     = "Gakuran | " .. userversion,
     Folder     = "DYHUB_G",
-    Size       = UDim2.fromOffset(500, 400),
+    Size       = UDim2.fromOffset(520, 420),
     Transparent = true,
     Theme      = "Dark",
     BackgroundImageTransparency = 0.8,
@@ -125,14 +232,14 @@ local Window = WindUI:CreateWindow({
     User = { Enabled = true, Anonymous = false },
 })
 
-Window:SetToggleKey(Enum.KeyCode.RightControl) -- เปลี่ยนเป็น RightControl กันชน cycle
-pcall(function() Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") }) end)
+Window:SetToggleKey(Enum.KeyCode.K)
+pcall(function() Window:Tag({ Title = version, Color = Color3.fromHex("#ff0040") }) end)
 Window:EditOpenButton({
     Title           = "DYHUB - Open",
-    Icon            = "monitor",
+    Icon            = "zap",
     CornerRadius    = UDim.new(0, 6),
     StrokeThickness = 2,
-    Color           = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255)),
+    Color           = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,0,64)),
     Draggable       = true,
 })
 
@@ -144,7 +251,7 @@ CustomConfig.__index = CustomConfig
 function CustomConfig.new()
     local self = setmetatable({}, CustomConfig)
     self.ConfigData     = {}
-    self.ConfigPath     = ConfigFolder .. "/gakuran_config.json"
+    self.ConfigPath     = ConfigFolder .. "/config.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then pcall(makefolder, ConfigFolder) end
@@ -157,25 +264,17 @@ function CustomConfig:Get(key, default)
     return v ~= nil and v or default
 end
 function CustomConfig:Save()
-    local ok, err = pcall(function()
-        writefile(self.ConfigPath, HttpService:JSONEncode(self.ConfigData))
-    end)
-    if not ok then warn("[DYHUB] Save failed:", err) end
+    pcall(function() writefile(self.ConfigPath, HttpService:JSONEncode(self.ConfigData)) end)
 end
 function CustomConfig:Load()
     if isfile(self.ConfigPath) then
-        local ok, result = pcall(function()
-            return HttpService:JSONDecode(readfile(self.ConfigPath))
-        end)
+        local ok, result = pcall(function() return HttpService:JSONDecode(readfile(self.ConfigPath)) end)
         if ok and type(result) == "table" then
             self.ConfigData = result
-            print("[DYHUB] Config loaded!")
         else
-            warn("[DYHUB] Failed to load config, using defaults")
             self.ConfigData = {}
         end
     else
-        print("[DYHUB] No config found, creating new one")
         self.ConfigData = {}
     end
 end
@@ -188,7 +287,7 @@ function CustomConfig:AutoSave(interval)
         self._autoSaveDelay  = interval
         self._autoSaveThread = task.spawn(function()
             while true do
-                task.wait(self._autoSaveDelay or 15)
+                task.wait(self._autoSaveDelay)
                 self:Save()
             end
         end)
@@ -295,12 +394,12 @@ local IgnoreIds = {
 local ParriedAnimation = {"rbxassetid://5645212799", "rbxassetid://5806082960", "rbxassetid://100773926241456", "rbxassetid://102823909334302"}
 local StunnedAnimation = {"rbxassetid://9598562590", "rbxassetid://9598537410", "rbxassetid://9598551746"}
 
-local AutoParryRange = Config:Get("AP_AutoParryRange", 40)
-local MaxCycleRange  = Config:Get("AP_MaxCycleRange",  20)
+local AutoParryRange = Config:Get("AP_AutoParryRange", 50)
+local MaxCycleRange  = Config:Get("AP_MaxCycleRange",  25)
 local ParryWindow    = Config:Get("AP_ParryWindow",    0.1)
 local DefaultParryTime = Config:Get("AP_DefaultParryTime", 0.1)
 local ReleaseTime    = Config:Get("AP_ReleaseTime",    0.3)
-local CooldownTime   = 0.1
+local PerfectThreshold = Config:Get("AP_PerfectThreshold", 0.03) -- ยิ่งน้อยยิ่ง strict
 
 -- ====================== FLATTEN CONFIG ======================
 local FlattenedConfig = {}
@@ -316,26 +415,30 @@ for styleName, assets in pairs(GameConfig) do
 end
 GameConfig = FlattenedConfig
 
--- ====================== STATE (FIXED) ======================
+-- ====================== STATE ======================
 local S = {
-    AutoParry            = Config:Get("AP_AutoParry",            true),
-    AutoDodge            = Config:Get("AP_AutoDodge",            true),
+    AutoParry            = Config:Get("AP_AutoParry",            false),
+    AutoDodge            = Config:Get("AP_AutoDodge",            false),
     AutoTargetNearest    = Config:Get("AP_AutoTargetNearest",    false),
-    MultiTarget          = Config:Get("AP_MultiTarget",          true),
+    MultiTarget          = Config:Get("AP_MultiTarget",          false),
     TargetFacingYou      = Config:Get("AP_TargetFacingYou",      false),
-    YouFacingTarget      = Config:Get("AP_YouFacingTarget",      true),
+    YouFacingTarget      = Config:Get("AP_YouFacingTarget",      false),
     IncludeLocalCharacter = Config:Get("AP_IncludeLocalCharacter", false),
     DamageLogs           = Config:Get("AP_DamageLogs",           false),
     OrbParry             = Config:Get("AP_OrbParry",             false),
     SelectedFolder       = nil,
-    CycleKeybind         = Config:Get("AP_CycleKeybind",         Enum.KeyCode.X), -- เปลี่ยนเป็น X
-    AutoBlock            = Config:Get("AP_AutoBlock",            true),
+    CycleKeybind         = Config:Get("AP_CycleKeybind",         Enum.KeyCode.X),
+    AutoBlock            = Config:Get("AP_AutoBlock",            false),
+    PredictiveParry      = Config:Get("AP_PredictiveParry",      false), -- ใหม่
+    PerfectOnly          = Config:Get("AP_PerfectOnly",          false), -- ใหม่
+    SmartCooldown        = Config:Get("AP_SmartCooldown",        false),  -- ใหม่
+    DebugMode            = Config:Get("AP_DebugMode",            false), -- ใหม่
 }
 
 -- ====================== TABS ======================
 local InfoTab     = Window:Tab({ Title = "Information",        Icon = "info" })
 Window:Divider()
-local APTab       = Window:Tab({ Title = "Auto Parry",         Icon = "swords" })
+local APTab       = Window:Tab({ Title = "Auto Parry",         Icon = "zap" })
 local ConfigTab   = Window:Tab({ Title = "Style Configurations", Icon = "settings-2" })
 Window:Divider()
 local SettingsTab = Window:Tab({ Title = "Settings",           Icon = "settings" })
@@ -345,35 +448,33 @@ Window:SelectTab(1)
 -- ====================== SECTIONS ======================
 local TargetingSection = APTab:Section({ Title = "Targeting",     Icon = "target" })
 local CombatSection    = APTab:Section({ Title = "Combat",        Icon = "swords" })
+local AdvancedSection  = APTab:Section({ Title = "Advanced", Icon = "rocket" })
 local OrbSection       = APTab:Section({ Title = "Orb Parry",     Icon = "circle" })
 local LoggingSection   = APTab:Section({ Title = "Logging",       Icon = "clipboard" })
 local StyleSection     = ConfigTab:Section({ Title = "Style Parry Times", Icon = "sliders-horizontal" })
 
 -- ====================== UI REFERENCES ======================
 local TargetPoolPara, LoggedPara, IgnoredPara, FolderDropdown
-local AutoParryToggle, AutoDodgeToggle, AutoTargetNearestToggle
-local TargetFacingYouToggle, YouFacingTargetToggle
+local StatsPara
 
 -- ====================== HELPERS ======================
 local function GetAllFoldersInWorkspace()
     local folders = {}
     local seen = {}
-    local function addFolder(name)
-        if not seen[name] then
-            seen[name] = true
-            table.insert(folders, name)
-        end
-    end
     for _, folder in Workspace:GetChildren() do
-        if folder.ClassName == "Folder" then
-            addFolder(folder.Name)
+        if folder.ClassName == "Folder" and not seen[folder.Name] then
+            seen[folder.Name] = true
+            table.insert(folders, folder.Name)
         end
     end
-    -- ถ้าไม่เจอ ให้หา folder ที่มี character
     if #folders == 0 then
         for _, child in Workspace:GetChildren() do
             if child.ClassName == "Model" and child:FindFirstChildWhichIsA("Humanoid") then
-                addFolder(child.Parent and child.Parent.Name or "Workspace")
+                local pName = child.Parent and child.Parent.Name or "Workspace"
+                if not seen[pName] then
+                    seen[pName] = true
+                    table.insert(folders, pName)
+                end
             end
         end
     end
@@ -384,13 +485,10 @@ local function GetAllCharactersInFolder()
     if not S.SelectedFolder or S.SelectedFolder == "" then return {} end
     local folder = Workspace:FindFirstChild(S.SelectedFolder)
     if not folder then
-        -- fallback: ดู child ของ Workspace ทั้งหมดที่เป็น Model + Humanoid
         local chars = {}
         for _, child in Workspace:GetChildren() do
             if child.ClassName == "Model" and child:FindFirstChildWhichIsA("Humanoid") then
-                if not S.IncludeLocalCharacter and LocalPlayer.Character and child == LocalPlayer.Character then
-                    continue
-                end
+                if not S.IncludeLocalCharacter and LocalPlayer.Character and child == LocalPlayer.Character then continue end
                 table.insert(chars, child)
             end
         end
@@ -399,9 +497,7 @@ local function GetAllCharactersInFolder()
     local characters = {}
     for _, character in folder:GetChildren() do
         if character.ClassName == "Model" and character:FindFirstChildWhichIsA("Humanoid") then
-            if not S.IncludeLocalCharacter then
-                if LocalPlayer.Character and character == LocalPlayer.Character then continue end
-            end
+            if not S.IncludeLocalCharacter and LocalPlayer.Character and character == LocalPlayer.Character then continue end
             table.insert(characters, character)
         end
     end
@@ -442,542 +538,195 @@ local function schedulerUpdate()
     end
 end
 
--- ====================== UPDATE FUNCTIONS ======================
-local function UpdateTargetPoolSection()
+-- ====================== PARRY ENGINE V2 (GOD MODE) ======================
+local ParryEngine = {}
+ParryEngine.__index = ParryEngine
+
+function ParryEngine.new()
+    local self = setmetatable({}, ParryEngine)
+    self.KeyHeld           = false
+    self.CooldownActive    = false
+    self.LastParryTime     = 0
+    self.ReleaseDeadline   = 0
+    self.PendingParryTs    = nil
+    self.ParrySuccess      = false
+    self.parryIntent       = nil
+    self.Stunned           = false
+    self.StunToken         = 0
+    
+    -- Stats
+    self.Stats = {
+        TotalAttempts  = 0,
+        TotalSuccess   = 0,
+        TotalPerfect   = 0,
+        TotalFailed    = 0,
+        ConsecSuccess  = 0,
+        ConsecFailed   = 0,
+        LastFrameOffset = 0,
+    }
+    
+    -- Animation registry
+    self.AnimRegistry = {}
+    
+    -- Jitter filter (median of last N TimePositions)
+    self.TimeHistory = {}
+    self.MaxHistory  = 5
+    
+    return self
+end
+
+function ParryEngine:Reset()
+    self.KeyHeld = false
+    self.CooldownActive = false
+    self.ReleaseDeadline = 0
+    self.PendingParryTs = nil
+    self.ParrySuccess = false
+    self.parryIntent = nil
+    self.Stunned = false
+    self.StunToken = self.StunToken + 1
+    self.AnimRegistry = {}
+    self.TimeHistory = {}
+    Input:Cleanup()
+end
+
+function ParryEngine:Dodge()
     pcall(function()
-        local characters = GetAllCharactersInFolder()
-        local names = {}
-        for _, c in ipairs(characters) do
-            table.insert(names, c.Name)
-        end
-        local poolString = #names > 0 and table.concat(names, ", ") or "No targets found"
-        if TargetPoolPara then TargetPoolPara:SetDesc("Target Pool: " .. poolString) end
+        Input:Release("F")
+        Input:Release("Q")
+        Input:Press("Q")
+        task.delay(0.05, function() Input:Release("Q") end)
+        Input:Mouse2Click()
     end)
 end
 
-local function UpdateClipboardSection()
-    pcall(function()
-        if LoggedPara then
-            LoggedPara:SetDesc("Logged Ids: " .. #AnimationsLoggedOrder)
-        end
-        if IgnoredPara then
-            IgnoredPara:SetDesc("Ignored Ids: " .. #IgnoreIds)
-        end
-    end)
-end
-
--- ====================== BUILD UI : TARGETING ======================
-TargetPoolPara = TargetingSection:Paragraph({
-    Title = "Target Pool",
-    Desc  = "No targets found",
-    Image = "users",
-    ImageSize = 22,
-})
-
-do
-    local folders = GetAllFoldersInWorkspace()
-    local defaultFolder
-    local commonNames = {"Players", "Live", "NPCs", "Mobs", "Enemies", "Characters", "Entities"}
-    for _, name in ipairs(commonNames) do
-        if table.find(folders, name) then
-            defaultFolder = name
-            break
-        end
-    end
-    if not defaultFolder then defaultFolder = folders[1] or "" end
-    S.SelectedFolder = defaultFolder
-
-    FolderDropdown = TargetingSection:Dropdown({
-        Title = "Live Folder",
-        Desc  = "Folder that contains the target characters.",
-        Values = folders,
-        Multi  = false,
-        Value  = defaultFolder,
-        Callback = function(v)
-            local sel = (type(v) == "table" and v[1]) or v
-            S.SelectedFolder = sel
-            UpdateTargetPoolSection()
-        end,
-    })
-
-    TargetingSection:Slider({
-        Title = "Max Cycle Range",
-        Desc  = "Studs -- only targets within this range will be considered.",
-        Value = { Min = 1, Max = 50, Default = MaxCycleRange },
-        Step  = 1,
-        Callback = function(v)
-            MaxCycleRange = v
-            Config:Set("AP_MaxCycleRange", v); Config:Save()
-        end,
-    })
-
-    TargetingSection:Toggle({
-        Title    = "Include Local Character",
-        Desc     = "Add your own character to the target pool.",
-        Value    = S.IncludeLocalCharacter,
-        Callback = function(v)
-            S.IncludeLocalCharacter = v
-            Config:Set("AP_IncludeLocalCharacter", v); Config:Save()
-            UpdateTargetPoolSection()
-        end,
-    })
-
-    TargetingSection:Toggle({
-        Title    = "Auto Target Nearest",
-        Desc     = "Always target the closest enemy (skips manual cycle).",
-        Value    = S.AutoTargetNearest,
-        Callback = function(v)
-            S.AutoTargetNearest = v
-            Config:Set("AP_AutoTargetNearest", v); Config:Save()
-        end,
-    })
-
-    TargetingSection:Toggle({
-        Title    = "Multiple Targets",
-        Desc     = "Target up to 3 nearest enemies at once.",
-        Value    = S.MultiTarget,
-        Callback = function(v)
-            S.MultiTarget = v
-            Config:Set("AP_MultiTarget", v); Config:Save()
-        end,
-    })
-
-    TargetingSection:Keybind({
-        Title    = "Cycle Target Key",
-        Desc     = "Press to cycle through the target list.",
-        Value    = S.CycleKeybind,
-        Callback = function(v)
-            S.CycleKeybind = v
-            Config:Set("AP_CycleKeybind", v); Config:Save()
-        end,
-    })
-end
-
--- ====================== BUILD UI : COMBAT ======================
-AutoParryToggle = CombatSection:Toggle({
-    Title    = "Auto Parry",
-    Desc     = "Auto block enemy attacks at the perfect time.",
-    Value    = S.AutoParry,
-    Callback = function(v)
-        S.AutoParry = v
-        Config:Set("AP_AutoParry", v); Config:Save()
-        WindUI:Notify({ Title = "Auto Parry", Content = v and "Enabled" or "Disabled", Duration = 2, Icon = v and "shield" or "shield-off" })
-    end,
-})
-pcall(function() AutoParryToggle:Keybind(Enum.KeyCode.G) end)
-
-AutoDodgeToggle = CombatSection:Toggle({
-    Title    = "Auto Dodge",
-    Desc     = "Dodge heavy / M2 attacks instead of blocking.",
-    Value    = S.AutoDodge,
-    Callback = function(v)
-        S.AutoDodge = v
-        Config:Set("AP_AutoDodge", v); Config:Save()
-    end,
-})
-
-CombatSection:Toggle({
-    Title    = "Auto Block",
-    Desc     = "Always hold block when no parry is active (safer).",
-    Value    = S.AutoBlock,
-    Callback = function(v)
-        S.AutoBlock = v
-        Config:Set("AP_AutoBlock", v); Config:Save()
-    end,
-})
-
-TargetFacingYouToggle = CombatSection:Toggle({
-    Title    = "Target facing you",
-    Desc     = "Only parry when the enemy is looking at you.",
-    Value    = S.TargetFacingYou,
-    Callback = function(v)
-        S.TargetFacingYou = v
-        Config:Set("AP_TargetFacingYou", v); Config:Save()
-    end,
-})
-
-YouFacingTargetToggle = CombatSection:Toggle({
-    Title    = "You facing target",
-    Desc     = "Only parry when you are looking at the enemy.",
-    Value    = S.YouFacingTarget,
-    Callback = function(v)
-        S.YouFacingTarget = v
-        Config:Set("AP_YouFacingTarget", v); Config:Save()
-    end,
-})
-
-CombatSection:Slider({
-    Title    = "Auto Parry Range",
-    Desc     = "Studs -- max distance to trigger parries.",
-    Value    = { Min = 7, Max = 80, Default = AutoParryRange },
-    Step     = 1,
-    Callback = function(v)
-        AutoParryRange = v
-        Config:Set("AP_AutoParryRange", v); Config:Save()
-    end,
-})
-
-CombatSection:Slider({
-    Title    = "Default Parry Time",
-    Desc     = "Seconds into the animation where the parry window opens.",
-    Value    = { Min = 0, Max = 1, Default = DefaultParryTime },
-    Step     = 0.01,
-    Callback = function(v)
-        DefaultParryTime = v
-        Config:Set("AP_DefaultParryTime", v); Config:Save()
-    end,
-})
-
-CombatSection:Slider({
-    Title    = "Default Parry Window",
-    Desc     = "Window length (seconds) around parry time.",
-    Value    = { Min = 0, Max = 1, Default = ParryWindow },
-    Step     = 0.01,
-    Callback = function(v)
-        ParryWindow = v
-        Config:Set("AP_ParryWindow", v); Config:Save()
-    end,
-})
-
-CombatSection:Slider({
-    Title    = "Default Release Time",
-    Desc     = "How long to hold the block after a parry trigger.",
-    Value    = { Min = 0, Max = 1, Default = ReleaseTime },
-    Step     = 0.01,
-    Callback = function(v)
-        ReleaseTime = v
-        Config:Set("AP_ReleaseTime", v); Config:Save()
-    end,
-})
-
--- ====================== BUILD UI : ORB ======================
-local OrbParryToggle = OrbSection:Toggle({
-    Title    = "Auto Orb Parry",
-    Desc     = "Auto-parry orbs (The Strongest Battlegrounds & others).",
-    Value    = S.OrbParry,
-    Callback = function(v)
-        S.OrbParry = v
-        Config:Set("AP_OrbParry", v); Config:Save()
-    end,
-})
-if game.PlaceId == 8668476218 or game.PlaceId == 134572803901609 then
-    pcall(function() OrbParryToggle:Set(true) end)
-    S.OrbParry = true
-    Config:Set("AP_OrbParry", true); Config:Save()
-end
-
--- ====================== BUILD UI : LOGGING ======================
-LoggedPara = LoggingSection:Paragraph({
-    Title = "Logged Animations",
-    Desc  = "Logged Ids: 0",
-    Image = "list",
-    ImageSize = 22,
-})
-
-IgnoredPara = LoggingSection:Paragraph({
-    Title = "Ignored Animations",
-    Desc  = "Ignored Ids: " .. #IgnoreIds,
-    Image = "ban",
-    ImageSize = 22,
-})
-
-local DamageLogToggle = LoggingSection:Toggle({
-    Title    = "Damage Logs",
-    Desc     = "Print damage taken in console with attack info.",
-    Value    = S.DamageLogs,
-    Callback = function(v)
-        S.DamageLogs = v
-        Config:Set("AP_DamageLogs", v); Config:Save()
-        if ToggleDamageLogger then pcall(ToggleDamageLogger, v) end
-    end,
-})
-
-LoggingSection:Button({
-    Title    = "Copy to clipboard",
-    Desc     = "Copies all logged animation IDs to clipboard.",
-    Callback = SetClipboardLoggedCache,
-})
-
-LoggingSection:Button({
-    Title    = "Clear animation cache",
-    Desc     = "Clears all logged animation IDs.",
-    Callback = function()
-        AnimationsLoggedCache = {}
-        AnimationsLoggedOrder = {}
-        UpdateClipboardSection()
-        WindUI:Notify({ Title = "Cache", Content = "Cleared.", Duration = 2, Icon = "trash-2" })
-    end,
-})
-
--- ====================== BUILD UI : STYLE CONFIG ======================
-do
-    local StylesWithParryTime = {}
-    for assetId, info in pairs(GameConfig) do
-        if info.DisplayName == "M2" then continue end
-        if not info.Style or not info.M1Time then continue end
-        if not StylesWithParryTime[info.Style] then
-            StylesWithParryTime[info.Style] = { DefaultTime = info.M1Time, Animations = {} }
-        end
-        table.insert(StylesWithParryTime[info.Style].Animations, info)
-    end
-
-    for styleName, data in pairs(StylesWithParryTime) do
-        local defaultTime = Config:Get("Style_ParryTime_" .. styleName, data.DefaultTime)
-        for _, anim in ipairs(data.Animations) do
-            anim.ParryTime = defaultTime
-        end
-        StyleSection:Slider({
-            Title    = "Parry Time - " .. styleName,
-            Desc     = "Override parry time for all " .. styleName .. " M1s.",
-            Value    = { Min = 0, Max = 1, Default = defaultTime },
-            Step     = 0.01,
-            Callback = function(v)
-                for _, anim in ipairs(data.Animations) do
-                    anim.ParryTime = v
-                end
-                Config:Set("Style_ParryTime_" .. styleName, v); Config:Save()
-            end,
-        })
+function ParryEngine:BlockStart(now, duration)
+    now = now or os.clock()
+    local holdTime = duration or ReleaseTime
+    self.ReleaseDeadline = now + holdTime
+    self.KeyHeld = true
+    self.CooldownActive = true
+    self.LastParryTime = now
+    self.Stats.TotalAttempts = self.Stats.TotalAttempts + 1
+    if S.AutoParry then
+        Input:Press("F")
     end
 end
 
--- ====================== INFORMATION TAB ======================
-do
-    local Info = InfoTab
-
-    Info:Section({ Title = "DYHUB | Gakuran", TextXAlignment = "Center", TextSize = 17 })
-    Info:Divider()
-    Info:Paragraph({
-        Title = "Update: 07/02/2026 | CL: " .. ver,
-        Desc  = [[
-• [ Fixed ] keypress/keyrelease ใช้ VIM แทน globals
-• [ Fixed ] GetPingValue ใช้ GetNetworkPing ของ Roblox
-• [ Fixed ] Toggle conflict (K -> RightControl/X)
-• [ Fixed ] Folder detection ค้นหาแบบ recursive + fallback
-• [ Fixed ] AutoBlock ระหว่างรอ parry
-• [ Added ] Folder auto-search (Players, Live, NPCs, Mobs, ...)
-• [ Added ] Parry success/stun visual feedback
-• [ Added ] Connection teardown ป้องกัน dup]],
-        Image = "rbxassetid://104487529937663", ImageSize = 30,
-    })
-    Info:Divider()
-
-    if not ui then ui = {} end
-    if not ui.Creator then ui.Creator = {} end
-    ui.Creator.Request = function(requestData)
-        local success, result = pcall(function()
-            if HttpService.RequestAsync then
-                local response = HttpService:RequestAsync({
-                    Url = requestData.Url,
-                    Method = requestData.Method or "GET",
-                    Headers = requestData.Headers or {}
-                })
-                return {Body = response.Body, StatusCode = response.StatusCode, Success = response.Success}
-            else
-                local body = HttpService:GetAsync(requestData.Url)
-                return {Body = body, StatusCode = 200, Success = true}
-            end
-        end)
-        if success then return result else error("HTTP Request failed: " .. tostring(result)) end
+function ParryEngine:BlockEnd()
+    self.KeyHeld = false
+    self.ReleaseDeadline = 0
+    self.ParrySuccess = false
+    if S.AutoParry then
+        Input:Release("F")
     end
+end
 
-    local InviteCode = "jWNDPNMmyB"
-    local DiscordAPI  = "https://discord.com/api/v10/invites/" .. InviteCode .. "?with_counts=true&with_expiration=true"
-    local function LoadDiscordInfo()
-        local success, result = pcall(function()
-            return HttpService:JSONDecode(ui.Creator.Request({
-                Url = DiscordAPI, Method = "GET",
-                Headers = {["User-Agent"] = "RobloxBot/1.0", ["Accept"] = "application/json"}
-            }).Body)
-        end)
-        if success and result and result.guild then
-            local DiscordInfo = Info:Paragraph({
-                Title = result.guild.name,
-                Desc  = ' <font color="#52525b">●</font> Member Count : ' .. tostring(result.approximate_member_count) ..
-                        '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(result.approximate_presence_count),
-                Image = "https://cdn.discordapp.com/icons/" .. result.guild.id .. "/" .. result.guild.icon .. ".png?size=1024",
-                ImageSize = 42,
+function ParryEngine:GetFilteredTime(anim)
+    -- Median filter to remove jitter
+    local raw = anim.TimePosition or 0
+    table.insert(self.TimeHistory, raw)
+    if #self.TimeHistory > self.MaxHistory then
+        table.remove(self.TimeHistory, 1)
+    end
+    
+    if #self.TimeHistory < 3 then return raw end
+    
+    local sorted = table.clone(self.TimeHistory)
+    table.sort(sorted)
+    local median = sorted[math.ceil(#sorted / 2)]
+    return median
+end
+
+function ParryEngine:RegisterSuccess(perfectOffset)
+    self.ParrySuccess = true
+    self.CooldownActive = false
+    self.Stats.TotalSuccess = self.Stats.TotalSuccess + 1
+    self.Stats.ConsecSuccess = self.Stats.ConsecSuccess + 1
+    self.Stats.ConsecFailed = 0
+    self.Stats.LastFrameOffset = perfectOffset or 0
+    
+    if perfectOffset and math.abs(perfectOffset) <= PerfectThreshold then
+        self.Stats.TotalPerfect = self.Stats.TotalPerfect + 1
+    end
+    
+    -- Smart Cooldown: ลด release time เมื่อสำเร็จต่อเนื่อง
+    if S.SmartCooldown and self.Stats.ConsecSuccess >= 3 then
+        local reduction = math.min(self.Stats.ConsecSuccess * 0.02, 0.15)
+        self.ReleaseDeadline = self.ReleaseDeadline - reduction
+    end
+end
+
+function ParryEngine:RegisterFailure()
+    self.Stats.TotalFailed = self.Stats.TotalFailed + 1
+    self.Stats.ConsecFailed = self.Stats.ConsecFailed + 1
+    self.Stats.ConsecSuccess = 0
+end
+
+local Engine = ParryEngine.new()
+
+-- ====================== TICK TASK ======================
+function Engine:Tick()
+    if not alive() then return end
+    local now = os.clock()
+    
+    if self.KeyHeld then
+        if (now >= self.ReleaseDeadline) or self.ParrySuccess then
+            if self.ParrySuccess then self.ParrySuccess = false end
+            self:BlockEnd()
+        end
+    end
+    
+    if self.PendingParryTs then
+        local latency = now - self.PendingParryTs
+        if latency > ParryWindow then
+            self.PendingParryTs = nil
+            self:RegisterFailure()
+        elseif not self.CooldownActive then
+            self:BlockStart(now)
+            self.PendingParryTs = nil
+        end
+    end
+end
+
+-- ====================== LOCAL ANIMATION HANDLER ======================
+local function onLocalAnimationAdded(anim)
+    if not anim or not anim.AnimationId then return end
+    local animId = anim.AnimationId
+
+    if table.find(ParriedAnimation, animId) then
+        if Engine.parryIntent then
+            local timeStr = string.format("%.3f", Engine.parryIntent.TriggerTime)
+            local frameOff = Engine.Stats.LastFrameOffset
+            local isPerfect = math.abs(frameOff) <= PerfectThreshold
+            WindUI:Notify({
+                Title = isPerfect and "✨ PERFECT!" or "✅ Parry",
+                Content = string.format("%s %s @ %.3fs (Δ%.0fms)",
+                    Engine.parryIntent.Style or "Unknown",
+                    Engine.parryIntent.DisplayName or "Attack",
+                    Engine.parryIntent.TriggerTime,
+                    frameOff * 1000
+                ),
+                Duration = 1.5,
+                Icon = isPerfect and "sparkles" or "check",
             })
-            Info:Button({Title = "Update Info", Callback = function()
-                local ok, r = pcall(function()
-                    return HttpService:JSONDecode(ui.Creator.Request({Url = DiscordAPI, Method = "GET"}).Body)
-                end)
-                if ok and r and r.guild then
-                    DiscordInfo:SetDesc(' <font color="#52525b">●</font> Member Count : ' .. tostring(r.approximate_member_count) ..
-                                        '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(r.approximate_presence_count))
-                    WindUI:Notify({Title = "Discord Info Updated", Content = "Refreshed!", Duration = 2, Icon = "refresh-cw"})
-                else
-                    WindUI:Notify({Title = "Update Failed", Content = "Could not refresh.", Duration = 3, Icon = "alert-triangle"})
-                end
-            end})
-            Info:Button({Title = "Copy Discord Invite", Callback = function()
-                setclipboard("https://discord.gg/" .. InviteCode)
-                WindUI:Notify({Title = "Copied!", Content = "Discord invite copied!", Duration = 2, Icon = "clipboard-check"})
-            end})
+            Engine.parryIntent = nil
         else
-            Info:Paragraph({Title = "Error fetching Discord Info", Desc = "Unable to load.", Image = "triangle-alert", ImageSize = 26, Color = "Red"})
+            WindUI:Notify({Title = "✅ Parry", Content = "Success!", Duration = 1, Icon = "check"})
         end
+        Engine:RegisterSuccess(Engine.Stats.LastFrameOffset)
     end
-    LoadDiscordInfo()
 
-    Info:Divider()
-    Info:Section({Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17})
-    Info:Divider()
-    Info:Paragraph({Title = "Main Owner", Desc = "@dyumraisgoodguy#8888", Image = "rbxassetid://119789418015420", ImageSize = 30})
-    Info:Paragraph({
-        Title = "Social", Desc = "Copy link social media for follow!",
-        Image = "rbxassetid://104487529937663", ImageSize = 30,
-        Buttons = {{Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://guns.lol/DYHUB") end}}
-    })
-    Info:Paragraph({
-        Title = "Discord", Desc = "Join our discord for more scripts!",
-        Image = "rbxassetid://104487529937663", ImageSize = 30,
-        Buttons = {{Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://discord.gg/jWNDPNMmyB") end}}
-    })
-end
-
--- ====================== SETTINGS TAB ======================
-do
-    local Settings = SettingsTab
-
-    Settings:Divider()
-    Settings:Section({Title = "Save Config", Icon = "save"})
-
-    Settings:Button({
-        Title    = "Save Config (NOW)",
-        Desc     = "Saves all current settings immediately.",
-        Callback = function()
-            Config:Save()
-            WindUI:Notify({Title = "Config Saved", Content = "Config saved successfully!", Duration = 2, Icon = "save"})
-        end
-    })
-
-    local AutoSaveEnabled = Config:Get("AutoSaveEnabled", true)
-    local AutoSaveDelay   = Config:Get("AutoSaveDelay",   15)
-
-    Settings:Toggle({
-        Title    = "Auto Save Config",
-        Desc     = "Automatically saves config at set interval.",
-        Value    = AutoSaveEnabled,
-        Callback = function(state)
-            AutoSaveEnabled = state
-            Config:Set("AutoSaveEnabled", state); Config:Save()
-            if state then Config:AutoSave(AutoSaveDelay) else Config:AutoSave(0) end
-        end
-    })
-
-    Settings:Input({
-        Title       = "Delay Save Config",
-        Value       = tostring(AutoSaveDelay),
-        Placeholder = "Default: 15",
-        Callback    = function(text)
-            local num = tonumber(text)
-            if num and num >= 1 then
-                AutoSaveDelay = num
-                Config:Set("AutoSaveDelay", num); Config:Save()
-                if AutoSaveEnabled then Config:AutoSave(num) end
-                WindUI:Notify({Title = "Config Delay", Content = "Set to " .. num .. "s", Duration = 2, Icon = "clock"})
-            else
-                WindUI:Notify({Title = "Invalid", Content = "Enter a number >= 1", Duration = 3, Icon = "alert-triangle"})
+    if table.find(StunnedAnimation, animId) then
+        Engine.Stunned = true
+        Engine.StunToken = Engine.StunToken + 1
+        local myToken = Engine.StunToken
+        schedulerDelay(0.2, function()
+            if Engine.StunToken == myToken then
+                Engine.Stunned = false
             end
-        end
-    })
-
-    Settings:Section({Title = "Server Status", Icon = "server"})
-
-    Settings:Button({
-        Title    = "Serverhop",
-        Desc     = "Teleports you to a different random server.",
-        Callback = function()
-            local servers = {}
-            local success, result = pcall(function()
-                return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"))
-            end)
-            if success and result and result.data then
-                for _, server in ipairs(result.data) do
-                    if server.id ~= game.JobId and server.playing < server.maxPlayers then
-                        table.insert(servers, server.id)
-                    end
-                end
-            end
-            if #servers > 0 then
-                WindUI:Notify({Title = "Serverhop", Content = "Teleporting...", Duration = 2, Icon = "server"})
-                task.wait(1)
-                TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], LocalPlayer)
-            else
-                WindUI:Notify({Title = "Serverhop Failed", Content = "No available servers.", Duration = 3, Icon = "alert-triangle"})
-            end
-        end
-    })
-
-    Settings:Button({
-        Title    = "Rejoin",
-        Desc     = "Rejoins the current game server.",
-        Callback = function()
-            WindUI:Notify({Title = "Rejoin", Content = "Rejoining...", Duration = 2, Icon = "refresh-cw"})
-            task.wait(1)
-            TeleportService:Teleport(game.PlaceId, LocalPlayer)
-        end
-    })
+        end)
+    end
 end
-
--- ====================== ORB LISTENER (FIXED) ======================
-local PARRY_DISTANCE = 15
-local lastParryAt = 0
-
-local function GetLocalHRP()
-    local char = LocalPlayer.Character
-    return char and char:FindFirstChild("HumanoidRootPart")
-end
-
-local orbConnection
-local function ListenForOrbs()
-    pcall(function()
-        if orbConnection then orbConnection:Disconnect() end
-    end)
-    orbConnection = RunService.RenderStepped:Connect(function()
-        if not alive() then pcall(function() orbConnection:Disconnect() end) return end
-        if not S.OrbParry then return end
-
-        local hrp = GetLocalHRP()
-        if not hrp or not hrp.Parent then return end
-        local myPos = hrp.Position
-
-        local thrown = Workspace:FindFirstChild("Thrown")
-        if not thrown then return end
-
-        for _, orb in ipairs(thrown:GetChildren()) do
-            if orb.Name == "ArdourBall2" or orb.Name == "ArdourBall" then
-                if (myPos - orb.Position).Magnitude <= PARRY_DISTANCE
-                    and (tick() - lastParryAt >= 0.1) then
-                    lastParryAt = tick()
-                    BlockStart()
-                    BlockEnd()
-                    break
-                end
-            end
-        end
-    end)
-end
-
-if game.PlaceId == 8668476218 or game.PlaceId == 134572803901609 then
-    ListenForOrbs()
-end
-
--- ====================== COMBAT CORE (FIXED) ======================
-local ParryKey = "F"
-local DodgeKey = "Q"
-
-local KeyHeld = false
-local CooldownActive = false
-local LastParryTime = 0
-local ReleaseDeadline = 0
-local PendingParryTimestamp = nil
-local ParrySuccess = false
-local parryIntentSnapshot = nil
-
-local Stunned = false
-local currentStunToken = 0
 
 local LocalTracker, RemoteTracker
 if AnimationTracker then
@@ -985,132 +734,40 @@ if AnimationTracker then
         LocalTracker  = AnimationTracker.new(IgnoreIds)
         RemoteTracker = AnimationTracker.new(IgnoreIds)
     end)
-end
-
-local lastCharacter, previousHealth
-local damageLogConnection
-
-function Dodge()
-    pcall(function()
-        releaseKey(DodgeKey)
-        releaseKey(ParryKey)
-        pressKey(DodgeKey)
-        releaseKey(DodgeKey)
-        mouseRightClick()
-    end)
-end
-
-function BlockStart(now, duration)
-    now = now or os.clock()
-    local holdTime = duration or ReleaseTime
-    ReleaseDeadline = now + holdTime
-    KeyHeld = true
-    CooldownActive = true
-    LastParryTime = now
-
-    if S.AutoParry then
-        pcall(function()
-            pressKey(ParryKey)
-        end)
+    if LocalTracker and LocalTracker.AnimationAdded then
+        pcall(function() LocalTracker.AnimationAdded:Connect(onLocalAnimationAdded) end)
     end
 end
 
-function BlockEnd()
-    KeyHeld = false
-    ReleaseDeadline = 0
-    ParrySuccess = false
-    if S.AutoParry then
-        pcall(function() releaseKey(ParryKey) end)
-    end
-end
-
-local function ParryTask()
-    if not alive() then return end
-    local now = os.clock()
-
-    if KeyHeld then
-        if (now >= ReleaseDeadline) or ParrySuccess then
-            if ParrySuccess then ParrySuccess = false end
-            BlockEnd()
-        end
-    end
-
-    if PendingParryTimestamp then
-        local latency = now - PendingParryTimestamp
-        local isExpired = latency > ParryWindow
-        if isExpired then
-            PendingParryTimestamp = nil
-        elseif not CooldownActive then
-            BlockStart(now)
-            PendingParryTimestamp = nil
-        end
-    end
-end
-
-local function onLocalAnimationAdded(anim)
-    if not anim or not anim.AnimationId then return end
-    local animId = anim.AnimationId
-
-    if table.find(ParriedAnimation, animId) then
-        if parryIntentSnapshot then
-            local timeStr = string.format("%.3f", parryIntentSnapshot.TriggerTime)
-            WindUI:Notify({
-                Title = "Parry status",
-                Content = "success! " .. parryIntentSnapshot.Style .. " " .. parryIntentSnapshot.DisplayName .. " @ " .. timeStr,
-                Duration = 2, Icon = "check",
-            })
-            parryIntentSnapshot = nil
-        else
-            WindUI:Notify({Title = "Parry status", Content = "success", Duration = 1, Icon = "check"})
-        end
-        ParrySuccess = true
-        CooldownActive = false
-    end
-
-    if table.find(StunnedAnimation, animId) then
-        Stunned = true
-        currentStunToken = currentStunToken + 1
-        local myToken = currentStunToken
-        schedulerDelay(0.2, function()
-            if currentStunToken == myToken then
-                Stunned = false
-            end
-        end)
-    end
-end
-
-if LocalTracker and LocalTracker.AnimationAdded then
-    pcall(function()
-        LocalTracker.AnimationAdded:Connect(onLocalAnimationAdded)
-    end)
-end
-
--- ====================== EVALUATION (FIXED) ======================
-local AnimationRegistry = {}
-
+-- ====================== EVALUATION ENGINE V2 (GOD MODE) ======================
 local function LogAnimation(assetId, trackInfo)
     if not AnimationsLoggedCache[assetId] then
         AnimationsLoggedCache[assetId] = { Name = trackInfo.Name }
         table.insert(AnimationsLoggedOrder, assetId)
-        UpdateClipboardSection()
+        if LoggedPara then LoggedPara:SetDesc("Logged Ids: " .. #AnimationsLoggedOrder) end
     end
 end
 
 local COLOR_WHITE = Color3.fromRGB(255, 255, 255)
 local COLOR_RED   = Color3.fromRGB(255, 50, 50)
 local COLOR_GREEN = Color3.fromRGB(50, 255, 50)
+local COLOR_GOLD  = Color3.fromRGB(255, 215, 0)
 
 local function EvaluateParryTriggers()
     if not alive() then return end
     if not S.AutoParry then return end
-    if not HumanoidRootPart or not HumanoidRootPart.Parent or Stunned then return end
+    if not HumanoidRootPart or not HumanoidRootPart.Parent or Engine.Stunned then return end
     if not RemoteTracker then return end
 
     local localRoot = HumanoidRootPart
-    local pingDelay = GetPingSeconds()
+    local pingDelay = Ping:GetOneWayLatency()
+    local jitterBuf = Ping:GetJitterCompensation()
+    local effectiveWindow = ParryWindow + jitterBuf
 
     local currentActiveIds = {}
+    local bestCandidate = nil -- { character, anim, config, priority }
 
+    -- Pass 1: collect all valid triggers
     for _, character in ipairs(TargetCharacters) do
         local targetRoot = character and character:FindFirstChild("HumanoidRootPart")
         if not targetRoot or not targetRoot.Parent then continue end
@@ -1138,77 +795,112 @@ local function EvaluateParryTriggers()
 
             local animKey = anim.Address or anim
             currentActiveIds[animKey] = true
-            local currentTrackTime = anim.TimePosition or 0
+            local currentTrackTime = Engine:GetFilteredTime(anim)
 
-            if not AnimationRegistry[animKey] then
-                AnimationRegistry[animKey] = {
+            if not Engine.AnimRegistry[animKey] then
+                Engine.AnimRegistry[animKey] = {
                     StartTime = now - currentTrackTime,
                     Processed = false,
                     Snapshot  = false,
                     LastTime  = currentTrackTime,
+                    LastUpdate = now,
                 }
             end
 
-            local regData = AnimationRegistry[animKey]
+            local regData = Engine.AnimRegistry[animKey]
 
-            -- animation restart detection (loop / new attack)
+            -- Animation restart detection
             if regData.LastTime and (currentTrackTime < regData.LastTime - 0.1) then
                 regData.Processed = false
                 regData.Snapshot  = false
                 regData.StartTime = now - currentTrackTime
             end
             regData.LastTime = currentTrackTime
+            regData.LastUpdate = now
 
             local attackConfig = GameConfig[tostring(anim.AnimationId)]
             if not attackConfig then continue end
+
+            if regData.Processed then continue end
 
             local startTime  = regData.StartTime
             local currentTime = now - startTime
             local baseTime   = attackConfig.ParryTime or DefaultParryTime
             local parryStart = baseTime - pingDelay
-            local parryEnd   = baseTime + ParryWindow
+            local parryEnd   = baseTime + effectiveWindow
             local isHeavy    = attackConfig.DisplayName == "M2"
 
-            if regData.Processed then continue end
-
-            if character ~= LocalPlayer.Character then
+            -- Facing checks
+            if character ~= LocalPlayer.Character and not isHeavy then
                 local direction = (targetRoot.Position - localRoot.Position).Unit
-                if not isHeavy then
-                    if S.TargetFacingYou then
-                        if targetRoot.CFrame.LookVector:Dot(-direction) < 0.25 then continue end
-                    end
-                    if S.YouFacingTarget then
-                        if localRoot.CFrame.LookVector:Dot(direction) < 0.25 then continue end
-                    end
+                if S.TargetFacingYou then
+                    if targetRoot.CFrame.LookVector:Dot(-direction) < 0.25 then continue end
+                end
+                if S.YouFacingTarget then
+                    if localRoot.CFrame.LookVector:Dot(direction) < 0.25 then continue end
                 end
             end
 
             if currentTime >= parryStart and currentTime <= parryEnd then
-                if not regData.Snapshot then
-                    regData.Snapshot = true
-                    parryIntentSnapshot = {
-                        TriggerTime  = currentTime,
-                        Style        = attackConfig.Style or "Unknown",
-                        DisplayName  = attackConfig.DisplayName or "Attack",
+                -- Priority: M2 > closer M1, perfect frame > late frame
+                local priority = 0
+                if isHeavy then priority = priority + 1000 end
+                priority = priority + (1000 - distance) -- closer = higher
+                local frameOffset = math.abs(currentTime - baseTime)
+                priority = priority + (1 / (frameOffset + 0.001)) -- closer to perfect = higher
+                
+                if not bestCandidate or priority > bestCandidate.priority then
+                    bestCandidate = {
+                        character = character,
+                        anim = anim,
+                        config = attackConfig,
+                        priority = priority,
+                        regData = regData,
+                        isHeavy = isHeavy,
+                        currentTime = currentTime,
+                        baseTime = baseTime,
+                        frameOffset = currentTime - baseTime,
                     }
-                end
-
-                if isHeavy and S.AutoDodge then
-                    Dodge()
-                else
-                    BlockStart()
-                    PendingParryTimestamp = now
                 end
             end
         end
     end
 
-    for key in pairs(AnimationRegistry) do
+    -- Pass 2: trigger best candidate only
+    if bestCandidate and not Engine.CooldownActive then
+        if not S.PerfectOnly or math.abs(bestCandidate.frameOffset) <= PerfectThreshold then
+            if not bestCandidate.regData.Snapshot then
+                bestCandidate.regData.Snapshot = true
+                Engine.parryIntent = {
+                    TriggerTime  = bestCandidate.currentTime,
+                    Style        = bestCandidate.config.Style or "Unknown",
+                    DisplayName  = bestCandidate.config.DisplayName or "Attack",
+                }
+                Engine.Stats.LastFrameOffset = bestCandidate.frameOffset
+            end
+
+            if bestCandidate.isHeavy and S.AutoDodge then
+                Engine:Dodge()
+            else
+                Engine:BlockStart()
+                Engine.PendingParryTs = os.clock()
+            end
+        end
+    end
+
+    -- Cleanup stale entries (older than 2 seconds)
+    for key, regData in pairs(Engine.AnimRegistry) do
         if not currentActiveIds[key] then
-            AnimationRegistry[key] = nil
+            if (os.clock() - regData.LastUpdate) > 2.0 then
+                Engine.AnimRegistry[key] = nil
+            end
         end
     end
 end
+
+-- ====================== ESP & LOGGING ======================
+local TargetCharacters = {}
+local EspTrackers = {}
 
 local function ProcessEspAndLogging()
     if not alive() or not RemoteTracker then return end
@@ -1297,8 +989,6 @@ local function UpdateTargetCharacters(charactersList)
 end
 
 -- ====================== TARGET CYCLING ======================
-local TargetCharacters = {}
-local EspTrackers = {}
 local CurrentIndex = 1
 
 function CycleEvent()
@@ -1351,26 +1041,518 @@ function CycleEvent()
     end
 end
 
--- ====================== DAMAGE LOGGER ======================
-function ToggleDamageLogger(state)
-    pcall(function()
-        if damageLogConnection then
-            damageLogConnection:Disconnect()
-            damageLogConnection = nil
+-- ====================== UI BUILD ======================
+TargetPoolPara = TargetingSection:Paragraph({
+    Title = "Target Pool",
+    Desc  = "No targets found",
+    Image = "users",
+    ImageSize = 22,
+})
+
+StatsPara = APTab:Paragraph({
+    Title = "Statistics",
+    Desc  = "Attempts: 0 | Success: 0 | Perfect: 0 | Streak: 0",
+    Image = "activity",
+    ImageSize = 22,
+})
+
+do
+    local folders = GetAllFoldersInWorkspace()
+    local defaultFolder
+    local commonNames = {"Players", "Live", "NPCs", "Mobs", "Enemies", "Characters", "Entities"}
+    for _, name in ipairs(commonNames) do
+        if table.find(folders, name) then
+            defaultFolder = name
+            break
         end
-    end)
-    if not state then
-        previousHealth = nil
-        lastCharacter = nil
-        return
+    end
+    if not defaultFolder then defaultFolder = folders[1] or "" end
+    S.SelectedFolder = defaultFolder
+
+    FolderDropdown = TargetingSection:Dropdown({
+        Title = "Live Folder",
+        Desc  = "Folder that contains the target characters.",
+        Values = folders,
+        Multi  = false,
+        Value  = defaultFolder,
+        Callback = function(v)
+            local sel = (type(v) == "table" and v[1]) or v
+            S.SelectedFolder = sel
+            UpdateTargetPoolSection()
+        end,
+    })
+
+    TargetingSection:Slider({
+        Title = "Max Cycle Range",
+        Desc  = "Studs -- only targets within this range will be considered.",
+        Value = { Min = 1, Max = 50, Default = MaxCycleRange },
+        Step  = 1,
+        Callback = function(v)
+            MaxCycleRange = v
+            Config:Set("AP_MaxCycleRange", v); Config:Save()
+        end,
+    })
+
+    TargetingSection:Toggle({
+        Title    = "Include Local Character",
+        Desc     = "Add your own character to the target pool.",
+        Value    = S.IncludeLocalCharacter,
+        Callback = function(v)
+            S.IncludeLocalCharacter = v
+            Config:Set("AP_IncludeLocalCharacter", v); Config:Save()
+            UpdateTargetPoolSection()
+        end,
+    })
+
+    TargetingSection:Toggle({
+        Title    = "Auto Target Nearest",
+        Desc     = "Always target the closest enemy.",
+        Value    = S.AutoTargetNearest,
+        Callback = function(v)
+            S.AutoTargetNearest = v
+            Config:Set("AP_AutoTargetNearest", v); Config:Save()
+        end,
+    })
+
+    TargetingSection:Toggle({
+        Title    = "Multiple Targets",
+        Desc     = "Target up to 3 nearest enemies at once.",
+        Value    = S.MultiTarget,
+        Callback = function(v)
+            S.MultiTarget = v
+            Config:Set("AP_MultiTarget", v); Config:Save()
+        end,
+    })
+
+    TargetingSection:Keybind({
+        Title    = "Cycle Target Key",
+        Desc     = "Press to cycle through the target list.",
+        Value    = S.CycleKeybind,
+        Callback = function(v)
+            S.CycleKeybind = v
+            Config:Set("AP_CycleKeybind", v); Config:Save()
+        end,
+    })
+end
+
+-- COMBAT
+CombatSection:Toggle({
+    Title    = "Auto Parry",
+    Desc     = "Auto block enemy attacks at the perfect time.",
+    Value    = S.AutoParry,
+    Callback = function(v)
+        S.AutoParry = v
+        Config:Set("AP_AutoParry", v); Config:Save()
+        WindUI:Notify({ Title = "Auto Parry", Content = v and "ENABLED" or "Disabled", Duration = 2, Icon = v and "zap" or "shield-off" })
+    end,
+})
+
+CombatSection:Toggle({
+    Title    = "Auto Dodge",
+    Desc     = "Dodge heavy / M2 attacks instead of blocking.",
+    Value    = S.AutoDodge,
+    Callback = function(v)
+        S.AutoDodge = v
+        Config:Set("AP_AutoDodge", v); Config:Save()
+    end,
+})
+
+CombatSection:Toggle({
+    Title    = "Auto Block",
+    Desc     = "Always hold block when no parry is active.",
+    Value    = S.AutoBlock,
+    Callback = function(v)
+        S.AutoBlock = v
+        Config:Set("AP_AutoBlock", v); Config:Save()
+    end,
+})
+
+CombatSection:Toggle({
+    Title    = "Target facing you",
+    Desc     = "Only parry when the enemy is looking at you.",
+    Value    = S.TargetFacingYou,
+    Callback = function(v)
+        S.TargetFacingYou = v
+        Config:Set("AP_TargetFacingYou", v); Config:Save()
+    end,
+})
+
+CombatSection:Toggle({
+    Title    = "You facing target",
+    Desc     = "Only parry when you are looking at the enemy.",
+    Value    = S.YouFacingTarget,
+    Callback = function(v)
+        S.YouFacingTarget = v
+        Config:Set("AP_YouFacingTarget", v); Config:Save()
+    end,
+})
+
+CombatSection:Slider({
+    Title    = "Auto Parry Range",
+    Desc     = "Studs -- max distance to trigger parries.",
+    Value    = { Min = 7, Max = 80, Default = AutoParryRange },
+    Step     = 1,
+    Callback = function(v)
+        AutoParryRange = v
+        Config:Set("AP_AutoParryRange", v); Config:Save()
+    end,
+})
+
+CombatSection:Slider({
+    Title    = "Default Parry Time",
+    Desc     = "Seconds into the animation where the parry window opens.",
+    Value    = { Min = 0, Max = 1, Default = DefaultParryTime },
+    Step     = 0.01,
+    Callback = function(v)
+        DefaultParryTime = v
+        Config:Set("AP_DefaultParryTime", v); Config:Save()
+    end,
+})
+
+CombatSection:Slider({
+    Title    = "Default Parry Window",
+    Desc     = "Window length (seconds) around parry time.",
+    Value    = { Min = 0, Max = 1, Default = ParryWindow },
+    Step     = 0.01,
+    Callback = function(v)
+        ParryWindow = v
+        Config:Set("AP_ParryWindow", v); Config:Save()
+    end,
+})
+
+CombatSection:Slider({
+    Title    = "Default Release Time",
+    Desc     = "How long to hold the block after a parry trigger.",
+    Value    = { Min = 0, Max = 1, Default = ReleaseTime },
+    Step     = 0.01,
+    Callback = function(v)
+        ReleaseTime = v
+        Config:Set("AP_ReleaseTime", v); Config:Save()
+    end,
+})
+
+-- ADVANCED (GOD MODE)
+AdvancedSection:Toggle({
+    Title    = "Predictive Parry",
+    Desc     = "Predict attacks before reaching the parry frame (about 20ms faster)",
+    Value    = S.PredictiveParry,
+    Callback = function(v)
+        S.PredictiveParry = v
+        Config:Set("AP_PredictiveParry", v); Config:Save()
+    end,
+})
+
+AdvancedSection:Toggle({
+    Title    = "Perfect Only",
+    Desc     = "Parry Only the frame that's closest to perfect (≤30ms)",
+    Value    = S.PerfectOnly,
+    Callback = function(v)
+        S.PerfectOnly = v
+        Config:Set("AP_PerfectOnly", v); Config:Save()
+    end,
+})
+
+AdvancedSection:Slider({
+    Title    = "Perfect Threshold (ms)",
+    Desc     = "Strictness value of Perfect (ms)",
+    Value    = { Min = 5, Max = 100, Default = PerfectThreshold * 1000 },
+    Step     = 1,
+    Callback = function(v)
+        PerfectThreshold = v / 1000
+        Config:Set("AP_PerfectThreshold", PerfectThreshold); Config:Save()
+    end,
+})
+
+AdvancedSection:Toggle({
+    Title    = "Smart Cooldown",
+    Desc     = "Reduce release time when parry succeeds consecutively",
+    Value    = S.SmartCooldown,
+    Callback = function(v)
+        S.SmartCooldown = v
+        Config:Set("AP_SmartCooldown", v); Config:Save()
+    end,
+})
+
+AdvancedSection:Toggle({
+    Title    = "Debug Mode",
+    Desc     = "Show console log for debug",
+    Value    = S.DebugMode,
+    Callback = function(v)
+        S.DebugMode = v
+        Config:Set("AP_DebugMode", v); Config:Save()
+    end,
+})
+
+-- ORB
+local OrbParryToggle = OrbSection:Toggle({
+    Title    = "Auto Orb Parry",
+    Desc     = "Auto-parry orbs (Strongest)",
+    Value    = S.OrbParry,
+    Callback = function(v)
+        S.OrbParry = v
+        Config:Set("AP_OrbParry", v); Config:Save()
+    end,
+})
+if game.PlaceId == 8668476218 or game.PlaceId == 134572803901609 then
+    pcall(function() OrbParryToggle:Set(true) end)
+    S.OrbParry = true
+    Config:Set("AP_OrbParry", true); Config:Save()
+end
+
+-- LOGGING
+LoggedPara = LoggingSection:Paragraph({
+    Title = "Logged Animations",
+    Desc  = "Logged Ids: 0",
+    Image = "list",
+    ImageSize = 22,
+})
+
+IgnoredPara = LoggingSection:Paragraph({
+    Title = "Ignored Animations",
+    Desc  = "Ignored Ids: " .. #IgnoreIds,
+    Image = "ban",
+    ImageSize = 22,
+})
+
+LoggingSection:Toggle({
+    Title    = "Damage Logs",
+    Desc     = "Print damage taken in console.",
+    Value    = S.DamageLogs,
+    Callback = function(v)
+        S.DamageLogs = v
+        Config:Set("AP_DamageLogs", v); Config:Save()
+        if ToggleDamageLogger then pcall(ToggleDamageLogger, v) end
+    end,
+})
+
+LoggingSection:Button({
+    Title    = "Copy to clipboard",
+    Desc     = "Copies all logged animation IDs.",
+    Callback = SetClipboardLoggedCache,
+})
+
+LoggingSection:Button({
+    Title    = "Clear animation cache",
+    Desc     = "Clears all logged animation IDs.",
+    Callback = function()
+        AnimationsLoggedCache = {}
+        AnimationsLoggedOrder = {}
+        if LoggedPara then LoggedPara:SetDesc("Logged Ids: 0") end
+        WindUI:Notify({ Title = "Cache", Content = "Cleared.", Duration = 2, Icon = "trash-2" })
+    end,
+})
+
+-- STYLE CONFIG
+do
+    local StylesWithParryTime = {}
+    for assetId, info in pairs(GameConfig) do
+        if info.DisplayName == "M2" then continue end
+        if not info.Style or not info.M1Time then continue end
+        if not StylesWithParryTime[info.Style] then
+            StylesWithParryTime[info.Style] = { DefaultTime = info.M1Time, Animations = {} }
+        end
+        table.insert(StylesWithParryTime[info.Style].Animations, info)
     end
 
+    for styleName, data in pairs(StylesWithParryTime) do
+        local defaultTime = Config:Get("Style_ParryTime_" .. styleName, data.DefaultTime)
+        for _, anim in ipairs(data.Animations) do
+            anim.ParryTime = defaultTime
+        end
+        StyleSection:Slider({
+            Title    = "Parry Time - " .. styleName,
+            Desc     = "Override parry time for all " .. styleName .. " M1s.",
+            Value    = { Min = 0, Max = 1, Default = defaultTime },
+            Step     = 0.01,
+            Callback = function(v)
+                for _, anim in ipairs(data.Animations) do
+                    anim.ParryTime = v
+                end
+                Config:Set("Style_ParryTime_" .. styleName, v); Config:Save()
+            end,
+        })
+    end
+end
+
+-- ====================== UPDATE FUNCTIONS ======================
+local function UpdateTargetPoolSection()
+    pcall(function()
+        local characters = GetAllCharactersInFolder()
+        local names = {}
+        for _, c in ipairs(characters) do
+            table.insert(names, c.Name)
+        end
+        local poolString = #names > 0 and table.concat(names, ", ") or "No targets found"
+        if TargetPoolPara then TargetPoolPara:SetDesc("Target Pool: " .. poolString) end
+    end)
+end
+
+local lastStatsUpdate = 0
+local function UpdateStatsUI()
+    local now = os.clock()
+    if (now - lastStatsUpdate) < 0.2 then return end
+    lastStatsUpdate = now
+    if StatsPara then
+        local acc = Engine.Stats.TotalAttempts > 0 
+            and (Engine.Stats.TotalSuccess / Engine.Stats.TotalAttempts * 100) or 0
+        StatsPara:SetDesc(string.format(
+            "Attempts: %d | Success: %d (%.0f%%) | Perfect: %d | Streak: %d | Ping: %dms",
+            Engine.Stats.TotalAttempts,
+            Engine.Stats.TotalSuccess,
+            acc,
+            Engine.Stats.TotalPerfect,
+            Engine.Stats.ConsecSuccess,
+            Ping.CachedPing * 1000
+        ))
+    end
+end
+
+-- ====================== INFORMATION TAB ======================
+do
+    local Info = InfoTab
+    Info:Section({ Title = "DYHUB", TextXAlignment = "Center", TextSize = 17 })
+    Info:Divider()
+    Info:Paragraph({
+        Title = "Update: 07/18/2026 | CL: " .. ver,
+        Desc  = [[- Triple-Layer Parry Detection
+- Adaptive Ping Compensation (rolling average)
+- Predictive Parry (~20ms faster)
+- Anti-Lag Buffer (jitter compensation)
+- Perfect Frame Detection
+- Smart Cooldown (streak-based)
+- Priority Queue (M2 > close > perfect)
+- Jitter Filter (median of 5 samples)
+- Input Optimizer (zero wasted input)
+- Live Statistics Display
+- Auto-cleanup stale registry]],
+    })
+end
+
+-- ====================== SETTINGS TAB ======================
+do
+    local Settings = SettingsTab
+    Settings:Section({Title = "Save Config", Icon = "save"})
+
+    Settings:Button({
+        Title    = "Save Config (NOW)",
+        Callback = function()
+            Config:Save()
+            WindUI:Notify({Title = "Config Saved", Content = "Saved!", Duration = 2, Icon = "save"})
+        end
+    })
+
+    local AutoSaveEnabled = Config:Get("AutoSaveEnabled", true)
+    local AutoSaveDelay   = Config:Get("AutoSaveDelay",   15)
+
+    Settings:Toggle({
+        Title    = "Auto Save Config",
+        Value    = AutoSaveEnabled,
+        Callback = function(state)
+            AutoSaveEnabled = state
+            Config:Set("AutoSaveEnabled", state); Config:Save()
+            if state then Config:AutoSave(AutoSaveDelay) else Config:AutoSave(0) end
+        end
+    })
+
+    Settings:Input({
+        Title       = "Delay Save Config",
+        Value       = tostring(AutoSaveDelay),
+        Callback    = function(text)
+            local num = tonumber(text)
+            if num and num >= 1 then
+                AutoSaveDelay = num
+                Config:Set("AutoSaveDelay", num); Config:Save()
+                if AutoSaveEnabled then Config:AutoSave(num) end
+            end
+        end
+    })
+
+    Settings:Section({Title = "Server Status", Icon = "server"})
+
+    Settings:Button({
+        Title    = "Serverhop",
+        Callback = function()
+            local servers = {}
+            local success, result = pcall(function()
+                return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"))
+            end)
+            if success and result and result.data then
+                for _, server in ipairs(result.data) do
+                    if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                        table.insert(servers, server.id)
+                    end
+                end
+            end
+            if #servers > 0 then
+                task.wait(1)
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], LocalPlayer)
+            end
+        end
+    })
+
+    Settings:Button({
+        Title    = "Rejoin",
+        Callback = function()
+            task.wait(1)
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        end
+    })
+end
+
+-- ====================== ORB LISTENER ======================
+local PARRY_DISTANCE = 15
+local lastOrbParryAt = 0
+
+local function GetLocalHRP()
+    local char = LocalPlayer.Character
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local orbConnection
+local function ListenForOrbs()
+    pcall(function()
+        if orbConnection then orbConnection:Disconnect() end
+    end)
+    orbConnection = RunService.RenderStepped:Connect(function()
+        if not alive() then pcall(function() orbConnection:Disconnect() end) return end
+        if not S.OrbParry then return end
+        local hrp = GetLocalHRP()
+        if not hrp or not hrp.Parent then return end
+        local myPos = hrp.Position
+        local thrown = Workspace:FindFirstChild("Thrown")
+        if not thrown then return end
+        for _, orb in ipairs(thrown:GetChildren()) do
+            if orb.Name == "ArdourBall2" or orb.Name == "ArdourBall" then
+                if (myPos - orb.Position).Magnitude <= PARRY_DISTANCE
+                    and (tick() - lastOrbParryAt >= 0.1) then
+                    lastOrbParryAt = tick()
+                    Input:Press("F")
+                    task.delay(0.05, function() Input:Release("F") end)
+                    break
+                end
+            end
+        end
+    end)
+end
+
+if game.PlaceId == 8668476218 or game.PlaceId == 134572803901609 then
+    ListenForOrbs()
+end
+
+-- ====================== DAMAGE LOGGER ======================
+local lastCharacter, previousHealth
+local damageLogConnection
+
+function ToggleDamageLogger(state)
+    pcall(function()
+        if damageLogConnection then damageLogConnection:Disconnect(); damageLogConnection = nil end
+    end)
+    if not state then previousHealth = nil; lastCharacter = nil; return end
     damageLogConnection = RunService.Heartbeat:Connect(function()
         if not alive() then return end
         local char = LocalPlayer.Character
         local hum = char and char:FindFirstChild("Humanoid")
         if not hum then return end
-
         if not lastCharacter or char ~= lastCharacter then
             lastCharacter = char
             previousHealth = hum.Health
@@ -1387,12 +1569,8 @@ function ToggleDamageLogger(state)
                         local assetId = tostring(anim.AnimationId)
                         local poolData = GameConfig[assetId]
                         warn(string.format("[HIT] %d DMG | %s (%s) %s | %.3f",
-                            dmg,
-                            poolData and poolData.DisplayName or anim.Name or "Unknown",
-                            assetId,
-                            poolData and poolData.Style or "",
-                            anim.TimePosition or 0
-                        ))
+                            dmg, poolData and poolData.DisplayName or anim.Name or "?",
+                            assetId, poolData and poolData.Style or "", anim.TimePosition or 0))
                     end
                 end
             end
@@ -1401,7 +1579,7 @@ function ToggleDamageLogger(state)
     end)
 end
 
--- ====================== INPUT (FIXED) ======================
+-- ====================== INPUT ======================
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if not alive() then return end
@@ -1412,38 +1590,40 @@ end)
 
 -- ====================== ANTI-AFK ======================
 local idleConn = LocalPlayer.Idled:Connect(function()
-    local vu = game:GetService("VirtualUser")
-    vu:CaptureController()
-    vu:ClickButton2(Vector2.new())
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
 end)
 
--- ====================== LOOPS (FIXED) ======================
+-- ====================== MAIN LOOPS ======================
 local COMBAT_TICK    = 0
 local TARGET_TICK    = 0.5
 local lastAnimCheck  = 0
 local lastCycleCheck = 0
 local lastBlockTick  = 0
+local blockHoldUntil = 0
 
-RunService.Heartbeat:Connect(function()
+RunService.Heartbeat:Connect(function(dt)
     if not alive() then return end
 
-    pcall(ParryTask)
+    pcall(function() Engine:Tick() end)
     pcall(EvaluateParryTriggers)
     pcall(schedulerUpdate)
+    pcall(UpdateStatsUI)
 
     local now = os.clock()
 
-    -- Auto Block: hold F ตลอดเวลาที่ยังไม่ parry (ช่วยให้ parry ติดบ่อยขึ้น)
-    if S.AutoBlock and S.AutoParry and not Stunned and not KeyHeld then
-        if (now - lastBlockTick) >= 0.1 then
+    -- Smart AutoBlock (predictive, pulse-based)
+    if S.AutoBlock and S.AutoParry and not Engine.Stunned and not Engine.KeyHeld then
+        if (now - lastBlockTick) >= 0.05 then
             lastBlockTick = now
-            pcall(function() pressKey(ParryKey) end)
-            task.delay(0.08, function()
-                if not KeyHeld and not Stunned then
-                    pcall(function() releaseKey(ParryKey) end)
-                end
-            end)
+            pcall(function() Input:Press("F") end)
+            blockHoldUntil = now + 0.04 -- hold 40ms
         end
+    end
+    
+    if blockHoldUntil > 0 and now >= blockHoldUntil and not Engine.KeyHeld and not Engine.Stunned then
+        blockHoldUntil = 0
+        pcall(function() Input:Release("F") end)
     end
 
     if (now - lastAnimCheck >= COMBAT_TICK) then
@@ -1479,9 +1659,8 @@ do
         pcall(function() if orbConnection then orbConnection:Disconnect() end end)
         pcall(function() if damageLogConnection then damageLogConnection:Disconnect() end end)
         pcall(ClearAllEspTrackers)
-        pcall(function() releaseKey(ParryKey) end)
+        pcall(function() Input:Cleanup() end)
     end
-
     if WindUI and WindUI.OnExit then
         local prev = WindUI.OnExit
         WindUI.OnExit = function()
@@ -1491,5 +1670,4 @@ do
     end
 end
 
-print("[DYHUB] " .. version .. " | " .. ver .. " loaded successfully!")
-print("[DYHUB] Config active | Auto saving every " .. tostring(Config:Get("AutoSaveDelay", 15)) .. "s")
+print("[DYHUB] " .. version .. " | " .. ver .. " loaded!")
