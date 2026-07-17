@@ -2,7 +2,7 @@
 
 -- =========================
 local version = "BETA"
-local ver     = "v021.19"
+local ver     = "v021.22"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -520,58 +520,100 @@ do
 		end
 	end)
 
+	-- ====================== VEHICLE PHYSICS MODIFIER (PC + MOBILE) ======================
 	task.spawn(function()
 		while true do
-			task.wait(0.1)
+			task.wait()  -- ทำงานทุกเฟรม
 			local myVeh = GetMyVehicle()
-			if myVeh then
-				local seat = myVeh:FindFirstChild("VehicleSeat")
-				local driverObj = myVeh:FindFirstChild("Driver")
-				if seat and driverObj and driverObj.Value == LocalPlayer then
-					if State.PhysicsEnabled then
-						if seat.MaxSpeed < 9000 then seat.MaxSpeed = 9999 end
-						local velocity = seat.AssemblyLinearVelocity
+			if not myVeh then continue end
 
-						-- COMBINED INPUT SYSTEM (PC + MOBILE)
-						local throttle = seat.ThrottleFloat
-						local steering = 0
+			local seat = myVeh:FindFirstChild("VehicleSeat")
+			local driverObj = myVeh:FindFirstChild("Driver")
+			if not seat or not driverObj or driverObj.Value ~= LocalPlayer then continue end
+			if not State.PhysicsEnabled then continue end
 
-						-- Check Mobile Overrides
-						if MobileInput.Throttle ~= 0 then
-							throttle = MobileInput.Throttle
-						end
+			-- ปลดล็อก MaxSpeed ของรถ
+			if seat.MaxSpeed < 9000 then seat.MaxSpeed = 9999 end
 
-						local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-						if hum and math.abs(throttle) == 0 then
-							throttle = hum.MoveDirection:Dot(seat.CFrame.LookVector)
-						end
+			local velocity   = seat.AssemblyLinearVelocity
+			local lookVector  = seat.CFrame.LookVector
+			local rightVector = seat.CFrame.RightVector
 
-						-- Steer logic can be added here if the script intended to modify steering velocity
+			-- ============= INPUT (PC + MOBILE) =============
+			local throttle = seat.ThrottleFloat   -- -1 ถึง 1 (จาก W/S)
+			local steering = seat.Steer            -- -1, 0, 1 (จาก A/D)
 
-						local speed = velocity.Magnitude
+			-- Override ด้วยปุ่มมือถือ
+			if MobileInput.Throttle ~= 0 then
+				throttle = MobileInput.Throttle
+			end
+			if MobileInput.Steer ~= 0 then
+				steering = MobileInput.Steer
+			end
 
-						if State.AccelPower > 0 and math.abs(throttle) > 0 then
-							local isMovingForward = seat.CFrame.LookVector:Dot(velocity) > 0
-							if throttle > 0 then
-								if isMovingForward or speed < 3 then
-									seat.AssemblyLinearVelocity = velocity + (seat.CFrame.LookVector * (State.AccelPower / 5))
-								else
-									seat.AssemblyLinearVelocity = velocity * (1 - (State.BrakeForce / 200))
-								end
-							elseif throttle < 0 then
-								if not isMovingForward or speed < 3 then
-									seat.AssemblyLinearVelocity = velocity + (-seat.CFrame.LookVector * (State.AccelPower / 5))
-								else
-									seat.AssemblyLinearVelocity = velocity * (1 - (State.BrakeForce / 200))
-								end
-							end
-						end
+			-- Fallback: ใช้ทิศทางตัวละคร ถ้ารถไม่รับ input
+			if math.abs(throttle) < 0.05 then
+				local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+				if hum and hum.MoveDirection.Magnitude > 0.1 then
+					local dot = hum.MoveDirection:Dot(lookVector)
+					if math.abs(dot) > 0.1 then
+						throttle = dot
 					end
 				end
 			end
+
+			-- ============= แยกทิศทาง velocity =============
+			local forwardVel  = velocity:Dot(lookVector)   -- ความเร็วไปข้างหน้า/ถอยหลัง
+			local rightVel    = velocity:Dot(rightVector)  -- ความเร็วด้านข้าง
+			local verticalVel = velocity.Y                 -- แกน Y (กระเด้ง/ตก)
+
+			-- ============= เร่ง/เบรค =============
+			if math.abs(throttle) > 0.05 then
+				if throttle > 0 then
+					-- กด W
+					if forwardVel < -0.1 then
+						-- กำลังถอยหลังอยู่ → เบรค
+						forwardVel = forwardVel + (State.BrakeForce / 4)
+					else
+						-- หยุด/ไปข้างหน้า → เร่ง
+						forwardVel = forwardVel + (State.AccelPower / 5)
+					end
+				else
+					-- กด S
+					if forwardVel > 0.1 then
+						-- กำลังไปข้างหน้า → เบรค
+						forwardVel = forwardVel - (State.BrakeForce / 4)
+					else
+						-- หยุด/ถอยหลัง → ถอย
+						forwardVel = forwardVel - (State.AccelPower / 5)
+					end
+				end
+			end
+
+			-- ============= จำกัดความเร็วสูงสุด =============
+			local maxSpeed = State.AccelPower * 1.2
+			if maxSpeed < 100 then maxSpeed = 100 end
+			if forwardVel >  maxSpeed then forwardVel =  maxSpeed end
+			if forwardVel < -maxSpeed then forwardVel = -maxSpeed end
+
+			-- ============= เลี้ยว =============
+			if math.abs(steering) > 0.05 and velocity.Magnitude > 1 then
+				local steerPower = math.min(State.AccelPower / 100, 5)
+				rightVel = rightVel + (steering * steerPower)
+			end
+
+			-- แรงเสียดทานด้านข้าง กันรถลื่นไถล
+			rightVel = rightVel * 0.92
+
+			-- ============= รวม velocity ใหม่ =============
+			local newVelocity =
+				(lookVector  * forwardVel) +
+				(rightVector * rightVel)   +
+				Vector3.new(0, verticalVel, 0)
+
+			seat.AssemblyLinearVelocity = newVelocity
 		end
 	end)
-end
 
 -- =========================================================================
 --  ESP TAB
@@ -1626,13 +1668,13 @@ do
 	InfoTab:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 	pcall(function() InfoTab:Divder() end)
 	InfoTab:Paragraph({
-		Title = "Update: 07/17/2026 | CL: " .. ver,
+		Title = "Update: 07/18/2026 | CL: " .. ver,
 		Desc  = [[- [Fixed] Vehicle Physics Modifier not working
-		- [Fixed] Auto Delivery lag optimization
-		- [Fixed] ESP ColorPicker not showing
-		- [Fixed] State variable sync with Config
-		- [Improved] Physics loop using RenderStepped
-		- [Improved] Auto Delivery no platform creation spam]],
+	- [Fixed] Auto Delivery lag optimization
+	- [Fixed] ESP ColorPicker not showing
+	- [Fixed] State variable sync with Config
+	- [Improved] Physics loop using RenderStepped
+	- [Improved] Auto Delivery no platform creation spam]],
 	})
 	pcall(function() InfoTab:Divder() end)
 
