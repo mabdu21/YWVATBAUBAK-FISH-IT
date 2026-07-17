@@ -1,7 +1,6 @@
--- Script 2
 -- =========================
 local version = "BETA"
-local ver     = "v021.26"
+local ver     = "v021.28"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -435,7 +434,7 @@ do
 	MainTab:Slider({
 		Title    = "Acceleration Power",
 		Desc     = "Higher value means stronger boost when pressing forward or reverse.",
-		Value    = { Min = 0, Max = 5000, Default = State.AccelPower },
+		Value    = { Min = 0, Max = 9999, Default = State.AccelPower },
 		Step     = 1,
 		Callback = function(v)
 			State.AccelPower = v
@@ -446,7 +445,7 @@ do
 	MainTab:Slider({
 		Title    = "Brake Force",
 		Desc     = "Higher value means stronger braking when counter-throttling.",
-		Value    = { Min = 0, Max = 1500, Default = State.BrakeForce },
+		Value    = { Min = 0, Max = 150, Default = State.BrakeForce },
 		Step     = 1,
 		Callback = function(v)
 			State.BrakeForce = v
@@ -560,8 +559,8 @@ do
 
 			-- ========== FIX 1: ใช้ horizontal look vector ==========
 			-- ไม่แตะ Y เพื่อป้องกันลอยฟ้า/จมดิน
-			local lookH = Vector3.new(seat.CFrame.LookVector.X, 1.5, seat.CFrame.LookVector.Z)
-			if lookH.Magnitude > 0.001 then
+			local lookH = Vector3.new(seat.CFrame.LookVector.X, 2.5, seat.CFrame.LookVector.Z)
+			if lookH.Magnitude > 0.005 then
 				lookH = lookH.Unit
 			else
 				lookH = Vector3.new(0, 0, -1)
@@ -569,10 +568,10 @@ do
 
 			-- ========== FIX 2: ตรวจสถานะรถ (ตะแคง/คว่ำ) ==========
 			-- ถ้ารถตะแคงมากๆ ให้ reset Y velocity ส่วนเกิน
-			local upDot = seat.CFrame.UpVector:Dot(Vector3.new(0, 0.5, 0))
+			local upDot = seat.CFrame.UpVector:Dot(Vector3.new(0, 100, 0))
 			if upDot < 0.7 then
 				-- รถตะแคง/คว่ำ → ลด Y velocity ที่อาจทำให้ลอย
-				if math.abs(velocity.Y) > 50 then
+				if math.abs(velocity.Y) > 200 then
 					velocity = Vector3.new(velocity.X, velocity.Y * 0.5, velocity.Z)
 				end
 			end
@@ -689,7 +688,7 @@ do
 
 			-- ========== FIX 6: Max speed cap (แก้ 417 → 600) ==========
 			-- ใช้ smoothing เพื่อไม่ให้เกิด oscillation
-			local MAX_ALLOWED_SPEED = 2000
+			local MAX_ALLOWED_SPEED = 9999
 			local finalH = Vector3.new(newVel.X, 0, newVel.Z)
 			if finalH.Magnitude > MAX_ALLOWED_SPEED then
 				finalH = finalH.Unit * MAX_ALLOWED_SPEED
