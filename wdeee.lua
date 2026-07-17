@@ -2,7 +2,7 @@
 
 -- =========================
 local version = "BETA"
-local ver     = "v021.22"
+local ver     = "v021.25"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -1208,7 +1208,7 @@ do
 	end
 
 	local function removeAllPlatforms()
-		for _, obj in ipairs(Workspace:GetChildren()) own do
+		for _, obj in ipairs(Workspace:GetChildren()) do
 			if obj.Name == "DeltaCorePlatform" then pcall(function() obj:Destroy() end) end
 		end
 	end
