@@ -1700,4 +1700,4 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 end)
 
 print("[DYHUB] " .. version .. " | " .. ver .. " | loaded successfully.")
-print("[DYHUB] Auto saving every " .. tostring(settings.AutoSaveDelay) .. "s")
+print("[DYHUB] Auto saving every 15s")
