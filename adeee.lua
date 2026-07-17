@@ -2,7 +2,7 @@
 
 -- =========================
 local version = "BETA"
-local ver     = "v021.25"
+local ver     = "v021.18"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -1340,7 +1340,7 @@ do
 	end
 
 	local function findDeliveryAnchor()
-		return Workspace:FindFirstChild(DELIVERY_ANCH laNchor_NAME, true)
+		return Workspace:FindFirstChild(DELIVERY_ANCHOR_NAME, true)
 	end
 
 	local function doDeliveryTeleport()
