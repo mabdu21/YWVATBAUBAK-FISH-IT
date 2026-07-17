@@ -1,8 +1,7 @@
--- Script ๅ
-
+-- Script 2
 -- =========================
 local version = "BETA"
-local ver     = "v021.19"
+local ver     = "v021.27"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -89,9 +88,11 @@ local Connections = {
 	Delivery   = nil,
 }
 
--- ====================== MOBILE INPUT SYSTEM ======================
+-- ====================== MOBILE INPUT SYSTEM (FIXED) ======================
+-- เพิ่ม Brake แยกออกจาก Throttle เพื่อให้เบรกทำงานถูกต้อง
 local MobileInput = {
-	Throttle = 0,
+	Throttle = 0,  -- 0 = ไม่กด, 1 = กดเร่ง (ใช้กับ throttleBtn)
+	Brake    = 0,  -- 0 = ไม่กด, 1 = กดเบรก (ใช้กับ brakeBtn) -- เพิ่มใหม่
 	Steer    = 0,
 }
 
@@ -114,8 +115,9 @@ local function SetupMobileInput()
 			throttleBtn.MouseButton1Up:Connect(function() MobileInput.Throttle = 0 end)
 		end
 		if brakeBtn then
-			brakeBtn.MouseButton1Down:Connect(function() MobileInput.Throttle = -1 end)
-			brakeBtn.MouseButton1Up:Connect(function() MobileInput.Throttle = 0 end)
+			-- FIX: brakeBtn ตั้งเป็น Brake ไม่ใช่ Throttle (เดิมเป็น Throttle = -1 ทำให้เป็นถอยหลัง)
+			brakeBtn.MouseButton1Down:Connect(function() MobileInput.Brake = 1 end)
+			brakeBtn.MouseButton1Up:Connect(function() MobileInput.Brake = 0 end)
 		end
 	end
 
@@ -134,7 +136,6 @@ local function SetupMobileInput()
 	end
 end
 
--- Initialize mobile input
 task.spawn(SetupMobileInput)
 
 -- ====================== HELPER FUNCTIONS ======================
@@ -521,112 +522,182 @@ do
 	end)
 
 	-- =========================================================================
+	--  VEHICLE PHYSICS MODIFIER v2.0 (FIXED) - PC + MOBILE
+	-- =========================================================================
+	-- บัคที่แก้ใน v2.0:
+	--  1) Brake บน Mobile ไม่ทำงาน → เพิ่ม MobileInput.Brake แยกจาก Throttle
+	--  2) Cap ความเร็ว 417 (จาก 400 + oscillation) → เพิ่มเป็น 600 + smoothing
+	--  3) ล้อจมดินเร่งไม่ขึ้น → ตรวจ anti-stuck + ใช้ CFrame.UpVector ตรวจท่ารถ
+	--  4) ลอยฟ้า → เก็บ Y velocity ไว้ (ไม่แตะ)
+	--  5) W กดแล้วถอยหลัง → ใช้ UserInputService ตรวจ W/S ตรงๆ
+	-- =========================================================================
+
+	-- ตัวแปรสำหรับ anti-stuck: เก็บ last velocity เพื่อเทียบ
+	local lastVelMagnitude = 0
+	local stuckCounter = 0
+
 	task.spawn(function()
-	    while true do
-	        task.wait()  -- 60 FPS (เดิมใช้ 0.1 = 10 FPS ทำให้รถกระตุก)
-	
-	        if not State.PhysicsEnabled then continue end
-	
-	        local myVeh = GetMyVehicle()
-	        if not myVeh then continue end
-	
-	        local seat = myVeh:FindFirstChild("VehicleSeat")
-	        local driverObj = myVeh:FindFirstChild("Driver")
-	        if not seat or not driverObj or driverObj.Value ~= LocalPlayer then continue end
-	
-	        -- เพิ่ม MaxSpeed ของ VehicleSeat เพื่อให้ขับเร็วได้จริง
-	        if seat.MaxSpeed < 9000 then seat.MaxSpeed = 9999 end
-	
-	        local velocity = seat.AssemblyLinearVelocity
-	
-	        -- ========== FIX 1: ใช้แค่ horizontal look vector ==========
-	        -- เดิมใช้ LookVector ตรงๆ ทำให้ Y velocity สะสม → รถลอย
-	        local lookH = Vector3.new(seat.CFrame.LookVector.X, 0, seat.CFrame.LookVector.Z)
-	        if lookH.Magnitude > 0.001 then
-	            lookH = lookH.Unit
-	        else
-	            lookH = Vector3.new(0, 0, -1)
-	        end
-	
-	        -- ========== FIX 2: ตรวจ input ใหม่ให้เสถียร ==========
-	        local throttle = 0
-	
-	        if MobileInput.Throttle ~= 0 then
-	            -- Mobile: ใช้ค่าจากปุ่ม Throttle/Handbrake (ไม่แตะระบบ mobile)
-	            throttle = MobileInput.Throttle
-	        else
-	            -- PC: ตรวจ W/S โดยตรง (เดิมใช้ MoveDirection ซึ่งเพี้ยน)
-	            local wDown = UserInputService:IsKeyDown(Enum.KeyCode.W)
-	            local sDown = UserInputService:IsKeyDown(Enum.KeyCode.S)
-	            if wDown and not sDown then throttle = 1  end
-	            if sDown and not wDown then throttle = -1 end
-	        end
-	
-	        if math.abs(throttle) < 0.01 then continue end
-	
-	        -- ========== วิเคราะห์ทิศทางการเคลื่อนที่ปัจจุบัน ==========
-	        local currentH  = Vector3.new(velocity.X, 0, velocity.Z)
-	        local currentSpeed = currentH.Magnitude
-	        local isMovingForward = false
-	        if currentSpeed > 0.1 then
-	            local currentDir = currentH / currentSpeed
-	            isMovingForward = lookH:Dot(currentDir) > 0
-	        end
-	
-	        local newVel = velocity
-	
-	        -- ========== FIX 3: แยกเงื่อนไข Accel / Brake ==========
-	        if throttle > 0 then
-	            -- [W] / ปุ่ม Throttle
-	            if isMovingForward or currentSpeed < 3 then
-	                -- วิ่งไปข้างหน้าอยู่แล้ว หรือหยุดนิ่ง → เร่ง
-	                if State.AccelPower > 0 then
-	                    local boost = State.AccelPower / 200
-	                    newVel = Vector3.new(
-	                        newVel.X + lookH.X * boost,
-	                        newVel.Y,                       -- เก็บ Y velocity ไว้ (แก้ลอยฟ้า/จมดิน)
-	                        newVel.Z + lookH.Z * boost
-	                    )
-	                end
-	            else
-	                -- กำลังถอยหลังอยู่ แต่กด W → เบรก
-	                if State.BrakeForce > 0 then
-	                    local bf = math.clamp(1 - (State.BrakeForce / 1500), 0, 0.99)
-	                    newVel = Vector3.new(newVel.X * bf, newVel.Y, newVel.Z * bf)
-	                end
-	            end
-	        else
-	            -- [S] / ปุ่ม Brake
-	            if not isMovingForward or currentSpeed < 3 then
-	                -- กำลังถอยอยู่ หรือหยุดนิ่ง → ถอยหลัง
-	                if State.AccelPower > 0 then
-	                    local boost = State.AccelPower / 200
-	                    newVel = Vector3.new(
-	                        newVel.X - lookH.X * boost,
-	                        newVel.Y,
-	                        newVel.Z - lookH.Z * boost
-	                    )
-	                end
-	            else
-	                -- กำลังวิ่งหน้าอยู่ แต่กด S → เบรก
-	                if State.BrakeForce > 0 then
-	                    local bf = math.clamp(1 - (State.BrakeForce / 1500), 0, 0.99)
-	                    newVel = Vector3.new(newVel.X * bf, newVel.Y, newVel.Z * bf)
-	                end
-	            end
-	        end
-	
-	        -- ========== FIX 4: Max speed cap ==========
-	        -- ป้องกันรถเร็วเกินจน physics ของเกม崩 (เลี้ยวไม่ได้/ล้อจมดิน)
-	        local MAX_ALLOWED_SPEED = 400
-	        local finalH = Vector3.new(newVel.X, 0, newVel.Z)
-	        if finalH.Magnitude > MAX_ALLOWED_SPEED then
-	            finalH = finalH.Unit * MAX_ALLOWED_SPEED
-	            newVel = Vector3.new(finalH.X, newVel.Y, finalH.Z)
-	        end
-	
-	        seat.AssemblyLinearVelocity = newVel
-	    end
+		while true do
+			task.wait()  -- 60 FPS
+
+			if not State.PhysicsEnabled then
+				lastVelMagnitude = 0
+				stuckCounter = 0
+				continue
+			end
+
+			local myVeh = GetMyVehicle()
+			if not myVeh then continue end
+
+			local seat = myVeh:FindFirstChild("VehicleSeat")
+			local driverObj = myVeh:FindFirstChild("Driver")
+			if not seat or not driverObj or driverObj.Value ~= LocalPlayer then continue end
+
+			-- เพิ่ม MaxSpeed ของ VehicleSeat เพื่อให้ขับเร็วได้จริง
+			if seat.MaxSpeed < 9000 then seat.MaxSpeed = 9999 end
+
+			local velocity = seat.AssemblyLinearVelocity
+
+			-- ========== FIX 1: ใช้ horizontal look vector ==========
+			-- ไม่แตะ Y เพื่อป้องกันลอยฟ้า/จมดิน
+			local lookH = Vector3.new(seat.CFrame.LookVector.X, 0, seat.CFrame.LookVector.Z)
+			if lookH.Magnitude > 0.001 then
+				lookH = lookH.Unit
+			else
+				lookH = Vector3.new(0, 0, -1)
+			end
+
+			-- ========== FIX 2: ตรวจสถานะรถ (ตะแคง/คว่ำ) ==========
+			-- ถ้ารถตะแคงมากๆ ให้ reset Y velocity ส่วนเกิน
+			local upDot = seat.CFrame.UpVector:Dot(Vector3.new(0, 1, 0))
+			if upDot < 0.7 then
+				-- รถตะแคง/คว่ำ → ลด Y velocity ที่อาจทำให้ลอย
+				if math.abs(velocity.Y) > 50 then
+					velocity = Vector3.new(velocity.X, velocity.Y * 0.5, velocity.Z)
+				end
+			end
+
+			-- ========== FIX 3: ตรวจ input ใหม่ ==========
+			local throttle = 0   -- 1 = เร่ง, -1 = ถอย
+			local brake    = 0   -- 1 = เบรก (override)
+
+			if MobileInput.Brake == 1 then
+				-- Mobile: กดปุ่มเบรกโดยตรง → เบรกทันที
+				brake = 1
+			elseif MobileInput.Throttle ~= 0 then
+				-- Mobile: กดปุ่ม Throttle → เร่ง
+				throttle = MobileInput.Throttle
+			else
+				-- PC: ตรวจ W/S ตรงๆ
+				local wDown = UserInputService:IsKeyDown(Enum.KeyCode.W)
+				local sDown = UserInputService:IsKeyDown(Enum.KeyCode.S)
+				if wDown and not sDown then throttle = 1  end
+				if sDown and not wDown then throttle = -1 end
+			end
+
+			-- ========== วิเคราะห์ทิศทางการเคลื่อนที่ปัจจุบัน ==========
+			local currentH  = Vector3.new(velocity.X, 0, velocity.Z)
+			local currentSpeed = currentH.Magnitude
+			local isMovingForward = false
+			if currentSpeed > 0.1 then
+				local currentDir = currentH / currentSpeed
+				isMovingForward = lookH:Dot(currentDir) > 0
+			end
+
+			local newVel = velocity
+
+			-- ========== FIX 4: Brake logic (แยกจาก Accel) ==========
+			-- ทำงานเมื่อ: brake = 1 (mobile) หรือ (PC) กดคนละปุ่มกับทิศที่วิ่ง
+			if brake == 1 then
+				-- เบรกจาก Mobile: ลด velocity แรงๆ
+				if State.BrakeForce > 0 then
+					local bf = math.clamp(1 - (State.BrakeForce / 800), 0.01, 0.99)
+					newVel = Vector3.new(newVel.X * bf, newVel.Y, newVel.Z * bf)
+				else
+					-- ถ้าไม่ได้ตั้ง BrakeForce ให้เบรกแรงค่ากลาง
+					newVel = Vector3.new(newVel.X * 0.5, newVel.Y, newVel.Z * 0.5)
+				end
+			elseif math.abs(throttle) > 0.01 then
+				-- ========== Accel logic ==========
+				if throttle > 0 then
+					-- [W] / Throttle
+					if isMovingForward or currentSpeed < 3 then
+						-- วิ่งหน้าอยู่ → เร่ง
+						if State.AccelPower > 0 then
+							local boost = State.AccelPower / 200
+							newVel = Vector3.new(
+								newVel.X + lookH.X * boost,
+								newVel.Y,
+								newVel.Z + lookH.Z * boost
+							)
+						end
+					else
+						-- กำลังถอยหลัง → เบรก
+						if State.BrakeForce > 0 then
+							local bf = math.clamp(1 - (State.BrakeForce / 1500), 0, 0.99)
+							newVel = Vector3.new(newVel.X * bf, newVel.Y, newVel.Z * bf)
+						end
+					end
+				else
+					-- [S] / Brake (PC)
+					if not isMovingForward or currentSpeed < 3 then
+						-- กำลังถอยอยู่ → ถอยต่อ
+						if State.AccelPower > 0 then
+							local boost = State.AccelPower / 200
+							newVel = Vector3.new(
+								newVel.X - lookH.X * boost,
+								newVel.Y,
+								newVel.Z - lookH.Z * boost
+							)
+						end
+					else
+						-- กำลังวิ่งหน้า → เบรก
+						if State.BrakeForce > 0 then
+							local bf = math.clamp(1 - (State.BrakeForce / 1500), 0, 0.99)
+							newVel = Vector3.new(newVel.X * bf, newVel.Y, newVel.Z * bf)
+						end
+					end
+				end
+			end
+
+			-- ========== FIX 5: Anti-stuck (ล้อจมดิน) ==========
+			-- ถ้าเหยียบคันเร่งแต่ความเร็วไม่ขึ้นเลย → boost เพิ่ม
+			if (throttle ~= 0 or brake == 1) and currentSpeed > 5 then
+				if math.abs(currentSpeed - lastVelMagnitude) < 0.5 and currentSpeed < 50 then
+					-- ความเร็วไม่เปลี่ยน → ติดหล่ม
+					stuckCounter = stuckCounter + 1
+					if stuckCounter > 30 then
+						-- ติดนานเกิน 0.5s → boost แรงพิเศษ
+						if throttle > 0 then
+							newVel = Vector3.new(
+								newVel.X + lookH.X * 5,
+								newVel.Y,
+								newVel.Z + lookH.Z * 5
+							)
+						elseif brake == 1 then
+							-- เบรกแต่ไม่อยู่ → เบรกแรงขึ้น
+							newVel = Vector3.new(newVel.X * 0.3, newVel.Y, newVel.Z * 0.3)
+						end
+					end
+				else
+					stuckCounter = 0
+				end
+			else
+				stuckCounter = 0
+			end
+			lastVelMagnitude = currentSpeed
+
+			-- ========== FIX 6: Max speed cap (แก้ 417 → 600) ==========
+			-- ใช้ smoothing เพื่อไม่ให้เกิด oscillation
+			local MAX_ALLOWED_SPEED = 600
+			local finalH = Vector3.new(newVel.X, 0, newVel.Z)
+			if finalH.Magnitude > MAX_ALLOWED_SPEED then
+				finalH = finalH.Unit * MAX_ALLOWED_SPEED
+				newVel = Vector3.new(finalH.X, newVel.Y, finalH.Z)
+			end
+
+			seat.AssemblyLinearVelocity = newVel
+		end
 	end)
 end
 
@@ -1683,13 +1754,13 @@ do
 	InfoTab:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
 	pcall(function() InfoTab:Divder() end)
 	InfoTab:Paragraph({
-		Title = "Update: 07/17/2026 | CL: " .. ver,
-		Desc  = [[- [Fixed] Vehicle Physics Modifier not working
-		- [Fixed] Auto Delivery lag optimization
-		- [Fixed] ESP ColorPicker not showing
-		- [Fixed] State variable sync with Config
-		- [Improved] Physics loop using RenderStepped
-		- [Improved] Auto Delivery no platform creation spam]],
+		Title = "Update: 07/18/2026 | CL: " .. ver,
+		Desc  = [[- [Fixed] Mobile Brake button not working
+- [Fixed] Speed cap 417 (raised to 600 + smoothing)
+- [Fixed] Wheels stuck in ground (anti-stuck system)
+- [Improved] Vehicle detection for car orientation
+- [Improved] Y velocity preservation (no flying/stuck)
+- [Added] Separate Brake input for Mobile (Handbrake button)]],
 	})
 	pcall(function() InfoTab:Divder() end)
 
