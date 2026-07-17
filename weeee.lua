@@ -1,8 +1,8 @@
 -- Script 1
 
 -- =========================
-local version = "PAID"
-local ver     = "v021.26"
+local version = "BETA"
+local ver     = "v021.19"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -175,7 +175,7 @@ local function ExecuteServerHop()
 		pcall(function()
 			qot([[
 			repeat task.wait() until game:IsLoaded()
-			loadstring(game:HttpGet("https://raw.githubusercontent.com/mabdu21/YWVATBAUBAK-FISH-IT/refs/heads/main/dededededede.lua"))()
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/mabdu21/YWVATBAUBAK-FISH-IT/refs/heads/main/weeee.lua"))()
 			]])
 		end)
 	end
@@ -434,7 +434,7 @@ do
 	MainTab:Slider({
 		Title    = "Acceleration Power",
 		Desc     = "Higher value means stronger boost when pressing forward or reverse.",
-		Value    = { Min = 0, Max = 1000, Default = State.AccelPower },
+		Value    = { Min = 0, Max = 5000, Default = State.AccelPower },
 		Step     = 1,
 		Callback = function(v)
 			State.AccelPower = v
@@ -445,7 +445,7 @@ do
 	MainTab:Slider({
 		Title    = "Brake Force",
 		Desc     = "Higher value means stronger braking when counter-throttling.",
-		Value    = { Min = 0, Max = 150, Default = State.BrakeForce },
+		Value    = { Min = 0, Max = 1500, Default = State.BrakeForce },
 		Step     = 1,
 		Callback = function(v)
 			State.BrakeForce = v
@@ -603,8 +603,8 @@ do
 			}
 		end)
 		if ok and obj then
-			obj..Filled = false
-			obj..Visible = false
+			obj.Box.Filled = false
+			obj.Box.Visible = false
 			obj.Name.Center = true
 			obj.Name.Outline = true
 			obj.Name.Size = 14
@@ -624,7 +624,7 @@ do
 	local function RemoveESP(player)
 		if ESP_Objects[player] and Drawing then
 			local obj = ESP_Objects[player]
-			pcall(function() obj.:Remove() end)
+			pcall(function() obj.Box:Remove() end)
 			pcall(function() obj.Tracer:Remove() end)
 			pcall(function() obj.Name:Remove() end)
 			pcall(function() obj.Distance:Remove() end)
@@ -664,8 +664,8 @@ do
 	})
 	EspTab:Divider()
 	EspTab:Section({ Title = "Targets", Icon = "target" })
-	EspTab:Toggle({ Title = "Players", Desc = "Display ESP for neutral players.", Value = _G.ESP_Targets.Players,   Callback = function(v) _G.ESP_Targets.Players   = v end })
-	EspTab:Toggle({ Title = "Police", Desc = "Display ESP for Security players.", Value = _G.ESP_Targets.Police,   Callback = function(v) _G.ESP_Targets.Police   = v end })
+	EspTab:Toggle({ Title = "Players (Neutral)", Desc = "Display ESP for neutral players.", Value = _G.ESP_Targets.Players,   Callback = function(v) _G.ESP_Targets.Players   = v end })
+	EspTab:Toggle({ Title = "Police (Security)", Desc = "Display ESP for Security players.", Value = _G.ESP_Targets.Police,   Callback = function(v) _G.ESP_Targets.Police   = v end })
 	EspTab:Toggle({ Title = "Criminals",         Desc = "Display ESP for Criminal players.",  Value = _G.ESP_Targets.Criminals, Callback = function(v) _G.ESP_Targets.Criminals = v end })
 	EspTab:Divider()
 	EspTab:Section({ Title = "Visuals", Icon = "layers" })
@@ -1628,11 +1628,11 @@ do
 	InfoTab:Paragraph({
 		Title = "Update: 07/17/2026 | CL: " .. ver,
 		Desc  = [[- [Fixed] Vehicle Physics Modifier not working
-	- [Fixed] Auto Delivery lag optimization
-	- [Fixed] ESP ColorPicker not showing
-	- [Fixed] State variable sync with Config
-	- [Improved] Physics loop using RenderStepped
-	- [Improved] Auto Delivery no platform creation spam]],
+		- [Fixed] Auto Delivery lag optimization
+		- [Fixed] ESP ColorPicker not showing
+		- [Fixed] State variable sync with Config
+		- [Improved] Physics loop using RenderStepped
+		- [Improved] Auto Delivery no platform creation spam]],
 	})
 	pcall(function() InfoTab:Divder() end)
 
