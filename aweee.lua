@@ -1,7 +1,7 @@
 -- Script 1
 
 -- =========================
-local version = "BETA"
+local version = "PAID"
 local ver     = "v021.18"
 -- =========================
 
@@ -434,7 +434,7 @@ do
 	MainTab:Slider({
 		Title    = "Acceleration Power",
 		Desc     = "Higher value means stronger boost when pressing forward or reverse.",
-		Value    = { Min = 0, Max = 5000, Default = State.AccelPower },
+		Value    = { Min = 0, Max = 1000, Default = State.AccelPower },
 		Step     = 1,
 		Callback = function(v)
 			State.AccelPower = v
@@ -445,7 +445,7 @@ do
 	MainTab:Slider({
 		Title    = "Brake Force",
 		Desc     = "Higher value means stronger braking when counter-throttling.",
-		Value    = { Min = 0, Max = 1500, Default = State.BrakeForce },
+		Value    = { Min = 0, Max = 150, Default = State.BrakeForce },
 		Step     = 1,
 		Callback = function(v)
 			State.BrakeForce = v
