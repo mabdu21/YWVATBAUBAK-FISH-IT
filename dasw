@@ -163,7 +163,7 @@ local S = {
     buyType       = Config:Get("buyType", "Best affordable"),
     plateFallback = Config:Get("plateFallback", true),
     autoPlates    = Config:Get("autoPlates", false),
-    buyTrash      = Config:get("buyTrash", true),
+    buyTrash      = Config:Get("buyTrash", true),
     earned        = Config:Get("earned", 0),
     status        = Config:Get("status", "idle"),
 }
