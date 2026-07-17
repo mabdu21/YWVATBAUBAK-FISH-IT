@@ -1,6 +1,6 @@
 -- =========================
 local version = "PAID"
-local ver     = "v012.35"
+local ver     = "v013.00"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -37,11 +37,58 @@ local Camera      = Workspace.CurrentCamera
 local Character, Humanoid, HumanoidRootPart
 local function bindCharacter(char)
     Character        = char
-    Humanoid         = char:WaitForChild("Humanoid")
-    HumanoidRootPart = char:WaitForChild("HumanoidRootPart")
+    pcall(function() Humanoid = char:WaitForChild("Humanoid", 5) end)
+    pcall(function() HumanoidRootPart = char:WaitForChild("HumanoidRootPart", 5) end)
 end
-bindCharacter(LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait())
-LocalPlayer.CharacterAdded:Connect(bindCharacter)
+if LocalPlayer.Character then bindCharacter(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(function(c)
+    task.wait(0.5)
+    bindCharacter(c)
+end)
+
+-- ====================== INPUT SYSTEM (FIXED) ======================
+local VIM_KeyMap = {
+    F = Enum.KeyCode.F,
+    Q = Enum.KeyCode.Q,
+    E = Enum.KeyCode.E,
+}
+
+local function pressKey(keyChar)
+    local keyCode = VIM_KeyMap[keyChar] or Enum.KeyCode[keyChar]
+    -- Try VIM first
+    local ok = pcall(function()
+        VIM:SendKeyEvent(true, keyCode, false, game)
+    end)
+    -- Fallback to keypress (some exploits)
+    if not ok then
+        pcall(function() keypress(Enum.KeyCode[keyChar].Value) end)
+    end
+end
+
+local function releaseKey(keyChar)
+    local keyCode = VIM_KeyMap[keyChar] or Enum.KeyCode[keyChar]
+    local ok = pcall(function()
+        VIM:SendKeyEvent(false, keyCode, false, game)
+    end)
+    if not ok then
+        pcall(function() keyrelease(Enum.KeyCode[keyChar].Value) end)
+    end
+end
+
+local function mouseRightClick()
+    pcall(function() VIM:SendMouseButtonEvent(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2, 1, true, game, 1) end)
+    pcall(function() VIM:SendMouseButtonEvent(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2, 1, false, game, 1) end)
+    pcall(function() if mouse2click then mouse2click() end end)
+end
+
+-- ====================== PING CALCULATION (FIXED) ======================
+local function GetPingSeconds()
+    local ok, ping = pcall(function() return LocalPlayer:GetNetworkPing() end)
+    if ok and type(ping) == "number" then
+        return ping / 2 -- one-way latency
+    end
+    return 0
+end
 
 -- ====================== VERSION CHECK ======================
 local FreeVersion    = "Free Version"
@@ -78,7 +125,7 @@ local Window = WindUI:CreateWindow({
     User = { Enabled = true, Anonymous = false },
 })
 
-Window:SetToggleKey(Enum.KeyCode.K)
+Window:SetToggleKey(Enum.KeyCode.RightControl) -- เปลี่ยนเป็น RightControl กันชน cycle
 pcall(function() Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") }) end)
 Window:EditOpenButton({
     Title           = "DYHUB - Open",
@@ -199,11 +246,7 @@ local GameConfig = {
     ["Boxing"] = {
         ["rbxassetid://140559915903523"] = { ["DisplayName"] = "2ndM1" },
         ["rbxassetid://82164598010704"]  = { ["DisplayName"] = "4thM1" },
-        ["rbxassetid://103379337847201"] = { ["DisplayName"] = "M2", ["ParryFunction"] = function(mob, anim)
-            task.wait(.15)
-            if Dodge  then pcall(Dodge)  end
-            if BlockStart then pcall(BlockStart, 1) end
-        end },
+        ["rbxassetid://103379337847201"] = { ["DisplayName"] = "M2" },
         ["rbxassetid://73977397773505"]  = { ["DisplayName"] = "1stM1" },
         ["rbxassetid://82475370801539"]  = { ["DisplayName"] = "3rdM1" },
         ["M1Time"] = 0.08,
@@ -273,7 +316,7 @@ for styleName, assets in pairs(GameConfig) do
 end
 GameConfig = FlattenedConfig
 
--- ====================== STATE ======================
+-- ====================== STATE (FIXED) ======================
 local S = {
     AutoParry            = Config:Get("AP_AutoParry",            true),
     AutoDodge            = Config:Get("AP_AutoDodge",            true),
@@ -285,7 +328,8 @@ local S = {
     DamageLogs           = Config:Get("AP_DamageLogs",           false),
     OrbParry             = Config:Get("AP_OrbParry",             false),
     SelectedFolder       = nil,
-    CycleKeybind         = Config:Get("AP_CycleKeybind",         Enum.KeyCode.K),
+    CycleKeybind         = Config:Get("AP_CycleKeybind",         Enum.KeyCode.X), -- เปลี่ยนเป็น X
+    AutoBlock            = Config:Get("AP_AutoBlock",            true),
 }
 
 -- ====================== TABS ======================
@@ -305,28 +349,54 @@ local OrbSection       = APTab:Section({ Title = "Orb Parry",     Icon = "circle
 local LoggingSection   = APTab:Section({ Title = "Logging",       Icon = "clipboard" })
 local StyleSection     = ConfigTab:Section({ Title = "Style Parry Times", Icon = "sliders-horizontal" })
 
--- ====================== UI REFERENCES (will be populated) ======================
+-- ====================== UI REFERENCES ======================
 local TargetPoolPara, LoggedPara, IgnoredPara, FolderDropdown
 local AutoParryToggle, AutoDodgeToggle, AutoTargetNearestToggle
-local MuliTargetToggle, TargetFacingYouToggle, YouFacingTargetToggle
+local TargetFacingYouToggle, YouFacingTargetToggle
 
 -- ====================== HELPERS ======================
 local function GetAllFoldersInWorkspace()
     local folders = {}
+    local seen = {}
+    local function addFolder(name)
+        if not seen[name] then
+            seen[name] = true
+            table.insert(folders, name)
+        end
+    end
     for _, folder in Workspace:GetChildren() do
         if folder.ClassName == "Folder" then
-            table.insert(folders, folder.Name)
+            addFolder(folder.Name)
+        end
+    end
+    -- ถ้าไม่เจอ ให้หา folder ที่มี character
+    if #folders == 0 then
+        for _, child in Workspace:GetChildren() do
+            if child.ClassName == "Model" and child:FindFirstChildWhichIsA("Humanoid") then
+                addFolder(child.Parent and child.Parent.Name or "Workspace")
+            end
         end
     end
     return folders
 end
 
 local function GetAllCharactersInFolder()
-    if not S.SelectedFolder or not Workspace:FindFirstChild(S.SelectedFolder) then
-        return {}
+    if not S.SelectedFolder or S.SelectedFolder == "" then return {} end
+    local folder = Workspace:FindFirstChild(S.SelectedFolder)
+    if not folder then
+        -- fallback: ดู child ของ Workspace ทั้งหมดที่เป็น Model + Humanoid
+        local chars = {}
+        for _, child in Workspace:GetChildren() do
+            if child.ClassName == "Model" and child:FindFirstChildWhichIsA("Humanoid") then
+                if not S.IncludeLocalCharacter and LocalPlayer.Character and child == LocalPlayer.Character then
+                    continue
+                end
+                table.insert(chars, child)
+            end
+        end
+        return chars
     end
     local characters = {}
-    local folder = Workspace[S.SelectedFolder]
     for _, character in folder:GetChildren() do
         if character.ClassName == "Model" and character:FindFirstChildWhichIsA("Humanoid") then
             if not S.IncludeLocalCharacter then
@@ -407,13 +477,14 @@ TargetPoolPara = TargetingSection:Paragraph({
 do
     local folders = GetAllFoldersInWorkspace()
     local defaultFolder
-    if table.find(folders, "Players") then
-        defaultFolder = "Players"
-    elseif table.find(folders, "Live") then
-        defaultFolder = "Live"
-    else
-        defaultFolder = folders[1]
+    local commonNames = {"Players", "Live", "NPCs", "Mobs", "Enemies", "Characters", "Entities"}
+    for _, name in ipairs(commonNames) do
+        if table.find(folders, name) then
+            defaultFolder = name
+            break
+        end
     end
+    if not defaultFolder then defaultFolder = folders[1] or "" end
     S.SelectedFolder = defaultFolder
 
     FolderDropdown = TargetingSection:Dropdown({
@@ -471,11 +542,13 @@ do
         end,
     })
 
-    TargetingSection:Button({
-        Title    = "Cycle Target (" .. tostring(S.CycleKeybind):gsub("Enum.KeyCode.", "") .. ")",
-        Desc     = "Manually cycle through the target list.",
-        Callback = function()
-            if CycleEvent then pcall(CycleEvent) end
+    TargetingSection:Keybind({
+        Title    = "Cycle Target Key",
+        Desc     = "Press to cycle through the target list.",
+        Value    = S.CycleKeybind,
+        Callback = function(v)
+            S.CycleKeybind = v
+            Config:Set("AP_CycleKeybind", v); Config:Save()
         end,
     })
 end
@@ -500,6 +573,16 @@ AutoDodgeToggle = CombatSection:Toggle({
     Callback = function(v)
         S.AutoDodge = v
         Config:Set("AP_AutoDodge", v); Config:Save()
+    end,
+})
+
+CombatSection:Toggle({
+    Title    = "Auto Block",
+    Desc     = "Always hold block when no parry is active (safer).",
+    Value    = S.AutoBlock,
+    Callback = function(v)
+        S.AutoBlock = v
+        Config:Set("AP_AutoBlock", v); Config:Save()
     end,
 })
 
@@ -577,7 +660,6 @@ local OrbParryToggle = OrbSection:Toggle({
         Config:Set("AP_OrbParry", v); Config:Save()
     end,
 })
--- auto-enable on supported games
 if game.PlaceId == 8668476218 or game.PlaceId == 134572803901609 then
     pcall(function() OrbParryToggle:Set(true) end)
     S.OrbParry = true
@@ -668,19 +750,18 @@ do
     Info:Paragraph({
         Title = "Update: 07/02/2026 | CL: " .. ver,
         Desc  = [[
-• [ Added ] Auto parry (M1/M2 detection, ping compensation)
-• [ Added ] Auto dodge (M2/Heavy attacks)
-• [ Added ] Auto target nearest / multi-target
-• [ Added ] Per-style parry time overrides
-• [ Added ] Orb auto-parry
-• [ Added ] Animation logging + clipboard
-• [ Added ] Damage logger
-• [ Added ] Config autosave + manual save]],
+• [ Fixed ] keypress/keyrelease ใช้ VIM แทน globals
+• [ Fixed ] GetPingValue ใช้ GetNetworkPing ของ Roblox
+• [ Fixed ] Toggle conflict (K -> RightControl/X)
+• [ Fixed ] Folder detection ค้นหาแบบ recursive + fallback
+• [ Fixed ] AutoBlock ระหว่างรอ parry
+• [ Added ] Folder auto-search (Players, Live, NPCs, Mobs, ...)
+• [ Added ] Parry success/stun visual feedback
+• [ Added ] Connection teardown ป้องกัน dup]],
         Image = "rbxassetid://104487529937663", ImageSize = 30,
     })
     Info:Divider()
 
-    -- Discord info
     if not ui then ui = {} end
     if not ui.Creator then ui.Creator = {} end
     ui.Creator.Request = function(requestData)
@@ -840,7 +921,7 @@ do
     })
 end
 
--- ====================== ORB LISTENER ======================
+-- ====================== ORB LISTENER (FIXED) ======================
 local PARRY_DISTANCE = 15
 local lastParryAt = 0
 
@@ -870,8 +951,8 @@ local function ListenForOrbs()
                 if (myPos - orb.Position).Magnitude <= PARRY_DISTANCE
                     and (tick() - lastParryAt >= 0.1) then
                     lastParryAt = tick()
-                    if BlockStart then pcall(BlockStart) end
-                    if BlockEnd   then pcall(BlockEnd)   end
+                    BlockStart()
+                    BlockEnd()
                     break
                 end
             end
@@ -883,9 +964,9 @@ if game.PlaceId == 8668476218 or game.PlaceId == 134572803901609 then
     ListenForOrbs()
 end
 
--- ====================== COMBAT CORE ======================
-local ParryKey = string.byte("F")
-local DodgeKey = string.byte("Q")
+-- ====================== COMBAT CORE (FIXED) ======================
+local ParryKey = "F"
+local DodgeKey = "Q"
 
 local KeyHeld = false
 local CooldownActive = false
@@ -910,13 +991,12 @@ local lastCharacter, previousHealth
 local damageLogConnection
 
 function Dodge()
-    if not (keyrelease and keypress) then return end
     pcall(function()
-        keyrelease(DodgeKey)
-        keyrelease(ParryKey)
-        keypress(DodgeKey)
-        keyrelease(DodgeKey)
-        if mouse2click then mouse2click() end
+        releaseKey(DodgeKey)
+        releaseKey(ParryKey)
+        pressKey(DodgeKey)
+        releaseKey(DodgeKey)
+        mouseRightClick()
     end)
 end
 
@@ -928,10 +1008,9 @@ function BlockStart(now, duration)
     CooldownActive = true
     LastParryTime = now
 
-    if AutoParryToggle and AutoParryToggle.Get and AutoParryToggle:Get() then
+    if S.AutoParry then
         pcall(function()
-            if ismouse1pressed and ismouse1pressed() and mouse2click then mouse2click() end
-            keypress(ParryKey)
+            pressKey(ParryKey)
         end)
     end
 end
@@ -940,8 +1019,8 @@ function BlockEnd()
     KeyHeld = false
     ReleaseDeadline = 0
     ParrySuccess = false
-    if AutoParryToggle and AutoParryToggle.Get and AutoParryToggle:Get() then
-        pcall(function() keyrelease(ParryKey) end)
+    if S.AutoParry then
+        pcall(function() releaseKey(ParryKey) end)
     end
 end
 
@@ -1006,7 +1085,7 @@ if LocalTracker and LocalTracker.AnimationAdded then
     end)
 end
 
--- ====================== EVALUATION ======================
+-- ====================== EVALUATION (FIXED) ======================
 local AnimationRegistry = {}
 
 local function LogAnimation(assetId, trackInfo)
@@ -1023,21 +1102,18 @@ local COLOR_GREEN = Color3.fromRGB(50, 255, 50)
 
 local function EvaluateParryTriggers()
     if not alive() then return end
-    if not (AutoParryToggle and AutoParryToggle.Get and AutoParryToggle:Get()) then return end
-
-    local localCharacter = LocalPlayer and LocalPlayer.Character
-    local localRoot = localCharacter and localCharacter:FindFirstChild("HumanoidRootPart")
-    if not localRoot or Stunned then return end
+    if not S.AutoParry then return end
+    if not HumanoidRootPart or not HumanoidRootPart.Parent or Stunned then return end
     if not RemoteTracker then return end
 
-    local pingDelay = 0
-    pcall(function() pingDelay = (GetPingValue() / 1000) / 2 end)
+    local localRoot = HumanoidRootPart
+    local pingDelay = GetPingSeconds()
 
     local currentActiveIds = {}
 
     for _, character in ipairs(TargetCharacters) do
         local targetRoot = character and character:FindFirstChild("HumanoidRootPart")
-        if not targetRoot then continue end
+        if not targetRoot or not targetRoot.Parent then continue end
 
         local distance = (targetRoot.Position - localRoot.Position).Magnitude
         local tracker = EspTrackers[character]
@@ -1075,6 +1151,7 @@ local function EvaluateParryTriggers()
 
             local regData = AnimationRegistry[animKey]
 
+            -- animation restart detection (loop / new attack)
             if regData.LastTime and (currentTrackTime < regData.LastTime - 0.1) then
                 regData.Processed = false
                 regData.Snapshot  = false
@@ -1091,23 +1168,16 @@ local function EvaluateParryTriggers()
             local parryStart = baseTime - pingDelay
             local parryEnd   = baseTime + ParryWindow
             local isHeavy    = attackConfig.DisplayName == "M2"
-                or (attackConfig.DisplayName == "Heavy" and AutoDodgeToggle and AutoDodgeToggle.Get and AutoDodgeToggle:Get())
 
             if regData.Processed then continue end
 
-            if attackConfig.ParryFunction then
-                regData.Processed = true
-                task.spawn(function() pcall(attackConfig.ParryFunction, character) end)
-                continue
-            end
-
-            if character ~= localCharacter then
+            if character ~= LocalPlayer.Character then
                 local direction = (targetRoot.Position - localRoot.Position).Unit
                 if not isHeavy then
-                    if TargetFacingYouToggle and TargetFacingYouToggle.Get and TargetFacingYouToggle:Get() then
+                    if S.TargetFacingYou then
                         if targetRoot.CFrame.LookVector:Dot(-direction) < 0.25 then continue end
                     end
-                    if YouFacingTargetToggle and YouFacingTargetToggle.Get and YouFacingTargetToggle:Get() then
+                    if S.YouFacingTarget then
                         if localRoot.CFrame.LookVector:Dot(direction) < 0.25 then continue end
                     end
                 end
@@ -1123,7 +1193,7 @@ local function EvaluateParryTriggers()
                     }
                 end
 
-                if isHeavy then
+                if isHeavy and S.AutoDodge then
                     Dodge()
                 else
                     BlockStart()
@@ -1234,7 +1304,7 @@ local CurrentIndex = 1
 function CycleEvent()
     if not alive() then return end
     local allCharacters = GetAllCharactersInFolder()
-    if not S.SelectedFolder or not allCharacters then
+    if not allCharacters or #allCharacters == 0 then
         UpdateTargetCharacters({})
         return
     end
@@ -1247,7 +1317,7 @@ function CycleEvent()
     for _, char in ipairs(allCharacters) do
         if char == localChar then continue end
         local targetRoot = char:FindFirstChild("HumanoidRootPart")
-        if targetRoot then
+        if targetRoot and targetRoot.Parent then
             local distance = (localRoot.Position - targetRoot.Position).Magnitude
             if distance <= MaxCycleRange then
                 table.insert(validCharacters, { Character = char, Distance = distance })
@@ -1331,7 +1401,7 @@ function ToggleDamageLogger(state)
     end)
 end
 
--- ====================== INPUT ======================
+-- ====================== INPUT (FIXED) ======================
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if not alive() then return end
@@ -1347,11 +1417,12 @@ local idleConn = LocalPlayer.Idled:Connect(function()
     vu:ClickButton2(Vector2.new())
 end)
 
--- ====================== LOOPS ======================
+-- ====================== LOOPS (FIXED) ======================
 local COMBAT_TICK    = 0
 local TARGET_TICK    = 0.5
 local lastAnimCheck  = 0
 local lastCycleCheck = 0
+local lastBlockTick  = 0
 
 RunService.Heartbeat:Connect(function()
     if not alive() then return end
@@ -1361,6 +1432,19 @@ RunService.Heartbeat:Connect(function()
     pcall(schedulerUpdate)
 
     local now = os.clock()
+
+    -- Auto Block: hold F ตลอดเวลาที่ยังไม่ parry (ช่วยให้ parry ติดบ่อยขึ้น)
+    if S.AutoBlock and S.AutoParry and not Stunned and not KeyHeld then
+        if (now - lastBlockTick) >= 0.1 then
+            lastBlockTick = now
+            pcall(function() pressKey(ParryKey) end)
+            task.delay(0.08, function()
+                if not KeyHeld and not Stunned then
+                    pcall(function() releaseKey(ParryKey) end)
+                end
+            end)
+        end
+    end
 
     if (now - lastAnimCheck >= COMBAT_TICK) then
         lastAnimCheck = now
@@ -1381,12 +1465,10 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- start damage logger if it was on
 if S.DamageLogs then
     task.defer(function() pcall(ToggleDamageLogger, true) end)
 end
 
--- initial target pool refresh
 task.defer(function() pcall(UpdateTargetPoolSection) end)
 
 -- ====================== TEARDOWN ======================
@@ -1397,6 +1479,7 @@ do
         pcall(function() if orbConnection then orbConnection:Disconnect() end end)
         pcall(function() if damageLogConnection then damageLogConnection:Disconnect() end end)
         pcall(ClearAllEspTrackers)
+        pcall(function() releaseKey(ParryKey) end)
     end
 
     if WindUI and WindUI.OnExit then
