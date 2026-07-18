@@ -1,6 +1,6 @@
 -- [[
 
-   ui นี้สำหรับการให้ ai เอาไปใช้แทนสคริปอืนที่มี ui อันนี้เป็นเหมือนเป็น ui kit สำหรัย สคริปที่ต้องการเอาระบบมาใส่เพราะ ui นี้มีระบบให้แล้วคือ
+   ui kit by dyhub
    - auto save config
    - toggle, dropdown, silder, button
    - tab window
