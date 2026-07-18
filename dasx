@@ -1,37 +1,49 @@
--- ============================================================
---  DYHUB | Scratchy Loot (SIGMA ISLAND)
---  v001.00 | BETA
---
---  Scratch-ticket gambling idle game hub.
---  Full WindUI kit + all Scratchy Loot automation systems.
---
---  Features:
---    • Auto scratch + claim (Instant / Visual mode)
---    • Auto buy tickets (best affordable / specific)
---    • Auto wash plates (free day-job money)
---    • Auto buy Trash Can gadget
---    • Auto-save config + manual save
---    • Serverhop / Rejoin
---    • Anti-AFK
---    • Live status / balance display
---    • Generation token (re-exec kills old loops safely)
--- ============================================================
-
--- =========================
 local version = "BETA"
-local ver     = "v001.00"
--- =========================
+local ver     = "v2.53"
 
+print("[DYHUB] Starting... Please wait for UI to load...")
+
+-- ======================== LOAD CHECK ========================
 repeat task.wait() until game:IsLoaded()
+task.wait(1)
 
 -- ====================== LOAD UI ======================
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+local WindUI_Success = false
+local WindUI
+local function loadWindUI()
+    local retries = 0
+    repeat
+        retries = retries + 1
+        local success = pcall(function()
+            WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+        end)
+        if success and WindUI then
+            WindUI_Success = true
+            return true
+        end
+        if retries < 3 then
+            print("[DYHUB] WindUI load attempt " .. retries .. " failed, retrying...")
+            task.wait(1)
+        end
+    until retries >= 3
+    return false
+end
 
+if not loadWindUI() then
+    warn("[DYHUB] CRITICAL: Failed to load WindUI after 3 attempts!")
+    error("WindUI failed to load. Check your internet connection.")
+end
+
+-- FPS Cap
 if setfpscap then
     pcall(function() setfpscap(1000000) end)
-    WindUI:Notify({ Title = "Service", Content = "FPS Unlocked! | " .. ver, Duration = 3, Icon = "cpu" })
+    if WindUI and WindUI.Notify then
+        WindUI:Notify({ Title = "Service", Content = "FPS Unlocked! | " .. ver, Duration = 3, Icon = "cpu" })
+    end
 else
-    WindUI:Notify({ Title = "Not Working", Content = "Your exploit does not support setfpscap.", Duration = 3, Icon = "ban" })
+    if WindUI and WindUI.Notify then
+        WindUI:Notify({ Title = "Not Working", Content = "Your exploit does not support setfpscap.", Duration = 3, Icon = "ban" })
+    end
 end
 
 -- ====================== SERVICES ======================
@@ -60,7 +72,10 @@ local function bindCharacter(char)
     Humanoid         = char:WaitForChild("Humanoid")
     HumanoidRootPart = char:WaitForChild("HumanoidRootPart")
 end
-bindCharacter(LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait())
+
+if LocalPlayer.Character then
+    bindCharacter(LocalPlayer.Character)
+end
 LocalPlayer.CharacterAdded:Connect(bindCharacter)
 
 -- ====================== VERSION CHECK ======================
@@ -81,33 +96,51 @@ end
 local userversion = checkVersion(LocalPlayer.Name)
 local isPremium   = (userversion == PremiumVersion)
 
--- ====================== WINDOW ======================
-local Window = WindUI:CreateWindow({
-    Title      = "DYHUB",
-    IconThemed = true,
-    Icon       = "rbxassetid://104487529937663",
-    Author     = "Scratchy Loot | " .. userversion,
-    Folder     = "DYHUB_SL",
-    Size       = UDim2.fromOffset(500, 400),
-    Transparent = true,
-    Theme      = "Dark",
-    BackgroundImageTransparency = 0.8,
-    HasOutline = false,
-    HideSearchBar    = true,
-    ScrollBarEnabled = true,
-    User = { Enabled = true, Anonymous = false },
-})
+-- ====================== WINDOW SETUP ======================
+local Window
+local function createWindow()
+    local ok = pcall(function()
+        Window = WindUI:CreateWindow({
+            Title      = "DYHUB",
+            IconThemed = true,
+            Icon       = "rbxassetid://104487529937663",
+            Author     = "Scratchy Loot | " .. userversion,
+            Folder     = "DYHUB_SL",
+            Size       = UDim2.fromOffset(550, 450),
+            Transparent = true,
+            Theme      = "Dark",
+            BackgroundImageTransparency = 0.8,
+            HasOutline = false,
+            HideSearchBar    = true,
+            ScrollBarEnabled = true,
+            User = { Enabled = true, Anonymous = false },
+        })
+        
+        if Window then
+            Window:SetToggleKey(Enum.KeyCode.K)
+            pcall(function() Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") }) end)
+            Window:EditOpenButton({
+                Title           = "DYHUB - Open",
+                Icon            = "monitor",
+                CornerRadius    = UDim.new(0, 6),
+                StrokeThickness = 2,
+                Color           = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255)),
+                Draggable       = true,
+            })
+            print("[DYHUB] Window created successfully!")
+            return true
+        end
+    end)
+    return ok and Window ~= nil
+end
 
-Window:SetToggleKey(Enum.KeyCode.K)
-pcall(function() Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") }) end)
-Window:EditOpenButton({
-    Title           = "DYHUB - Open",
-    Icon            = "monitor",
-    CornerRadius    = UDim.new(0, 6),
-    StrokeThickness = 2,
-    Color           = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255)),
-    Draggable       = true,
-})
+if not createWindow() then
+    warn("[DYHUB] Failed to create window, retrying...")
+    task.wait(2)
+    if not createWindow() then
+        error("[DYHUB] CRITICAL: Window creation failed!")
+    end
+end
 
 -- ====================== CONFIG SYSTEM ======================
 local ConfigFolder = "DYHUB_SL"
@@ -187,6 +220,8 @@ local DeleteTicket   = ReplicatedStorage.Remotes:WaitForChild("DeleteTicket")
 local TicketConfig  = require(ReplicatedStorage.Modules.ScratchTickets.ScratchTicketConfig)
 local GadgetsClient = require(ReplicatedStorage.Modules.Client.GadgetsClient)
 
+print("[DYHUB] All remotes loaded successfully!")
+
 -- generation token: re-executing the hub kills the old loops
 local gen = (getgenv()._WH_SL_gen or 0) + 1
 getgenv()._WH_SL_gen = gen
@@ -208,16 +243,19 @@ local S = {
 
 -- ====================== SHARED HELPERS ======================
 local function mainUI()
-    return LocalPlayer:FindFirstChild("PlayerGui")
-        and LocalPlayer.PlayerGui:FindFirstChild("MainUI")
+    local pg = LocalPlayer:FindFirstChild("PlayerGui")
+    if not pg then return nil end
+    return pg:FindFirstChild("MainUI")
 end
 
 local function ticketsContainer()
     local ui = mainUI()
-    return ui and ui:FindFirstChild("TicketsContainer", true)
+    if not ui then return nil end
+    return ui:FindFirstChild("TicketsContainer", true)
 end
 
 local function clickButton(btn)
+    if not btn then return end
     for _, sig in ipairs({ "MouseButton1Click", "Activated" }) do
         for _, c in ipairs(getconnections(btn[sig])) do
             pcall(c.Function)
@@ -269,8 +307,7 @@ local function refreshBuyList(force)
     buyList = list
 end
 
--- card lookup by numeric id (card names are full-precision float strings;
--- tostring() would reformat, so compare parsed numbers instead)
+-- card lookup by numeric id
 local function findCard(id)
     local tc = ticketsContainer()
     if not tc then return nil end
@@ -283,9 +320,7 @@ local function findCard(id)
     return nil
 end
 
--- trash a finished ticket/plate: the game's own delete remote (clears the
--- server entry, same as dragging it onto the bin) + local card removal
--- (card add/remove is client-driven, so remote claims leave ghosts otherwise)
+-- trash a finished ticket/plate
 local function trashTicket(id, waitForCard)
     pcall(function() DeleteTicket:FireServer(id) end)
     local deadline = os.clock() + (waitForCard and 2 or 0)
@@ -313,7 +348,7 @@ local function plateCycle()
     return true
 end
 
--- Trash Can gadget: rebuy whenever it's purchasable (resets on prestige)
+-- Trash Can gadget: rebuy whenever it's purchasable
 local function buyTrashCan()
     local ok, state = pcall(function() return GadgetsClient.getState().Trash end)
     if not ok or type(state) ~= "table" then return end
@@ -342,7 +377,7 @@ local function instantPass()
             end
         end
     end
-    -- day-job plates on the table are not in GetTickets -- sweep their cards
+    -- day-job plates on the table
     local tc = ticketsContainer()
     if tc then
         for _, card in ipairs(tc:GetChildren()) do
@@ -358,9 +393,7 @@ local function instantPass()
             end
         end
     end
-    -- ghost sweep: ticket cards whose server ticket no longer exists.
-    -- Two-strike rule: a just-bought ticket can miss the snapshot (bought
-    -- between fetch and sweep), so only destroy after 2 consecutive misses.
+    -- ghost sweep
     local ok2, live = pcall(function() return GetTickets:InvokeServer() end)
     if ok2 and type(live) == "table" and tc then
         local exists = {}
@@ -408,9 +441,6 @@ local function findClaimBtn()
     return nil
 end
 
--- serpentine eraser sweep over a set of frames (real scratch visuals).
--- passIdx offsets the grid so repeated passes hit different pixels --
--- pricier tickets have tougher coating and need several passes.
 local function sweepFrames(frames, scratchFn, radius, passIdx)
     local inset = GuiService:GetGuiInset()
     local step = math.max(8, (radius or 29) * 0.45)
@@ -433,9 +463,6 @@ local function sweepFrames(frames, scratchFn, radius, passIdx)
     return true
 end
 
--- keep sweeping the open ticket until every cell reports revealed (or it
--- closes); checkThreshold then auto-submits + auto-claims + closes.
--- ClaimBtn click is the fallback path (some ticket types keep the button).
 local function scratchOpenTicket(TP, SE, label)
     S.status = "scratching " .. tostring(label or "ticket")
     for pass = 1, 20 do
@@ -511,7 +538,6 @@ local function visualPass()
     local okWP, WP = pcall(require, MLH:FindFirstChild("WashPresenter"))
     if not (okTP and okSE) then return end
 
-    -- something already open (e.g. user opened it by hand)? finish it
     if TP.getCurrentTicket() then
         scratchOpenTicket(TP, SE, "open ticket")
         return
@@ -526,7 +552,7 @@ local function visualPass()
             else
                 visualTicket(TP, SE, card)
             end
-            return -- one card per pass, re-scan fresh
+            return
         end
     end
 end
@@ -540,7 +566,7 @@ local function tableBusy()
     for _, card in ipairs(tc:GetChildren()) do
         if card:IsA("ImageButton") and card.Name ~= "Template" then n += 1 end
     end
-    return n >= 2 -- visual mode is slow; don't stack the table
+    return n >= 2
 end
 
 local function buyPass()
@@ -610,359 +636,393 @@ local idleConn = LocalPlayer.Idled:Connect(function()
     vu:ClickButton2(Vector2.new())
 end)
 
--- ====================== TABS ======================
-local InfoTab     = Window:Tab({ Title = "Information", Icon = "info" })
-local _D2         = Window:Divider()
-local FarmTab     = Window:Tab({ Title = "Farm",        Icon = "rocket" })
-local BuyTab      = Window:Tab({ Title = "Buy",         Icon = "shopping-cart" })
-local PlatesTab   = Window:Tab({ Title = "Plates",      Icon = "droplet" })
-local _D3         = Window:Divider()
-local Main3       = Window:Tab({ Title = "Settings",    Icon = "settings" })
+-- ====================== TABS - SAFE CREATE ======================
+local tabs = {}
+local function safeCreateTab(title, icon)
+    local tab
+    local ok = pcall(function()
+        tab = Window:Tab({ Title = title, Icon = icon })
+    end)
+    if ok and tab then
+        tabs[title] = tab
+        print("[DYHUB] Tab created: " .. title)
+        return tab
+    else
+        warn("[DYHUB] Failed to create tab: " .. title)
+        return nil
+    end
+end
 
-Window:SelectTab(1)
+-- Create all tabs
+local InfoTab   = safeCreateTab("Information", "info")
+local FarmTab   = safeCreateTab("Farm",        "rocket")
+local BuyTab    = safeCreateTab("Buy",         "shopping-cart")
+local PlatesTab = safeCreateTab("Plates",      "droplet")
+local Main3     = safeCreateTab("Settings",    "settings")
+
+-- Select default tab
+if FarmTab then
+    pcall(function() Window:SelectTab(2) end)
+end
 
 -- ====================== INFORMATION TAB ======================
-do
+if InfoTab then
     local Info = InfoTab
 
-    Info:Section({ Title = "DYHUB | Scratchy Loot", TextXAlignment = "Center", TextSize = 17 })
-    Info:Divider()
-    Info:Paragraph({
-        Title = "Update: 07/02/2026 | CL: " .. ver,
-        Desc  = [[
-• [ Added ] Auto scratch + claim (Instant / Visual)
-• [ Added ] Auto buy tickets (best affordable / specific)
-• [ Added ] Auto wash plates (day job, free money)
-• [ Added ] Auto buy Trash Can gadget
-• [ Fixed ] Ghost ticket cleanup
-• [ Fixed ] Plate stuck-mid-fly-in handling
-• [ Added ] Config autosave + manual save]],
-        Image = "rbxassetid://104487529937663", ImageSize = 30,
-    })
-    Info:Divider()
+    pcall(function()
+        Info:Section({ Title = "DYHUB | Scratchy Loot", TextXAlignment = "Center", TextSize = 17 })
+        Info:Divider()
+        Info:Paragraph({
+            Title = "Update: " .. os.date("%m/%d/%Y") .. " | CL: " .. ver,
+            Desc  = [[
+• [ ADDED ] Full UI/TAB rendering fix
+• [ ADDED ] Auto scratch + claim (Instant / Visual)
+• [ ADDED ] Auto buy tickets (best affordable / specific)
+• [ ADDED ] Auto wash plates (day job, free money)
+• [ ADDED ] Auto buy Trash Can gadget
+• [ FIXED ] Ghost ticket cleanup
+• [ FIXED ] Plate stuck-mid-fly-in handling
+• [ ADDED ] Config autosave + manual save
+• [ IMPROVED ] Error handling & stability]],
+            Image = "rbxassetid://104487529937663", ImageSize = 30,
+        })
+        Info:Divider()
+    end)
 
-    -- ---- Discord info ----
-    if not ui then ui = {} end
-    if not ui.Creator then ui.Creator = {} end
-    ui.Creator.Request = function(requestData)
-        local success, result = pcall(function()
-            if HttpService.RequestAsync then
-                local response = HttpService:RequestAsync({
-                    Url = requestData.Url,
-                    Method = requestData.Method or "GET",
-                    Headers = requestData.Headers or {}
-                })
-                return {Body = response.Body, StatusCode = response.StatusCode, Success = response.Success}
-            else
-                local body = HttpService:GetAsync(requestData.Url)
-                return {Body = body, StatusCode = 200, Success = true}
-            end
-        end)
-        if success then return result else error("HTTP Request failed: " .. tostring(result)) end
-    end
-
-    local InviteCode = "jWNDPNMmyB"
-    local DiscordAPI  = "https://discord.com/api/v10/invites/" .. InviteCode .. "?with_counts=true&with_expiration=true"
-    local function LoadDiscordInfo()
-        local success, result = pcall(function()
-            return HttpService:JSONDecode(ui.Creator.Request({
-                Url = DiscordAPI, Method = "GET",
-                Headers = {["User-Agent"] = "RobloxBot/1.0", ["Accept"] = "application/json"}
-            }).Body)
-        end)
-        if success and result and result.guild then
-            local DiscordInfo = Info:Paragraph({
-                Title = result.guild.name,
-                Desc  = ' <font color="#52525b">●</font> Member Count : ' .. tostring(result.approximate_member_count) ..
-                        '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(result.approximate_presence_count),
-                Image = "https://cdn.discordapp.com/icons/" .. result.guild.id .. "/" .. result.guild.icon .. ".png?size=1024",
-                ImageSize = 42,
-            })
-            Info:Button({Title = "Update Info", Callback = function()
-                local ok, r = pcall(function()
-                    return HttpService:JSONDecode(ui.Creator.Request({Url = DiscordAPI, Method = "GET"}).Body)
-                end)
-                if ok and r and r.guild then
-                    DiscordInfo:SetDesc(' <font color="#52525b">●</font> Member Count : ' .. tostring(r.approximate_member_count) ..
-                                        '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(r.approximate_presence_count))
-                    WindUI:Notify({Title = "Discord Info Updated", Content = "Refreshed!", Duration = 2, Icon = "refresh-cw"})
+    -- Discord info
+    pcall(function()
+        if not ui then ui = {} end
+        if not ui.Creator then ui.Creator = {} end
+        ui.Creator.Request = function(requestData)
+            local success, result = pcall(function()
+                if HttpService.RequestAsync then
+                    local response = HttpService:RequestAsync({
+                        Url = requestData.Url,
+                        Method = requestData.Method or "GET",
+                        Headers = requestData.Headers or {}
+                    })
+                    return {Body = response.Body, StatusCode = response.StatusCode, Success = response.Success}
                 else
-                    WindUI:Notify({Title = "Update Failed", Content = "Could not refresh.", Duration = 3, Icon = "alert-triangle"})
+                    local body = HttpService:GetAsync(requestData.Url)
+                    return {Body = body, StatusCode = 200, Success = true}
                 end
-            end})
-            Info:Button({Title = "Copy Discord Invite", Callback = function()
-                setclipboard("https://discord.gg/" .. InviteCode)
-                WindUI:Notify({Title = "Copied!", Content = "Discord invite copied!", Duration = 2, Icon = "clipboard-check"})
-            end})
-        else
-            Info:Paragraph({Title = "Error fetching Discord Info", Desc = "Unable to load.", Image = "triangle-alert", ImageSize = 26, Color = "Red"})
+            end)
+            if success then return result else error("HTTP Request failed: " .. tostring(result)) end
         end
-    end
-    LoadDiscordInfo()
 
-    Info:Divider()
-    Info:Section({Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17})
-    Info:Divider()
-    Info:Paragraph({Title = "Main Owner", Desc = "@dyumraisgoodguy#8888", Image = "rbxassetid://119789418015420", ImageSize = 30})
-    Info:Paragraph({
-        Title = "Social", Desc = "Copy link social media for follow!",
-        Image = "rbxassetid://104487529937663", ImageSize = 30,
-        Buttons = {{Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://guns.lol/DYHUB") end}}
-    })
-    Info:Paragraph({
-        Title = "Discord", Desc = "Join our discord for more scripts!",
-        Image = "rbxassetid://104487529937663", ImageSize = 30,
-        Buttons = {{Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://discord.gg/jWNDPNMmyB") end}}
-    })
+        local InviteCode = "jWNDPNMmyB"
+        local DiscordAPI  = "https://discord.com/api/v10/invites/" .. InviteCode .. "?with_counts=true&with_expiration=true"
+        local function LoadDiscordInfo()
+            local success, result = pcall(function()
+                return HttpService:JSONDecode(ui.Creator.Request({
+                    Url = DiscordAPI, Method = "GET",
+                    Headers = {["User-Agent"] = "RobloxBot/1.0", ["Accept"] = "application/json"}
+                }).Body)
+            end)
+            if success and result and result.guild then
+                local DiscordInfo = Info:Paragraph({
+                    Title = result.guild.name,
+                    Desc  = ' <font color="#52525b">●</font> Member Count : ' .. tostring(result.approximate_member_count) ..
+                            '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(result.approximate_presence_count),
+                    Image = "https://cdn.discordapp.com/icons/" .. result.guild.id .. "/" .. result.guild.icon .. ".png?size=1024",
+                    ImageSize = 42,
+                })
+                Info:Button({Title = "Update Info", Callback = function()
+                    local ok, r = pcall(function()
+                        return HttpService:JSONDecode(ui.Creator.Request({Url = DiscordAPI, Method = "GET"}).Body)
+                    end)
+                    if ok and r and r.guild then
+                        DiscordInfo:SetDesc(' <font color="#52525b">●</font> Member Count : ' .. tostring(r.approximate_member_count) ..
+                                            '\n <font color="#16a34a">●</font> Online Count : ' .. tostring(r.approximate_presence_count))
+                        WindUI:Notify({Title = "Discord Info Updated", Content = "Refreshed!", Duration = 2, Icon = "refresh-cw"})
+                    else
+                        WindUI:Notify({Title = "Update Failed", Content = "Could not refresh.", Duration = 3, Icon = "alert-triangle"})
+                    end
+                end})
+                Info:Button({Title = "Copy Discord Invite", Callback = function()
+                    setclipboard("https://discord.gg/" .. InviteCode)
+                    WindUI:Notify({Title = "Copied!", Content = "Discord invite copied!", Duration = 2, Icon = "clipboard-check"})
+                end})
+            end
+        end
+        LoadDiscordInfo()
+    end)
+
+    pcall(function()
+        Info:Divider()
+        Info:Section({Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17})
+        Info:Divider()
+        Info:Paragraph({Title = "Main Owner", Desc = "@dyumraisgoodguy#8888", Image = "rbxassetid://119789418015420", ImageSize = 30})
+        Info:Paragraph({
+            Title = "Social", Desc = "Copy link social media for follow!",
+            Image = "rbxassetid://104487529937663", ImageSize = 30,
+            Buttons = {{Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://guns.lol/DYHUB") end}}
+        })
+        Info:Paragraph({
+            Title = "Discord", Desc = "Join our discord for more scripts!",
+            Image = "rbxassetid://104487529937663", ImageSize = 30,
+            Buttons = {{Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://discord.gg/jWNDPNMmyB") end}}
+        })
+    end)
 end
 
 -- ====================== FARM TAB ======================
-do
+if FarmTab then
     local Farm = FarmTab
 
-    Farm:Section({ Title = "Auto scratch", Icon = "zap" })
+    pcall(function()
+        Farm:Section({ Title = "Auto scratch", Icon = "zap" })
 
-    Farm:Toggle({
-        Title    = "Auto scratch + claim",
-        Desc     = "Scratch & claim all tickets/plates on the table.",
-        Value    = S.autoScratch,
-        Callback = function(v)
-            S.autoScratch = v
-            Config:Set("SL_AutoScratch", v); Config:Save()
-            WindUI:Notify({Title = "Auto scratch", Content = v and "Enabled" or "Disabled", Duration = 3, Icon = v and "zap" or "zap-off"})
-        end
-    })
+        Farm:Toggle({
+            Title    = "Auto scratch + claim",
+            Desc     = "Scratch & claim all tickets/plates on the table.",
+            Value    = S.autoScratch,
+            Callback = function(v)
+                S.autoScratch = v
+                Config:Set("SL_AutoScratch", v); Config:Save()
+                WindUI:Notify({Title = "Auto scratch", Content = v and "Enabled ✓" or "Disabled ✗", Duration = 3, Icon = v and "zap" or "zap-off"})
+            end
+        })
 
-    Farm:Dropdown({
-        Title    = "Mode",
-        Desc     = "Instant = remote (fast, invisible). Visual = plays the real effect.",
-        Values   = { "Instant", "Visual" },
-        Multi    = false,
-        Value    = S.mode,
-        Callback = function(v)
-            local val = (type(v) == "table" and v[1]) or v or "Instant"
-            S.mode = val
-            Config:Set("SL_Mode", S.mode); Config:Save()
-        end
-    })
+        Farm:Dropdown({
+            Title    = "Mode",
+            Desc     = "Instant = remote (fast, invisible). Visual = plays the real effect.",
+            Values   = { "Instant", "Visual" },
+            Multi    = false,
+            Value    = S.mode,
+            Callback = function(v)
+                local val = (type(v) == "table" and v[1]) or v or "Instant"
+                S.mode = val
+                Config:Set("SL_Mode", S.mode); Config:Save()
+                WindUI:Notify({Title = "Mode", Content = "Changed to: " .. val, Duration = 2, Icon = "layers"})
+            end
+        })
 
-    Farm:Slider({
-        Title    = "Visual speed",
-        Desc     = "Higher = faster real-scratch animation (visual mode only).",
-        Value    = { Min = 1, Max = 10, Default = S.visSpeed },
-        Step     = 1,
-        Callback = function(v)
-            S.visSpeed = v
-            Config:Set("SL_VisSpeed", v); Config:Save()
-        end
-    })
+        Farm:Slider({
+            Title    = "Visual speed",
+            Desc     = "Higher = faster real-scratch animation (visual mode only).",
+            Value    = { Min = 1, Max = 10, Default = S.visSpeed },
+            Step     = 1,
+            Callback = function(v)
+                S.visSpeed = v
+                Config:Set("SL_VisSpeed", v); Config:Save()
+            end
+        })
 
-    Farm:Paragraph({
-        Title = "Mode info",
-        Desc  = "• Instant - uses remotes, invisible, very fast.\n• Visual - opens tickets, plays the real scratch animation.\n• Visual mode is much slower but looks legit.",
-        Image = "info", ImageSize = 26,
-    })
+        Farm:Paragraph({
+            Title = "Mode info",
+            Desc  = "• Instant - uses remotes, invisible, very fast.\n• Visual - opens tickets, plays the real scratch animation.\n• Visual mode is much slower but looks legit.",
+            Image = "info", ImageSize = 26,
+        })
 
-    Farm:Divider()
-    Farm:Section({ Title = "Live status", Icon = "activity" })
+        Farm:Divider()
+        Farm:Section({ Title = "Live status", Icon = "activity" })
 
-    local statusPara  = Farm:Paragraph({ Title = "Status",  Desc = "status: idle", Image = "circle",      ImageSize = 18 })
-    local sessionPara = Farm:Paragraph({ Title = "Session", Desc = "session: +$0", Image = "trending-up", ImageSize = 18 })
-    local balancePara = Farm:Paragraph({ Title = "Balance", Desc = "balance: $?",  Image = "wallet",      ImageSize = 18 })
+        local statusPara  = Farm:Paragraph({ Title = "Status",  Desc = "status: idle", Image = "circle",      ImageSize = 18 })
+        local sessionPara = Farm:Paragraph({ Title = "Session", Desc = "session: +$0", Image = "trending-up", ImageSize = 18 })
+        local balancePara = Farm:Paragraph({ Title = "Balance", Desc = "balance: $?",  Image = "wallet",      ImageSize = 18 })
 
-    task.spawn(function()
-        while alive() do
-            pcall(function()
-                statusPara:SetDesc("status: " .. S.status)
-                sessionPara:SetDesc(("session: +$%d"):format(math.floor(S.earned)))
-                local ls = LocalPlayer:FindFirstChild("leaderstats")
-                local m  = ls and ls:FindFirstChild("Money")
-                balancePara:SetDesc("balance: $" .. tostring(m and m.Value or "?"))
-            end)
-            task.wait(0.5)
-        end
+        task.spawn(function()
+            while alive() do
+                pcall(function()
+                    statusPara:SetDesc("status: " .. S.status)
+                    sessionPara:SetDesc(("session: +$%d"):format(math.floor(S.earned)))
+                    local ls = LocalPlayer:FindFirstChild("leaderstats")
+                    local m  = ls and ls:FindFirstChild("Money")
+                    balancePara:SetDesc("balance: $" .. tostring(m and m.Value or "?"))
+                end)
+                task.wait(0.5)
+            end
+        end)
     end)
 end
 
 -- ====================== BUY TAB ======================
-do
+if BuyTab then
     local Buy = BuyTab
 
-    Buy:Section({ Title = "Auto buy tickets", Icon = "shopping-cart" })
+    pcall(function()
+        Buy:Section({ Title = "Auto buy tickets", Icon = "shopping-cart" })
 
-    Buy:Toggle({
-        Title    = "Auto buy tickets",
-        Desc     = "Continuously buys tickets while the table has space.",
-        Value    = S.autoBuy,
-        Callback = function(v)
-            S.autoBuy = v
-            Config:Set("SL_AutoBuy", v); Config:Save()
-            if v then refreshBuyList(true) end
-            WindUI:Notify({Title = "Auto buy", Content = v and "Enabled" or "Disabled", Duration = 3, Icon = "shopping-cart"})
-        end
-    })
+        Buy:Toggle({
+            Title    = "Auto buy tickets",
+            Desc     = "Continuously buys tickets while the table has space.",
+            Value    = S.autoBuy,
+            Callback = function(v)
+                S.autoBuy = v
+                Config:Set("SL_AutoBuy", v); Config:Save()
+                if v then refreshBuyList(true) end
+                WindUI:Notify({Title = "Auto buy", Content = v and "Enabled ✓" or "Disabled ✗", Duration = 3, Icon = "shopping-cart"})
+            end
+        })
 
-    refreshBuyList(true)
-    local dropdownItems = { "Best affordable" }
-    for _, e in ipairs(buyList) do dropdownItems[#dropdownItems + 1] = e.name end
+        refreshBuyList(true)
+        local dropdownItems = { "Best affordable" }
+        for _, e in ipairs(buyList) do dropdownItems[#dropdownItems + 1] = e.name end
 
-    Buy:Dropdown({
-        Title    = "Ticket type",
-        Desc     = "Best affordable buys the most expensive you can afford.",
-        Values   = dropdownItems,
-        Multi    = false,
-        Value    = S.buyType,
-        Callback = function(v)
-            local val = (type(v) == "table" and v[1]) or v or "Best affordable"
-            S.buyType = val
-            Config:Set("SL_BuyType", S.buyType); Config:Save()
-        end
-    })
+        Buy:Dropdown({
+            Title    = "Ticket type",
+            Desc     = "Best affordable buys the most expensive you can afford.",
+            Values   = dropdownItems,
+            Multi    = false,
+            Value    = S.buyType,
+            Callback = function(v)
+                local val = (type(v) == "table" and v[1]) or v or "Best affordable"
+                S.buyType = val
+                Config:Set("SL_BuyType", S.buyType); Config:Save()
+                WindUI:Notify({Title = "Buy Type", Content = "Set to: " .. val, Duration = 2, Icon = "tag"})
+            end
+        })
 
-    Buy:Toggle({
-        Title    = "Wash plates when broke",
-        Desc     = "Falls back to free plate washing if you can't afford tickets.",
-        Value    = S.plateFallback,
-        Callback = function(v)
-            S.plateFallback = v
-            Config:Set("SL_PlateFallback", v); Config:Save()
-        end
-    })
+        Buy:Toggle({
+            Title    = "Wash plates when broke",
+            Desc     = "Falls back to free plate washing if you can't afford tickets.",
+            Value    = S.plateFallback,
+            Callback = function(v)
+                S.plateFallback = v
+                Config:Set("SL_PlateFallback", v); Config:Save()
+            end
+        })
+    end)
 end
 
 -- ====================== PLATES TAB ======================
-do
+if PlatesTab then
     local Plates = PlatesTab
 
-    Plates:Section({ Title = "Day job", Icon = "droplet" })
+    pcall(function()
+        Plates:Section({ Title = "Day job", Icon = "droplet" })
 
-    Plates:Paragraph({
-        Title = "Free money loop",
-        Desc  = "Plates are a free day job.\n• Works even in loan debt.\n• Auto buy Trash Can rebuys the gadget when affordable (resets on prestige).",
-        Image = "info", ImageSize = 26,
-    })
+        Plates:Paragraph({
+            Title = "Free money loop",
+            Desc  = "Plates are a free day job.\n• Works even in loan debt.\n• Auto buy Trash Can rebuys the gadget when affordable (resets on prestige).",
+            Image = "info", ImageSize = 26,
+        })
 
-    Plates:Toggle({
-        Title    = "Auto wash plates",
-        Desc     = "Continuously buys + washes plates for free money.",
-        Value    = S.autoPlates,
-        Callback = function(v)
-            S.autoPlates = v
-            Config:Set("SL_AutoPlates", v); Config:Save()
-            WindUI:Notify({Title = "Auto plates", Content = v and "Enabled" or "Disabled", Duration = 3, Icon = v and "droplet" or "droplet"})
-        end
-    })
+        Plates:Toggle({
+            Title    = "Auto wash plates",
+            Desc     = "Continuously buys + washes plates for free money.",
+            Value    = S.autoPlates,
+            Callback = function(v)
+                S.autoPlates = v
+                Config:Set("SL_AutoPlates", v); Config:Save()
+                WindUI:Notify({Title = "Auto plates", Content = v and "Enabled ✓" or "Disabled ✗", Duration = 3, Icon = "droplet"})
+            end
+        })
 
-    Plates:Toggle({
-        Title    = "Auto buy Trash Can",
-        Desc     = "Auto-rebuys the Trash Can gadget when purchasable.",
-        Value    = S.buyTrash,
-        Callback = function(v)
-            S.buyTrash = v
-            Config:Set("SL_BuyTrash", v); Config:Save()
-        end
-    })
+        Plates:Toggle({
+            Title    = "Auto buy Trash Can",
+            Desc     = "Auto-rebuys the Trash Can gadget when purchasable.",
+            Value    = S.buyTrash,
+            Callback = function(v)
+                S.buyTrash = v
+                Config:Set("SL_BuyTrash", v); Config:Save()
+            end
+        })
+    end)
 end
 
 -- ====================== SETTINGS TAB ======================
-do
+if Main3 then
     local Settings = Main3
 
-    Settings:Divider()
-    Settings:Section({Title = "Save Config", Icon = "save"})
+    pcall(function()
+        Settings:Divider()
+        Settings:Section({Title = "Save Config", Icon = "save"})
 
-    Settings:Button({
-        Title    = "Save Config (NOW)",
-        Desc     = "Saves all current settings immediately.",
-        Callback = function()
-            Config:Save()
-            WindUI:Notify({Title = "Config Saved", Content = "Config saved successfully!", Duration = 2, Icon = "save"})
-        end
-    })
-
-    local AutoSaveEnabled = Config:Get("AutoSaveEnabled", true)
-    local AutoSaveDelay   = Config:Get("AutoSaveDelay",   15)
-
-    Settings:Toggle({
-        Title    = "Auto Save Config",
-        Desc     = "Automatically saves config at set interval.",
-        Value    = AutoSaveEnabled,
-        Callback = function(state)
-            AutoSaveEnabled = state
-            Config:Set("AutoSaveEnabled", state); Config:Save()
-            if state then Config:AutoSave(AutoSaveDelay) else Config:AutoSave(0) end
-        end
-    })
-
-    Settings:Input({
-        Title       = "Delay Save Config",
-        Value       = tostring(AutoSaveDelay),
-        Placeholder = "Default: 15",
-        Callback    = function(text)
-            local num = tonumber(text)
-            if num and num >= 1 then
-                AutoSaveDelay = num
-                Config:Set("AutoSaveDelay", num); Config:Save()
-                if AutoSaveEnabled then Config:AutoSave(num) end
-                WindUI:Notify({Title = "Config Delay", Content = "Set to " .. num .. "s", Duration = 2, Icon = "clock"})
-            else
-                WindUI:Notify({Title = "Invalid", Content = "Enter a number >= 1", Duration = 3, Icon = "alert-triangle"})
+        Settings:Button({
+            Title    = "Save Config (NOW)",
+            Desc     = "Saves all current settings immediately.",
+            Callback = function()
+                Config:Save()
+                WindUI:Notify({Title = "Config Saved ✓", Content = "Settings saved successfully!", Duration = 2, Icon = "save"})
             end
-        end
-    })
+        })
 
-    Settings:Section({Title = "Server Status", Icon = "server"})
+        local AutoSaveEnabled = Config:Get("AutoSaveEnabled", true)
+        local AutoSaveDelay   = Config:Get("AutoSaveDelay",   15)
 
-    Settings:Button({
-        Title    = "Serverhop",
-        Desc     = "Teleports you to a different random server.",
-        Callback = function()
-            local servers = {}
-            local success, result = pcall(function()
-                return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"))
-            end)
-            if success and result and result.data then
-                for _, server in ipairs(result.data) do
-                    if server.id ~= game.JobId and server.playing < server.maxPlayers then
-                        table.insert(servers, server.id)
-                    end
+        Settings:Toggle({
+            Title    = "Auto Save Config",
+            Desc     = "Automatically saves config at set interval.",
+            Value    = AutoSaveEnabled,
+            Callback = function(state)
+                AutoSaveEnabled = state
+                Config:Set("AutoSaveEnabled", state); Config:Save()
+                if state then Config:AutoSave(AutoSaveDelay) else Config:AutoSave(0) end
+            end
+        })
+
+        Settings:Input({
+            Title       = "Delay Save Config",
+            Value       = tostring(AutoSaveDelay),
+            Placeholder = "Default: 15",
+            Callback    = function(text)
+                local num = tonumber(text)
+                if num and num >= 1 then
+                    AutoSaveDelay = num
+                    Config:Set("AutoSaveDelay", num); Config:Save()
+                    if AutoSaveEnabled then Config:AutoSave(num) end
+                    WindUI:Notify({Title = "Config Delay", Content = "Set to " .. num .. "s", Duration = 2, Icon = "clock"})
+                else
+                    WindUI:Notify({Title = "Invalid", Content = "Enter a number >= 1", Duration = 3, Icon = "alert-triangle"})
                 end
             end
-            if #servers > 0 then
-                WindUI:Notify({Title = "Serverhop", Content = "Teleporting...", Duration = 2, Icon = "server"})
-                task.wait(1)
-                TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], LocalPlayer)
-            else
-                WindUI:Notify({Title = "Serverhop Failed", Content = "No available servers.", Duration = 3, Icon = "alert-triangle"})
-            end
-        end
-    })
+        })
 
-    Settings:Button({
-        Title    = "Rejoin",
-        Desc     = "Rejoins the current game server.",
-        Callback = function()
-            WindUI:Notify({Title = "Rejoin", Content = "Rejoining...", Duration = 2, Icon = "refresh-cw"})
-            task.wait(1)
-            TeleportService:Teleport(game.PlaceId, LocalPlayer)
-        end
-    })
+        Settings:Section({Title = "Server Status", Icon = "server"})
+
+        Settings:Button({
+            Title    = "Serverhop",
+            Desc     = "Teleports you to a different random server.",
+            Callback = function()
+                local servers = {}
+                local success, result = pcall(function()
+                    return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"))
+                end)
+                if success and result and result.data then
+                    for _, server in ipairs(result.data) do
+                        if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                            table.insert(servers, server.id)
+                        end
+                    end
+                end
+                if #servers > 0 then
+                    WindUI:Notify({Title = "Serverhop", Content = "Teleporting...", Duration = 2, Icon = "server"})
+                    task.wait(1)
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], LocalPlayer)
+                else
+                    WindUI:Notify({Title = "Serverhop Failed", Content = "No available servers.", Duration = 3, Icon = "alert-triangle"})
+                end
+            end
+        })
+
+        Settings:Button({
+            Title    = "Rejoin",
+            Desc     = "Rejoins the current game server.",
+            Callback = function()
+                WindUI:Notify({Title = "Rejoin", Content = "Rejoining...", Duration = 2, Icon = "refresh-cw"})
+                task.wait(1)
+                TeleportService:Teleport(game.PlaceId, LocalPlayer)
+            end
+        })
+    end)
 end
 
 -- ====================== TEARDOWN ======================
-do
-    local function teardown()
-        getgenv()._WH_SL_gen = -1
-        pcall(function() idleConn:Disconnect() end)
-    end
-    if WindUI.OnExit then
-        local prev = WindUI.OnExit
-        WindUI.OnExit = function()
-            pcall(teardown)
-            pcall(prev)
-        end
+local function teardown()
+    getgenv()._WH_SL_gen = -1
+    pcall(function() idleConn:Disconnect() end)
+end
+
+if WindUI and WindUI.OnExit then
+    local prev = WindUI.OnExit
+    WindUI.OnExit = function()
+        pcall(teardown)
+        pcall(prev)
     end
 end
 
+-- ====================== SUCCESS MESSAGE ======================
 print("[DYHUB] " .. version .. " | " .. ver .. " loaded successfully!")
 print("[DYHUB] Config active | Auto saving every " .. tostring(Config:Get("AutoSaveDelay", 15)) .. "s")
