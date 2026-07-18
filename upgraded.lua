@@ -59,7 +59,7 @@ local FreeVersion    = "Free Version"
 local PremiumVersion = "Premium Version"
 
 local function checkVersion(playerName)
-    local url = "https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/listpremium.lua"
+    local url = "dyhub-api.lovable.app:3000"
     local success, response = pcall(function() return game:HttpGet(url) end)
     if not success then return FreeVersion end
     local func = loadstring(response)
