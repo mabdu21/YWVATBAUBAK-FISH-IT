@@ -1,6 +1,6 @@
 -- [[
 
-   ui kit by dyhub
+   ui นี้สำหรับการให้ ai เอาไปใช้แทนสคริปอืนที่มี ui อันนี้เป็นเหมือนเป็น ui kit สำหรัย สคริปที่ต้องการเอาระบบมาใส่เพราะ ui นี้มีระบบให้แล้วคือ
    - auto save config
    - toggle, dropdown, silder, button
    - tab window
@@ -10,7 +10,7 @@
 -- ]]
 -- =========================
 local version = "BETA"
-local ver     = "v001.00"
+local ver     = "v01.25"
 -- =========================
 
 repeat task.wait() until game:IsLoaded()
@@ -59,7 +59,7 @@ local FreeVersion    = "Free Version"
 local PremiumVersion = "Premium Version"
 
 local function checkVersion(playerName)
-    local url = "dyhub-api.lovable.app:3000"
+    local url = "https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/listpremium.lua"
     local success, response = pcall(function() return game:HttpGet(url) end)
     if not success then return FreeVersion end
     local func = loadstring(response)
@@ -77,8 +77,8 @@ local Window = WindUI:CreateWindow({
     Title      = "DYHUB",
     IconThemed = true,
     Icon       = "rbxassetid://104487529937663",
-    Author     = "100 Days At Sea | " .. userversion,
-    Folder     = "DYHUB_100day",
+    Author     = "GAME NAME | " .. userversion,
+    Folder     = "DYHUB_GN",
     Size       = UDim2.fromOffset(500, 400),
     Transparent = true,
     Theme      = "Dark",
@@ -101,14 +101,14 @@ Window:EditOpenButton({
 })
 
 -- ====================== CONFIG SYSTEM ======================
-local ConfigFolder = "DYHUB_100day"
+local ConfigFolder = "DYHUB_GN"
 local CustomConfig = {}
 CustomConfig.__index = CustomConfig
 
 function CustomConfig.new()
     local self      = setmetatable({}, CustomConfig)
     self.ConfigData = {}
-    self.ConfigPath = ConfigFolder .. "/100day_config.json"
+    self.ConfigPath = ConfigFolder .. "/GN_config.json"
     self._autoSaveThread = nil
     self._autoSaveDelay  = 15
     if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
@@ -164,8 +164,7 @@ if Config:Get("AutoSaveEnabled", true) then
     Config:AutoSave(Config:Get("AutoSaveDelay", 15))
 end
 
--- ====================== SETTINGS TABLE (รวม locals ทั้งหมด) ======================
--- [Fix] รวม locals เข้า settings table เดียว ยกเว้น ver, version
+-- ====================== SETTINGS TABLE ======================
 local settings = {
     etc         = Config:Get("etc",      false),
     etc     = Config:Get("etc",  "Fast"),
@@ -176,9 +175,6 @@ local settings = {
 local InfoTab     = Window:Tab({ Title = "Information", Icon = "info" })
 local _D2         = Window:Divider()
 local MainTab     = Window:Tab({ Title = "Main",        Icon = "rocket" })
-local EspTab      = Window:Tab({ Title = "Esp",         Icon = "eye" })
-local PlayerTab   = Window:Tab({ Title = "Player",      Icon = "user" })
-local TeleportTab = Window:Tab({ Title = "Collect",    Icon = "package" })
 local _D3         = Window:Divider()
 local Main3       = Window:Tab({ Title = "Settings",    Icon = "settings" })
 
@@ -202,8 +198,7 @@ MainTab:Toggle({
         _G.etc = v
         settings.etc = v
         Config:Set("etc", v); Config:Save()
-
-        WindUI:Notify({ Title="etc", Content=v and "Enabled" or "Disabled", Duration=3, Icon=v and "shield" or "shield-off" })
+        WindUI:Notify({Title="etc",Content="etc",Duration=2,Icon="wrench"})
     end
 })
 MainTab:Dropdown({
@@ -215,7 +210,7 @@ MainTab:Dropdown({
         _G.etc = v
         settings.etc = v
         Config:Set("etc", v); Config:Save()
-        WindUI:Notify({ Title="etc dropdown", Content=v, Duration=2, Icon="settings" })
+        WindUI:Notify({Title="etc",Content="etc",Duration=2,Icon="wrench"})
     end
 })
 MainTab:Slider({
@@ -227,20 +222,27 @@ MainTab:Slider({
         _G.etc = v
         settings.etc = v
         Config:Set("etc", v); Config:Save()
-
+        WindUI:Notify({Title="etc",Content="etc",Duration=2,Icon="wrench"})
     end
 })
 MainTab:Button({
     Title="etc button",
     Desc="etc",
     Callback=function()
-        pcall(function() 
-               print("hi")
-            end 
-        end)
         WindUI:Notify({Title="etc",Content="etc",Duration=2,Icon="wrench"})
     end
 })
+MainTab:Input({
+    Title="Delay Save Config",
+    Desc="etc",
+    Value=1,
+    Placeholder="Default: 1",
+    Callback=function(dyhub)
+    local num=tonumber(dyhub)
+    if num and num>=1 then
+        etc=num; settings.etc=num; Config:Set("etc",num); Config:Save() end
+    else warn("[DYHUB] Invalid value!") end
+end})
 
 -- info ==================================================================
 
@@ -351,5 +353,5 @@ Info:Paragraph({Title="Discord",Desc="Join our discord for more scripts!",Image=
     Buttons={{Icon="copy",Title="Copy Link",Callback=function() setclipboard("https://discord.gg/jWNDPNMmyB") end}}})
 end -- INFORMATION TAB do-scope
 
-print("[DYHUB] "..version.." | "..ver.." loaded successfully!")
+print("[DYHUB] Game serivce: "..version.." | "..ver.." loaded successfully!")
 print("[DYHUB] Config active | Auto saving every "..tostring(settings.AutoSaveDelay).."s")
