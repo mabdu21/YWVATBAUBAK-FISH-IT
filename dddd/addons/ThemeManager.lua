@@ -228,7 +228,7 @@ do
     end
 
     function ThemeManager:LoadDefault()
-        local theme = "Bunny"
+        local theme = "Jester"
         local content = isfile(self.Folder .. "/themes/default.txt") and readfile(self.Folder .. "/themes/default.txt")
 
         local isDefault = true
