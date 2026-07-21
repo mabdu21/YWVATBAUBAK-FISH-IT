@@ -5,7 +5,7 @@ end
 game.Players.LocalPlayer.Character.Humanoid.Health = 0
 
 game:GetService('Players').LocalPlayer.CharacterAdded:Wait()
-loadstring(game:HttpGet('https://raw.githubusercontent.com/mabdu21/YWVATBAUBAK-FISH-IT/refs/heads/main/dddd/dhdhdhdhdh/ap'))()
+loadstring(game:HttpGet('https://raw.githubusercontent.com/mabdu21/YWVATBAUBAK-FISH-IT/refs/heads/main/dddd/dhdhdhdhdh/ad'))()
 
 loadstring(game:HttpGet('https://raw.githubusercontent.com/mabdu21/YWVATBAUBAK-FISH-IT/refs/heads/main/dddd/dhdhdhdhdh/fp'))()
 
