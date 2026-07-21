@@ -1,0 +1,2976 @@
+
+local v1 = game:GetService("Players")
+local vu2 = game:GetService("StarterGui")
+local vu3 = v1.LocalPlayer
+local v4 = game:HttpGet("https://raw.githubusercontent.com/yuvic123/StandLIST/refs/heads/main/list")
+local v5 = game:HttpGet("https://raw.githubusercontent.com/yuvic123/StandLIST/refs/heads/main/Stand%20Bypass%20Premium")
+local vu6 = {}
+local function v14(pu7)
+    local v8, v9 = pcall(function()
+        return loadstring(pu7)()
+    end)
+    if v8 and type(v9) == "table" then
+        local v10, v11, v12 = ipairs(v9)
+        while true do
+            local v13
+            v12, v13 = v10(v11, v12)
+            if v12 == nil then
+                break
+            end
+            table.insert(vu6, v13)
+        end
+    end
+end
+v14(v4)
+v14(v5)
+local function vu25()
+    local v15, v16 = pcall(function()
+        return vu2:GetCore("GetBlockedUserIds")
+    end)
+    if not v15 or typeof(v16) ~= "table" then
+        return false
+    end
+    local v17, v18, v19 = ipairs(vu6)
+    while true do
+        local v20
+        v19, v20 = v17(v18, v19)
+        if v19 == nil then
+            break
+        end
+        local v21, v22, v23 = ipairs(v16)
+        while true do
+            local v24
+            v23, v24 = v21(v22, v23)
+            if v23 == nil then
+                break
+            end
+            if v20 == v24 then
+                return true, v20
+            end
+        end
+    end
+    return false
+end
+task.spawn(function()
+    while task.wait(2) do
+        local v26, v27 = vu25()
+        if v26 then
+            vu3:Kick("You blocked a protected user (UserId: " .. v27 .. ")")
+            break
+        end
+    end
+end)
+local vu28 = {
+    FPS_BOOSTER = ScriptSettings.Configs.CameraOnMain,
+    prefix = ScriptSettings.Configs.Prefix,
+    CREATOR = false,
+    accounts = {
+        ["Stand Creator"] = ScriptSettings.MainAccount
+    },
+    commands = getgenv().ScriptCommands
+}
+if not game:IsLoaded() then
+    game.Loaded:Wait()
+end
+while not game.Players.LocalPlayer.Character:FindFirstChild("FULLY_LOADED_CHAR") do
+    task.wait()
+end
+print()
+local vu29 = getgenv().ScriptSettings
+while not vu29.Configs do
+    task.wait()
+end
+if setfpscap and vu29.FPSCap ~= 0 then
+    setfpscap(vu29.Configs.FPSCap)
+end
+local vu30 = game:GetService("Players")
+local vu31 = game:GetService("RunService")
+local _ = vu30.LocalPlayer
+local vu32 = workspace.CurrentCamera
+local function v34()
+    vu31.Heartbeat:Connect(function()
+        if vu29.Configs.CameraOnMain then
+            local v33 = vu30:FindFirstChild(vu29.MainAccount)
+            if v33 and v33.Character and (v33.Character:FindFirstChild("Humanoid") and vu32.CameraSubject ~= v33.Character.Humanoid) then
+                vu32.CameraSubject = v33.Character.Humanoid
+                vu32.CameraType = Enum.CameraType.Custom
+            end
+        end
+    end)
+end
+if vu29.Configs.CameraOnMain then
+    v34()
+end
+local vu35 = loadstring(game:HttpGet("https://raw.githubusercontent.com/yuvic123/StandLIST/refs/heads/main/list"))()
+local vu36 = loadstring(game:HttpGet("https://raw.githubusercontent.com/yuvic123/StandLIST/main/BypassPremium"))()
+local v37 = loadstring(game:HttpGet("https://raw.githubusercontent.com/yuvic123/StandLIST/refs/heads/main/Blacklisted"))()
+local v38 = game:GetService("RbxAnalyticsService"):GetClientId()
+if table.find(v37, tostring(v38)) then
+    game.Players.LocalPlayer:Kick("You have been blacklisted from this script")
+end
+loadstring(game:HttpGet("https://raw.githubusercontent.com/yuvic123/list/refs/heads/main/list"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/yuvic123/Unthinkable-Present/refs/heads/main/UP"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/YuvicHaha/batoon/refs/heads/main/bat"))()
+local vu39 = game:GetService("TextChatService")
+function chat(pu40, _)
+    local vu41 = vu39:FindFirstChild("TextChannels")
+    if vu41 then
+        vu41 = vu41:FindFirstChild("RBXGeneral")
+    end
+    if vu41 then
+        local v42, v43 = pcall(function()
+            vu41:SendAsync(pu40)
+        end)
+        if not v42 then
+            warn("Failed to send general chat message:", v43)
+        end
+    else
+        warn("RBXGeneral channel not found.")
+    end
+end
+if tonumber(vu28.accounts["Stand Creator"]) == game.Players.LocalPlayer.UserId and vu28.CREATOR ~= true then
+    chat("Seems like you\'ve executed on your main account.")
+    return
+end
+if getgenv().ScriptLoadedAlready then
+    chat("Already executed..")
+    return
+end
+local vu44 = game:GetService("RunService")
+local vu45 = game:GetService("ReplicatedStorage")
+local v46 = game:GetService("Players").LocalPlayer
+local vu47 = {
+    ["[Flintlock]"] = 0,
+    ["[Rifle]"] = 1
+}
+local function vu55(pu48)
+    coroutine.wrap(function()
+        while pu48 and pu48.Parent do
+            local v49 = pu48
+            local v50, v51, v52 = pairs(v49:GetChildren())
+            while true do
+                local v53
+                v52, v53 = v50(v51, v52)
+                if v52 == nil then
+                    break
+                end
+                if v53:IsA("Tool") and v53:FindFirstChild("Ammo") then
+                    local v54 = v53.Ammo
+                    if (vu47[v53.Name] or 1) >= v54.Value then
+                        vu45.MainEvent:FireServer("Reload", v53)
+                        task.wait(3.7)
+                    end
+                end
+            end
+            vu44.RenderStepped:Wait()
+        end
+    end)()
+end
+if v46.Character then
+    vu55(v46.Character)
+end
+v46.CharacterAdded:Connect(function(p56)
+    vu55(p56)
+end)
+workspace.FallenPartsDestroyHeight = - math.huge
+local vu57 = false
+game:GetService("Players").LocalPlayer.CharacterAdded:Connect(function()
+    vu57 = false
+end)
+getgenv().fireclickdetector = function(p58, _, _)
+    if not vu57 then
+        vu57 = true
+        game:GetService("VirtualInputManager"):SendKeyEvent(true, 101, false, game:GetService("Players").LocalPlayer)
+    end
+    local vu59 = p58:FindFirstChild("ClickDetector") or p58
+    local vu60 = vu59.Parent
+    local vu61 = Instance.new("Part")
+    vu61.Transparency = 1
+    vu61.Size = Vector3.new(30, 30, 30)
+    vu61.Anchored = true
+    vu61.CanCollide = false
+    vu61.Parent = workspace
+    vu59.Parent = vu61
+    vu59.MaxActivationDistance = math.huge
+    local vu62 = game:GetService("RunService").Heartbeat:Connect(function()
+        vu61.CFrame = workspace.Camera.CFrame * CFrame.new(0, 0, - 20) * CFrame.new(workspace.Camera.CFrame.LookVector)
+        game:GetService("VirtualUser"):ClickButton1(Vector2.new(20, 20), workspace.CurrentCamera.CFrame)
+    end)
+    vu59.MouseClick:Once(function()
+        vu62:Disconnect()
+        vu59.Parent = vu60
+        vu61:Destroy()
+    end)
+    task.delay(3, function()
+        if vu62.Connected then
+            vu62:Disconnect()
+            vu59.Parent = vu60
+            vu61:Destroy()
+        end
+    end)
+end
+getgenv().ScriptLoadedAlready = true
+local v63, v64, v65 = pairs(vu28.commands)
+while true do
+    local v66
+    v65, v66 = v63(v64, v65)
+    if v65 == nil then
+        break
+    end
+    vu28.commands[v65] = string.lower(v66)
+end
+local v67, v68, v69 = pairs(vu29.Configs)
+while true do
+    local v70, v71 = v67(v68, v69)
+    if v70 == nil then
+        break
+    end
+    v69 = v70
+    if type(v71) == "string" then
+        vu29.Configs[v70] = string.lower(v71)
+    end
+end
+function getShopItem(p72)
+    local v73 = game:GetService("Workspace").Ignored.Shop
+    local v74, v75, v76 = pairs(v73:GetChildren())
+    while true do
+        local v77
+        v76, v77 = v74(v75, v76)
+        if v76 == nil then
+            break
+        end
+        if v77.Name:match("%[" .. p72 .. "%]") then
+            return v77
+        end
+    end
+    return nil
+end
+local vu78 = game.Players
+local vu79 = vu78.LocalPlayer
+local vu80 = vu79.Character
+local _ = vu80.BodyEffects
+local v81 = {
+    mil = Vector3.new(38.92394256591797, 50.73406219482422, - 817.4947509765625),
+    military = Vector3.new(38.92394256591797, 50.73406219482422, - 817.4947509765625),
+    rev = Vector3.new(- 638.674194, 21.7201862, - 135.108582, - 1, 2.72464238e-8, 0.000228257602, 2.72418816e-8, 1, - 1.98963797e-8, - 0.000228257602, - 1.98901606e-8, - 1),
+    revolver = Vector3.new(- 638.674194, 21.7201862, - 135.108582, - 1, 2.72464238e-8, 0.000228257602, 2.72418816e-8, 1, - 1.98963797e-8, - 0.000228257602, - 1.98901606e-8, - 1),
+    db = Vector3.new(- 1043.89465, 21.7201843, - 271.673889, - 0.999944091, 1.96100682e-8, - 0.01057149, 1.93148484e-8, 1, 2.80281451e-8, 0.01057149, 2.78223915e-8, - 0.999944091),
+    double = Vector3.new(- 1043.89465, 21.7201843, - 271.673889, - 0.999944091, 1.96100682e-8, - 0.01057149, 1.93148484e-8, 1, 2.80281451e-8, 0.01057149, 2.78223915e-8, - 0.999944091),
+    bank = Vector3.new(- 432.1439208984375, 38.9649658203125, - 284.1016540527344),
+    ufo = Vector3.new(80.11156463623047, 138.96067810058594, - 660.760498046875),
+    downhill = Vector3.new(- 557.683105, 7.97003078, - 734.802307, 0.0412703343, - 2.03053907e-9, 0.999148011, - 2.44322979e-10, 1, 2.0423625e-9, - 0.999148011, - 3.28403804e-10, 0.0412703343),
+    food1 = Vector3.new(- 333.203979, 23.6528339, - 297.603149, - 0.049722299, - 1.0099032e-7, - 0.998763084, 1.96874037e-8, 1, - 1.02095505e-7, 0.998763084, - 2.47394762e-8, - 0.049722299),
+    fired = Vector3.new(- 164.864639, 21.7201881, - 126.428085, - 0.999782085, 2.36693207e-8, - 0.0208756141, 2.19475051e-8, 1, 8.27088371e-8, 0.0208756141, 8.22326456e-8, - 0.999782085),
+    fit = Vector3.new(- 75.0085831, 21.7251854, - 592.956238, 0.999627769, - 4.65461847e-9, - 0.0272818822, 3.86121979e-9, 1, - 2.91342079e-8, 0.0272818822, 2.90180218e-8, 0.999627769),
+    fitness = Vector3.new(- 75.0085831, 21.7251854, - 592.956238, 0.999627769, - 4.65461847e-9, - 0.0272818822, 3.86121979e-9, 1, - 2.91342079e-8, 0.0272818822, 2.90180218e-8, 0.999627769),
+    firea = Vector3.new(98.2835312, 22.7201862, - 334.61615, - 0.734660625, - 7.3709332e-9, 0.678434789, 4.45302462e-9, 1, 1.56866875e-8, - 0.678434789, 1.45454786e-8, - 0.734660625),
+    firearmor = Vector3.new(98.2835312, 22.7201862, - 334.61615, - 0.734660625, - 7.3709332e-9, 0.678434789, 4.45302462e-9, 1, 1.56866875e-8, - 0.678434789, 1.45454786e-8, - 0.734660625),
+    food2 = Vector3.new(299.055908, 49.2528534, - 612.770081, 0.999209464, 3.60684496e-8, - 0.039754983, - 3.22682219e-8, 1, 9.62329096e-8, 0.039754983, - 9.48740109e-8, 0.999209464),
+    uphill = Vector3.new(482.059845, 47.975174, - 597.523682, 0.996277153, 4.24855067e-8, - 0.0862079561, - 4.52658568e-8, 1, - 3.02968814e-8, 0.0862079561, 3.40863657e-8, 0.996277153),
+    cage = Vector3.new(527.624878, 47.9701843, - 106.50116, 0.997367501, - 3.66628612e-8, - 0.0725129023, 3.74486184e-8, 1, 9.47652712e-9, 0.0725129023, - 1.21670878e-8, 0.997367501),
+    church = Vector3.new(205.289032, 21.7201843, - 87.1190186, - 0.999999166, - 8.26678246e-8, - 0.00129823678, - 8.27640037e-8, 1, 7.40298844e-8, 0.00129823678, 7.41372688e-8, - 0.999999166),
+    jail = Vector3.new(- 330.228607, 21.7201805, - 79.0901031, 0.999956071, 4.96978529e-8, - 0.0093738921, - 4.91057648e-8, 1, 6.33935997e-8, 0.0093738921, - 6.29305035e-8, 0.999956071),
+    prison = Vector3.new(- 330.228607, 21.7201805, - 79.0901031, 0.999956071, 4.96978529e-8, - 0.0093738921, - 4.91057648e-8, 1, 6.33935997e-8, 0.0093738921, - 6.29305035e-8, 0.999956071),
+    foodr = Vector3.new(- 322.097656, 80.4040833, - 302.826111, - 0.0615694113, 1.762127e-9, 0.998102784, 4.61417571e-8, 1, 1.08084441e-9, - 0.998102784, 4.61207641e-8, - 0.0615694113),
+    foodroof = Vector3.new(- 322.097656, 80.4040833, - 302.826111, - 0.0615694113, 1.762127e-9, 0.998102784, 4.61417571e-8, 1, 1.08084441e-9, - 0.998102784, 4.61207641e-8, - 0.0615694113),
+    school = Vector3.new(- 596.092407, 68.0951767, 322.415924, 0.548425019, - 2.28776926e-8, - 0.83619976, 3.45167317e-9, 1, - 2.50953303e-8, 0.83619976, 1.08766178e-8, 0.548425019),
+    [v4] = Vector3.new(- 931.958313, - 28.5298119, 561.678772, - 0.999808371, - 3.76621756e-8, - 0.0195772182, - 3.71941127e-8, 1, - 2.42727385e-8, 0.0195772182, - 2.35399309e-8, - 0.999808371),
+    higharmor = Vector3.new(- 931.958313, - 28.5298119, 561.678772, - 0.999808371, - 3.76621756e-8, - 0.0195772182, - 3.71941127e-8, 1, - 2.42727385e-8, 0.0195772182, - 2.35399309e-8, - 0.999808371),
+    cas = Vector3.new(- 917.82135, 21.2251816, - 176.320694, - 0.102753371, 6.54587851e-8, - 0.994706869, 2.80752097e-8, 1, 6.29069348e-8, 0.994706869, - 2.14627036e-8, - 0.102753371),
+    casino = Vector3.new(- 917.82135, 21.2251816, - 176.320694, - 0.102753371, 6.54587851e-8, - 0.994706869, 2.80752097e-8, 1, 6.29069348e-8, 0.994706869, - 2.14627036e-8, - 0.102753371),
+    skate = Vector3.new(- 790.582642, 21.9700089, - 495.017761, - 0.449155867, - 1.61434404e-8, - 0.893453419, 2.57799027e-8, 1, - 3.10286303e-8, 0.893453419, - 3.69698334e-8, - 0.449155867),
+    skatepark = Vector3.new(- 790.582642, 21.9700089, - 495.017761, - 0.449155867, - 1.61434404e-8, - 0.893453419, 2.57799027e-8, 1, - 3.10286303e-8, 0.893453419, - 3.69698334e-8, - 0.449155867),
+    park = Vector3.new(- 260.346985, 22.1200542, - 756.058411, 0.0526538678, - 4.66212668e-8, - 0.998612821, - 8.09210334e-8, 1, - 5.09527531e-8, 0.998612821, 8.3491642e-8, 0.0526538678),
+    taco = Vector3.new(573.98584, 51.0315971, - 478.621582, - 0.0247627739, 5.79425148e-8, - 0.999693334, 2.19785923e-9, 1, 5.79058437e-8, 0.999693334, - 7.63275776e-10, - 0.0247627739),
+    grave = Vector3.new(157.339783, 21.7201862, 78.4517593, - 0.320198596, 1.50120414e-8, - 0.947350442, - 3.45387718e-8, 1, 2.75202368e-8, 0.947350442, 4.15322639e-8, - 0.320198596),
+    graveyard = Vector3.new(157.339783, 21.7201862, 78.4517593, - 0.320198596, 1.50120414e-8, - 0.947350442, - 3.45387718e-8, 1, 2.75202368e-8, 0.947350442, 4.15322639e-8, - 0.320198596),
+    train = Vector3.new(- 428.553986, - 21.2798138, 110.969559, 0.999346256, - 1.02114349e-7, 0.036153432, 9.94641169e-8, 1, 7.51035998e-8, - 0.036153432, - 7.14585298e-8, 0.999346256),
+    station = Vector3.new(- 428.553986, - 21.2798138, 110.969559, 0.999346256, - 1.02114349e-7, 0.036153432, 9.94641169e-8, 1, 7.51035998e-8, - 0.036153432, - 7.14585298e-8, 0.999346256),
+    trainstation = Vector3.new(- 428.553986, - 21.2798138, 110.969559, 0.999346256, - 1.02114349e-7, 0.036153432, 9.94641169e-8, 1, 7.51035998e-8, - 0.036153432, - 7.14585298e-8, 0.999346256),
+    rpg = Vector3.new(89.1956406, - 26.7798462, - 271.548737, 0.0118332496, 6.53033609e-8, - 0.999929965, - 6.39634834e-8, 1, 6.45509886e-8, 0.999929965, 6.31951522e-8, 0.0118332496)
+}
+local vu82 = {
+    Creator = nil,
+    teleporting = {
+        teleport = false,
+        place = nil,
+        method = "cart",
+        places = vu28.tpPlaces or v81
+    },
+    autosave = {
+        location = Vector3.new(- 488.47, 49.2254, - 197.183),
+        locations = {
+            foodroof = Vector3.new(- 325.861, 81.0569, - 296.092),
+            foodr = Vector3.new(- 325.861, 81.0569, - 296.092),
+            camera = Vector3.new(- 488.47, 49.2254, - 197.183),
+            ufo = Vector3.new(80.4224, 139.623, - 639.349),
+            water = Vector3.new(- 638.801, 84.9978, - 647.864),
+            tank = Vector3.new(- 638.801, 84.9978, - 647.864),
+            watertank = Vector3.new(- 638.801, 84.9978, - 647.864),
+            fire = Vector3.new(- 151.816, 78.4335, - 93.4502),
+            school = Vector3.new(- 577.714, 68.748, 301.158),
+            theatre = Vector3.new(- 1029.8, 69.223, - 89.2538),
+            movie = Vector3.new(- 1029.8, 69.223, - 89.2538),
+            downhill = Vector3.new(- 579.619, 67.2728, - 682.08),
+            treehouse = Vector3.new(- 78.9301, 55.998, - 242.941),
+            train = Vector3.new(- 465.296, - 20.627, 45.3169),
+            station = Vector3.new(- 465.296, - 20.627, 45.3169),
+            trainstation = Vector3.new(- 465.296, - 20.627, 45.3169)
+        },
+        autosave = false,
+        autoSavePlayers = {}
+    },
+    getback = false,
+    autoheal = false,
+    autoarmor = false,
+    summonSettings = {
+        player = nil,
+        pos = 1.5
+    },
+    loops = {
+        cashfarm = false,
+        kill = false,
+        gunkill = false,
+        summon = true,
+        alwaysView = not vu28.FPS_BOOSTER,
+        disableSummon = false,
+        functionloop = false,
+        autodrop = false
+    },
+    mask = getShopItem("Surgeon Mask"),
+    vars = {
+        target = nil,
+        viewingPlayer = nil
+    },
+    solara = true,
+    killType = nil,
+    resolver = false,
+    meleeSettings = {
+        Weapon = "Combat",
+        purchasePlace = nil,
+        price = nil
+    },
+    gunSettings = {
+        prediction = 0.16,
+        gun = "[Rifle]",
+        orbitspeed = 0.25,
+        orbitlength = 18,
+        buyPosition = getShopItem("Rifle"),
+        ammoPosition = getShopItem("Rifle Ammo"),
+        gunPrice = 0,
+        ammoPrice = 0
+    },
+    whitelistedPlayers = {},
+    Moderators = {
+        3364285702,
+        4073777763,
+        3364285702,
+        4262823434,
+        35785991
+    },
+    BypassPremium = loadstring(game:HttpGet("https://raw.githubusercontent.com/yuvic123/StandLIST/refs/heads/main/Stand%20Bypass%20Premium"))(),
+    premiumShit = {
+        freeze = false,
+        benxed = false,
+        loopkill = false
+    }
+}
+function findc()
+    while task.wait() do
+        pcall(function()
+            local v83 = vu78
+            local v84, v85, v86 = pairs(v83:GetChildren())
+            while true do
+                local v87
+                v86, v87 = v84(v85, v86)
+                if v86 == nil then
+                    break
+                end
+                if tostring(v87.UserId) == tostring(vu28.accounts["Stand Creator"]) or string.lower(tostring(v87.Name)) == string.lower(tostring(vu28.accounts["Stand Creator"])) then
+                    vu82.Creator = v87
+                end
+            end
+        end)
+        if vu82.Creator then
+            break
+        end
+    end
+end
+pcall(findc)
+repeat
+    task.wait()
+until vu82.Creator
+local vu88 = game:GetService("ReplicatedStorage").IM.ANIM
+local vu89 = false
+local vu90 = nil
+local _ = vu82.vars.orbitlength
+local vu91 = false
+local vu92 = 0
+local vu93 = false
+game:GetService("ReplicatedStorage")
+local vu94 = nil
+local v95 = identifyexecutor()
+local vu96 = (v95 == "Solara" or (v95 == "JJSploit" or (v95 == "VegaX" or (v95 == "Arceus X" or v95 == "Nezur")))) and 0.4 or 0.1
+local vu97 = Instance.new("Part")
+vu97.CFrame = CFrame.new(9999, 9999, 9999)
+vu97.Anchored = true
+vu97.Parent = game.Workspace
+function disableLoops()
+    if vu82.killType == "bending" then
+        game:GetService("ReplicatedStorage").MainEvent:FireServer("Grabbing", false)
+    end
+    for _ = 1, 4 do
+        vu82.loops.cashfarm = false
+        vu94 = nil
+        vu89 = false
+        vu82.teleporting.teleport = false
+        vu82.teleporting.place = nil
+        vu82.loops.gunkill = false
+        vu82.loops.kill = false
+        vu82.vars.target = nil
+        vu82.killType = nil
+        vu82.loops.disableSummon = false
+        vu91 = false
+        vu90 = nil
+        vu93 = false
+        vu92 = 0
+        task.wait(0.0125)
+    end
+end
+local vu98 = {
+    paint = "[Paintball Mask] - $66",
+    ninja = "[Ninja Mask] - $66",
+    surgeon = "[Surgeon Mask] - $27",
+    riot = "[Riot Mask] - $66",
+    hockey = "[Hockey Mask] - $66",
+    breathing = "[Breathing Mask] - $66",
+    skull = "[Skull Mask] - $66",
+    pumpkin = "[Pumpkin Mask] - $66"
+}
+local v99 = vu29.Configs.Mask
+local v100, v101, v102 = pairs(vu98)
+local v103 = nil
+local vu104 = nil
+local vu105 = false
+local vu106 = false
+local vu107 = nil
+local vu108 = nil
+local vu109 = - 1.1
+local vu110 = nil
+local vu111 = false
+local vu112 = false
+local vu113 = false
+local vu114 = false
+local vu115 = nil
+local vu116 = nil
+local vu117 = false
+local vu118 = 0
+local vu119 = false
+local vu120 = nil
+local vu121 = false
+local vu122 = false
+local vu123 = 1
+local vu124 = nil
+local vu125 = 0
+local vu126 = false
+while true do
+    local v127
+    v102, v127 = v100(v101, v102)
+    if v102 == nil then
+        v127 = v103
+        break
+    end
+    if v99:find(v102) then
+        break
+    end
+end
+task.wait()
+if v127 then
+    vu82.mask = game:GetService("Workspace").Ignored.Shop[v127]
+end
+local v128 = ({
+    fist = {
+        attackMode = "Combat",
+        message = "Changed attack method to fists."
+    },
+    combat = {
+        attackMode = "Combat",
+        message = "Changed attack method to fists."
+    },
+    default = {
+        attackMode = "Combat",
+        message = "Changed attack method to fists."
+    },
+    knife = {
+        attackMode = "[Knife]",
+        attackPrice = 164,
+        buyPosition = getShopItem("Knife"),
+        message = "Changed attack method to knife."
+    },
+    shovel = {
+        attackMode = "[Shovel]",
+        attackPrice = 350,
+        buyPosition = getShopItem("Shovel"),
+        message = "Changed attack method to shovel."
+    },
+    pitch = {
+        attackMode = "[Pitchfork]",
+        attackPrice = 350,
+        buyPosition = getShopItem("Pitchfork"),
+        message = "Changed attack method to pitchfork."
+    },
+    pitchfork = {
+        attackMode = "[Pitchfork]",
+        attackPrice = 350,
+        buyPosition = getShopItem("Pitchfork"),
+        message = "Changed attack method to pitchfork."
+    },
+    sledge = {
+        attackMode = "[SledgeHammer]",
+        attackPrice = 382,
+        buyPosition = getShopItem("SledgeHammer"),
+        message = "Changed attack method to sledge hammer."
+    },
+    sledgehammer = {
+        attackMode = "[SledgeHammer]",
+        attackPrice = 382,
+        buyPosition = getShopItem("SledgeHammer"),
+        message = "Changed attack method to sledge hammer."
+    },
+    stop = {
+        attackMode = "[StopSign]",
+        attackPrice = 328,
+        buyPosition = getShopItem("StopSign"),
+        message = "Changed attack method to stop sign."
+    },
+    stopsign = {
+        attackMode = "[StopSign]",
+        attackPrice = 328,
+        buyPosition = getShopItem("StopSign"),
+        message = "Changed attack method to stop sign."
+    }
+})[vu29.Configs.Melee]
+if v128 then
+    vu82.meleeSettings.Weapon = v128.attackMode
+    vu82.meleeSettings.purchasePlace = v128.buyPosition
+    vu82.meleeSettings.price = v128.attackPrice
+end
+local vu129 = {
+    ak47 = {
+        orbitspeed = 5,
+        orbitlength = 12,
+        gunBuyPosition = getShopItem("AK47"),
+        gunAttackPrice = 0,
+        gunAmmoPrice = 0,
+        gunAmmoBuyPosition = getShopItem("AK47 Ammo"),
+        gunAttackWeapon = "[AK47]",
+        chatMessage = "Changed the attack gun to ak47."
+    },
+    smg = {
+        orbitspeed = 5,
+        orbitlength = 12,
+        gunBuyPosition = getShopItem("SMG"),
+        gunAmmoBuyPosition = getShopItem("SMG Ammo"),
+        gunAttackPrice = 0,
+        gunAmmoPrice = 0,
+        gunAttackWeapon = "[SMG]",
+        chatMessage = "Changed the attack gun to smg."
+    },
+    rpg = {
+        orbitspeed = 5,
+        orbitlength = 12,
+        gunBuyPosition = getShopItem("RPG"),
+        gunAmmoBuyPosition = getShopItem("RPG Ammo"),
+        gunAttackPrice = 0,
+        gunAmmoPrice = 0,
+        gunAttackWeapon = "[RPG]",
+        chatMessage = "Changed the attack gun to rpg."
+    },
+    lmg = {
+        orbitspeed = 5,
+        orbitlength = 12,
+        gunBuyPosition = getShopItem("LMG"),
+        gunAttackPrice = 0,
+        gunAmmoPrice = 0,
+        gunAmmoBuyPosition = getShopItem("LMG Ammo"),
+        gunAttackWeapon = "[LMG]",
+        chatMessage = "Changed the attack gun to lmg."
+    },
+    ar = {
+        orbitspeed = 5,
+        orbitlength = 12,
+        gunBuyPosition = getShopItem("AR"),
+        gunAttackPrice = 0,
+        gunAmmoPrice = 0,
+        gunAmmoBuyPosition = getShopItem("AR Ammo"),
+        gunAttackWeapon = "[AR]",
+        chatMessage = "Changed the attack gun to ar."
+    },
+    p90 = {
+        orbitspeed = 5,
+        orbitlength = 12,
+        gunBuyPosition = getShopItem("P90"),
+        gunAmmoBuyPosition = getShopItem("P90 Ammo"),
+        gunAttackPrice = 0,
+        gunAmmoPrice = 0,
+        gunAttackWeapon = "[P90]",
+        chatMessage = "Changed the attack gun to p90."
+    },
+    aug = {
+        orbitspeed = 5,
+        orbitlength = 12,
+        gunBuyPosition = getShopItem("AUG"),
+        gunAttackPrice = 2,
+        gunAmmoPrice = 23,
+        gunAmmoBuyPosition = getShopItem("AUG Ammo"),
+        gunAttackWeapon = "[AUG]",
+        chatMessage = "Changed the attack gun to aug."
+    },
+    flint = {
+        orbitspeed = 5,
+        orbitlength = 12,
+        gunBuyPosition = getShopItem("Flintlock"),
+        gunAttackPrice = 0,
+        gunAmmoPrice = 0,
+        gunAmmoBuyPosition = getShopItem("Flintlock Ammo"),
+        gunAttackWeapon = "[Flintlock]",
+        chatMessage = "Changed the attack gun to flintlock."
+    },
+    rifle = {
+        orbitspeed = 5,
+        orbitlength = 23,
+        gunBuyPosition = getShopItem("Rifle"),
+        gunAttackPrice = 2,
+        gunAmmoPrice = 22,
+        gunAmmoBuyPosition = getShopItem("Rifle Ammo"),
+        gunAttackWeapon = "[Rifle]",
+        chatMessage = "Changed the attack gun to Rifle."
+    }
+}
+local v130 = vu129[vu29.Configs.Gun]
+if v130 and vu82.solara == false then
+    vu82.gunSettings.gun = v130.gunAttackWeapon
+    vu82.gunSettings.orbitspeed = v130.orbitspeed
+    vu82.gunSettings.orbitlength = v130.orbitlength
+    vu82.gunSettings.buyPosition = v130.gunBuyPosition
+    vu82.gunSettings.ammoPosition = v130.gunAmmoBuyPosition
+    vu82.gunSettings.gunPrice = v130.gunAttackPrice
+    vu82.gunSettings.ammoPrice = v130.gunAmmoPrice
+    if vu82.gunSettings.gun == "SMG" then
+        local v131, v132, v133 = pairs(game:GetService("Workspace").Ignored.Shop:GetChildren())
+        while true do
+            local v134, v135 = v131(v132, v133)
+            if v134 == nil then
+                break
+            end
+            v133 = v134
+            if string.find(string.lower(v135.Name), "smg") and v135:FindFirstChild("Head") then
+                vu82.gunSettings.gunBuyPosition = v135
+            end
+        end
+    end
+end
+function meleekill()
+    if vu79.Backpack:FindFirstChild(vu82.meleeSettings.Weapon) or vu80:FindFirstChild(vu82.meleeSettings.Weapon) then
+        vu80.HumanoidRootPart.CFrame = CFrame.new(vu82.vars.target.Character.UpperTorso.Position + vu82.vars.target.Character.UpperTorso.Velocity * 0.425) * CFrame.new(0, - 5.15, 0)
+        if vu80:FindFirstChild(vu82.meleeSettings.Weapon) then
+            if vu80:FindFirstChild(vu82.meleeSettings.Weapon) then
+                vu80:FindFirstChild(vu82.meleeSettings.Weapon):Activate()
+            end
+        else
+            vu79.Backpack:FindFirstChild(vu82.meleeSettings.Weapon).Parent = vu80
+        end
+    else
+        if vu79.DataFolder.Currency.Value < vu82.meleeSettings.price then
+            vu82.meleeSettings.Weapon = "Combat"
+        end
+        vu80.HumanoidRootPart.CFrame = vu82.meleeSettings.purchasePlace.Head.CFrame * CFrame.new(0, - 3, 0)
+        fireclickdetector(vu82.meleeSettings.purchasePlace.ClickDetector, 0)
+    end
+end
+function stomp()
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("Stomp")
+    vu80.HumanoidRootPart.CFrame = CFrame.new(vu82.vars.target.Character.UpperTorso.Position) * CFrame.new(0, 3, 0)
+end
+function grabPlayer(p136, p137, p138)
+    if vu82.vars.target.Character:FindFirstChild("GRABBING_CONSTRAINT") then
+        if vu82.vars.target.Character:FindFirstChild("GRABBING_CONSTRAINT") then
+            if p136 == true then
+                vu80.HumanoidRootPart.CFrame = CFrame.new(9999, 20, 9999)
+                task.wait(0.45)
+                game:GetService("ReplicatedStorage").MainEvent:FireServer("Grabbing", false)
+                disableLoops()
+            elseif p137 == true then
+                vu80.HumanoidRootPart.CFrame = CFrame.new(9999, 9999, 9999)
+                task.wait(0.45)
+                game:GetService("ReplicatedStorage").MainEvent:FireServer("Grabbing", false)
+                disableLoops()
+            elseif p138 == true then
+                vu80.HumanoidRootPart.CFrame = CFrame.new(vu90.Character.UpperTorso.Position)
+                task.wait(0.25)
+                game:GetService("ReplicatedStorage").MainEvent:FireServer("Grabbing", false)
+                disableLoops()
+            elseif p136 ~= true and (p137 ~= true and p138 ~= true) then
+                if vu82.summonSettings.player ~= vu90 or vu82.loops.summon ~= true then
+                    if vu82.summonSettings.player ~= vu90 or vu82.loops.summon == false then
+                        vu80.HumanoidRootPart.CFrame = CFrame.new(vu90.Character.UpperTorso.Position)
+                        task.wait(0.45)
+                        game:GetService("ReplicatedStorage").MainEvent:FireServer("Grabbing", false)
+                        disableLoops()
+                    end
+                else
+                    disableLoops()
+                end
+            end
+        end
+    else
+        if vu82.vars.target.Character.BodyEffects["K.O"].Value == false then
+            disableLoops()
+        end
+        vu80.HumanoidRootPart.CFrame = CFrame.new(vu82.vars.target.Character.UpperTorso.Position) * CFrame.new(0, 3, 0)
+        coroutine.wrap(function()
+            if vu126 ~= true then
+                vu126 = true
+                game:GetService("ReplicatedStorage").MainEvent:FireServer("Grabbing", false)
+                task.wait(0.35)
+                vu126 = false
+            end
+        end)()
+    end
+end
+local vu139 = {
+    "[AUG]",
+    "[Rifle]",
+    "[LMG]",
+    "[P90]",
+    "[Flintlock]",
+    "[Revolver]",
+    "[Double-Barrel SG]",
+    "[AK47]",
+    "[SMG]"
+}
+function equipAllGuns()
+    local v140 = game:GetService("Players").LocalPlayer
+    local v141 = v140.Character or v140.CharacterAdded:Wait()
+    local v142 = v140:WaitForChild("Backpack")
+    local v143, v144, v145 = ipairs(vu139)
+    while true do
+        local v146
+        v145, v146 = v143(v144, v145)
+        if v145 == nil then
+            break
+        end
+        local v147 = v142:FindFirstChild(v146)
+        if v147 and v147:IsA("Tool") then
+            v147.Parent = v141
+        end
+    end
+end
+function unequipAllGuns()
+    local v148 = game:GetService("Players").LocalPlayer
+    local v149 = v148.Character or v148.CharacterAdded:Wait()
+    local v150 = v148:WaitForChild("Backpack")
+    local v151, v152, v153 = ipairs(vu139)
+    while true do
+        local v154
+        v153, v154 = v151(v152, v153)
+        if v153 == nil then
+            break
+        end
+        local v155 = v149:FindFirstChild(v154)
+        if v155 and v155:IsA("Tool") then
+            v155.Parent = v150
+        end
+    end
+end
+function gkill()
+    vu82.loops.disableSummon = true
+    local v156, v157, v158 = pairs(vu80.Humanoid:GetPlayingAnimationTracks())
+    while true do
+        local v159
+        v158, v159 = v156(v157, v158)
+        if v158 == nil then
+            break
+        end
+        if v159.Name ~= "RightAim" then
+            v159:Stop()
+        else
+            vu89 = true
+        end
+    end
+    if vu89 ~= true then
+        vu80.Humanoid:LoadAnimation(game:GetService("ReplicatedStorage").IM.ANIM.RightAim):Play()
+    end
+    if vu79.DataFolder.Currency.Value < vu82.gunSettings.gunPrice and tonumber(vu79.PlayerGui.MainScreenGui.AmmoFrame.AmmoText.Text) == 0 then
+        disableLoops()
+        chat("I ran out of money to buy the ammo.", vu82.summonSettings.player)
+    end
+    pcall(function()
+        if vu117 ~= true then
+            vu79.Backpack:FindFirstChild(vu82.gunSettings.gun).Parent = vu80
+            task.wait()
+            vu80:FindFirstChild(vu82.gunSettings.gun).Parent = vu79.Backpack
+            vu117 = true
+        end
+    end)
+    if (vu79.Backpack:FindFirstChild(vu82.gunSettings.gun) or vu80:FindFirstChild(vu82.gunSettings.gun)) and tonumber(vu79.PlayerGui.MainScreenGui.AmmoFrame.AmmoText.Text) > 15 then
+        if (vu79.Backpack:FindFirstChild(vu82.gunSettings.gun) or vu80:FindFirstChild(vu82.gunSettings.gun)) and tonumber(vu79.PlayerGui.MainScreenGui.AmmoFrame.AmmoText.Text) > 15 then
+            if vu82.multiGun and tonumber(vu79.PlayerGui.MainScreenGui.AmmoFrame.AmmoText.Text) <= 15 then
+                vu82.multiGun = false
+                unequipAllGuns()
+            end
+            vu118 = vu118 + vu82.gunSettings.orbitspeed
+            local v160 = vu82.vars.target.Character
+            if v160 then
+                v160 = vu82.vars.target.Character:FindFirstChild("HumanoidRootPart")
+            end
+            if v160 then
+                local v161 = (v160.Velocity or Vector3.zero) * 0.3
+                local v162 = Vector3.new(math.random(- 20, 20), math.random(- 20, 20), math.random(- 20, 20))
+                local v163 = CFrame.Angles(math.rad(math.random(0, 360)), math.rad(math.random(0, 360)), math.rad(math.random(0, 360)))
+                vu80.HumanoidRootPart.CFrame = CFrame.new(v160.Position + v161 + v162) * v163
+            end
+            local v164 = vu82.vars.target and vu82.vars.target.Character and vu82.vars.target.Character:FindFirstChild("Head")
+            local v165 = v164 and (vu80:FindFirstChild(vu82.gunSettings.gun) or vu79.Backpack:FindFirstChild(vu82.gunSettings.gun))
+            if v165 then
+                if v165.Parent == vu79.Backpack then
+                    v165.Parent = vu80
+                end
+                local v166 = v165:FindFirstChild("Handle")
+                if v166 then
+                    local v167 = game:GetService("ReplicatedStorage")
+                    local v168 = v166.CFrame.Position
+                    local v169 = v160.Velocity or Vector3.zero
+                    local v170 = v164.Position + v169 * 0.3
+                    v167.MainEvent:FireServer("ShootGun", v166, v168, v170 - Vector3.new(0, 10, 0), v164, Vector3.new(0, 0, - 1))
+                    v167.MainEvent:FireServer("ShootGun", v166, v168 - Vector3.new(0, 10, 0), v164.Position - Vector3.new(0, 10, 0), v164, Vector3.new(0, 0, - 1))
+                    v167.MainEvent:FireServer("ShootGun", v166, v168, v164.Position, v164, Vector3.new(0, 0, - 1))
+                end
+            end
+        end
+    elseif vu79.Backpack:FindFirstChild(vu82.gunSettings.gun) or vu80:FindFirstChild(vu82.gunSettings.gun) then
+        if tonumber(vu79.PlayerGui.MainScreenGui.AmmoFrame.AmmoText.Text) <= 15 then
+            if vu80:FindFirstChildWhichIsA("Tool") and vu105 ~= true then
+                vu80:FindFirstChildWhichIsA("Tool").Parent = vu79.Backpack
+            end
+            vu80.HumanoidRootPart.CFrame = CFrame.new(vu82.gunSettings.ammoPosition.Head.Position) * CFrame.new(0, 3, 0)
+            fireclickdetector(vu82.gunSettings.ammoPosition.ClickDetector, 0)
+            coroutine.wrap(function()
+                vu125 = vu125 + task.wait()
+                if vu125 >= 2 then
+                    vu105 = true
+                    vu79.Backpack:FindFirstChild(vu82.gunSettings.gun).Parent = vu80
+                    task.wait()
+                    vu80:FindFirstChild(vu82.gunSettings.gun).Parent = vu79.Backpack
+                    task.wait()
+                    vu105 = false
+                    vu125 = 0
+                    vu111 = false
+                end
+            end)()
+        end
+    else
+        if vu80:FindFirstChildWhichIsA("Tool") then
+            vu80:FindFirstChildWhichIsA("Tool").Parent = vu79.Backpack
+        end
+        vu80.HumanoidRootPart.CFrame = CFrame.new(vu82.gunSettings.buyPosition.Head.Position) * CFrame.new(0, 3, 0)
+        getgenv().Finobe1 = true
+        fireclickdetector(vu82.gunSettings.buyPosition.ClickDetector, 0)
+        if vu79.DataFolder.Currency.Value < vu82.gunSettings.gunPrice then
+            disableLoops()
+            chat("I ran out of money to buy the gun.", vu82.summonSettings.player)
+        end
+    end
+end
+function findPlayer(p171, p172)
+    found = false
+    local v173, v174, v175 = pairs(game.Players:GetChildren())
+    while true do
+        local v176
+        v175, v176 = v173(v174, v175)
+        if v175 == nil then
+            break
+        end
+        if string.find(string.lower(v176.Name), string.lower(p171)) or string.find(string.lower(v176.DisplayName), string.lower(p171)) then
+            if p172 ~= true and (table.find(vu82.Moderators, v176.UserId) or table.find(vu82.BypassPremium, v176.UserId)) then
+                found = false
+                if not table.find(vu82.BypassPremium, vu82.Creator.UserId) then
+                    return
+                end
+            end
+            found = true
+            return v176
+        end
+    end
+    if found == false then
+        return nil
+    end
+end
+function tpwheels()
+    game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").LBWheel.CFrame = CFrame.new(game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").Seat.Position)
+    game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").LTWheel.CFrame = CFrame.new(game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").Seat.Position)
+    game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").RBWheel.CFrame = CFrame.new(game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").Seat.Position)
+    game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").RTWheel.CFrame = CFrame.new(game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").Seat.Position)
+end
+function teleport(p177, _)
+    if not vu104 then
+        if type(vu82.teleporting.place) ~= "vector" then
+            vu104 = CFrame.new(vu82.teleporting.place.Character.UpperTorso.Position)
+        else
+            vu104 = CFrame.new(vu82.teleporting.place)
+        end
+    end
+    if p177 == "cart" then
+        if game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE") then
+            if game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE") then
+                if game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE"):FindFirstChild("VehicleSeat") then
+                    if not (game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").VehicleSeat:FindFirstChildWhichIsA("Weld") or vu119) then
+                        vu119 = true
+                        vu80.HumanoidRootPart.CFrame = game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").VehicleSeat.CFrame
+                        task.wait(0.1)
+                        vu119 = false
+                    end
+                else
+                    vu80.HumanoidRootPart.CFrame = game:GetService("Workspace").Ignored.Shop["[FoodsCart] - $16"].Head.CFrame * CFrame.new(0, 999, 0)
+                end
+            end
+        else
+            if vu80:FindFirstChildWhichIsA("Tool") then
+                vu80:FindFirstChildWhichIsA("Tool").Parent = vu79.Backpack
+            end
+            vu80.HumanoidRootPart.CFrame = game:GetService("Workspace").Ignored.Shop["[FoodsCart] - $16"].Head.CFrame * CFrame.new(0, - 3.1, 0)
+            fireclickdetector(game:GetService("Workspace").Ignored.Shop["[FoodsCart] - $16"].ClickDetector, 0)
+        end
+        if game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").VehicleSeat:FindFirstChildWhichIsA("Weld") then
+            if game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").Seat:FindFirstChildWhichIsA("Weld") or vu91 then
+                if game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").Seat:FindFirstChildWhichIsA("Weld") or vu91 then
+                    vu91 = true
+                    if game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").Seat:FindFirstChildWhichIsA("Weld") then
+                        game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").Seat.CFrame = vu104
+                        pcall(tpwheels)
+                    elseif not (game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").Seat:FindFirstChildWhichIsA("Weld") or vu93) then
+                        vu93 = true
+                        while game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").VehicleSeat:FindFirstChildWhichIsA("Weld") and task.wait() do
+                            vu82.loops.disableSummon = true
+                            game:GetService("Workspace").OldVehicles[vu79.Name .. "BIKE"].Seat.CFrame = CFrame.new(254.242661, 50.5007324, - 642.484985, - 0.356812239, 0, - 0.934176087, 0, 1, 0, 0.934176087, 0, - 0.356812239) * CFrame.new(0, 2, 0)
+                            pcall(tpwheels)
+                            vu92 = vu92 + task.wait()
+                            if vu92 > 0.25 then
+                                disableLoops()
+                            end
+                        end
+                    end
+                end
+            else
+                game:GetService("Workspace").OldVehicles:FindFirstChild(vu79.Name .. "BIKE").Seat.CFrame = vu82.vars.target.Character.UpperTorso.CFrame
+                pcall(tpwheels)
+            end
+        end
+    elseif p177 == "knock" and not vu93 then
+        vu93 = true
+        while not vu82.vars.target.Character:FindFirstChild("GRABBING_CONSTRAINT") do
+            if vu82.vars.target.Character.BodyEffects["K.O"].Value then
+                if not vu119 then
+                    vu119 = true
+                    grabPlayer()
+                    task.wait(0.15)
+                    vu119 = false
+                end
+            else
+                while not vu82.vars.target.Character.BodyEffects["K.O"].Value and task.wait() do
+                    meleekill()
+                end
+            end
+            task.wait()
+        end
+        vu80.HumanoidRootPart.CFrame = vu104
+        task.wait(0.25)
+        game:GetService("ReplicatedStorage").MainEvent:FireServer("Grabbing", false)
+        disableLoops()
+        vu119 = false
+        vu91 = false
+    end
+end
+vu82.summonSettings.player = vu82.Creator
+vu80 = vu79.Character
+local vu178 = vu80.BodyEffects
+game.Players.LocalPlayer.CharacterAdded:Connect(function()
+    while not (game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart") or game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")) do
+        task.wait()
+    end
+    vu80 = vu79.Character
+    while not game.Players.LocalPlayer.Character:FindFirstChild("BodyEffects") do
+        task.wait()
+    end
+    vu178 = vu80.BodyEffects
+end)
+game.Players.PlayerRemoving:Connect(function(p179)
+    if vu82.vars.target ~= nil and p179 == vu82.vars.target then
+        disableLoops()
+    end
+    if table.find(vu82.autosave.autoSavePlayers, p179) then
+        local v180, v181, v182 = ipairs(vu82.autosave.autoSavePlayers)
+        while true do
+            local v183
+            v182, v183 = v180(v181, v182)
+            if v182 == nil then
+                break
+            end
+            if vu82.autosave.autoSavePlayers[v182] == p179 then
+                table.remove(vu82.autosave.autoSavePlayers, v182)
+                vu107 = nil
+            end
+        end
+    end
+    if tostring(p179.UserId) == tostring(vu82.Creator.UserId) or tostring(string.lower(p179.Name)) == tostring(string.lower(vu28.accounts["Stand Creator"])) then
+        vu114 = true
+        disableLoops()
+        while vu114 and task.wait() do
+            vu82.loops.disableSummon = true
+            vu80.HumanoidRootPart.CFrame = CFrame.new(9999, 9999, 9999)
+        end
+    end
+end)
+function Align(p184, p185, p186, p187)
+    local v188 = Instance.new("Attachment", p184)
+    local v189 = Instance.new("Attachment", p185)
+    local v190 = Instance.new("AlignPosition", p184)
+    local v191 = Instance.new("AlignOrientation", p184)
+    v189.Position = p186
+    v188.Rotation = p187
+    v190.RigidityEnabled = true
+    v190.Responsiveness = 200
+    v190.Attachment0 = v188
+    v190.Attachment1 = v189
+    v191.MaxTorque = 9000000000
+    v191.Responsiveness = 200
+    v191.RigidityEnabled = true
+    v191.Attachment0 = v188
+    v191.Attachment1 = v189
+    return v188, v189, v190, v191
+end
+function bend(pu192, p193, p194)
+    local vu195 = false
+    if p194 == "bend" then
+        while vu124 ~= 0 do
+            vu124 = 0
+            task.wait()
+        end
+    elseif p194 == "blow" then
+        while vu124 ~= 180 do
+            vu124 = 180
+            task.wait()
+        end
+    end
+    function dragGrab()
+        coroutine.wrap(function()
+            while not vu195 and (task.wait() and (not vu195 and vu82.killType)) do
+                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(pu192.Character.Head.Position) * CFrame.new(0, 2.3, 0)
+            end
+        end)()
+        while vu80.BodyEffects:WaitForChild("Attacking").Value == true do
+            task.wait()
+        end
+        task.wait(1.25)
+        game:GetService("ReplicatedStorage").MainEvent:FireServer("Grabbing", true)
+        task.wait(0.2)
+        vu195 = true
+    end
+    while vu82.killType and task.wait() do
+        task.wait()
+        if vu195 then
+            if not pu192.Character:FindFirstChild("GRABBING_CONSTRAINT") then
+                vu80.Animate.Disabled = true
+                for _ = 1, 5 do
+                    local v196, v197, v198 = pairs(vu80.Humanoid:GetPlayingAnimationTracks())
+                    while true do
+                        local v199
+                        v198, v199 = v196(v197, v198)
+                        if v198 == nil then
+                            break
+                        end
+                        v199:Stop()
+                    end
+                end
+                vu80.Animate.Disabled = false
+                pcall(function()
+                    vu108:Destroy()
+                end)
+                pcall(function()
+                    vu116:Destroy()
+                end)
+                pcall(function()
+                    vu120:Destroy()
+                end)
+                pcall(function()
+                    vu115:Destroy()
+                end)
+            end
+            pu192.Character:WaitForChild("GRABBING_CONSTRAINT"):WaitForChild("H").Length = 9000000000
+            vu80.Animate.Disabled = true
+            local v200, v201, v202 = pairs(vu80.Humanoid:GetPlayingAnimationTracks())
+            while true do
+                local v203
+                v202, v203 = v200(v201, v202)
+                if v202 == nil then
+                    break
+                end
+                v203:Stop()
+            end
+            vu80.Animate.Disabled = false
+            vu80.Humanoid:LoadAnimation(vu88.RightAim):Play()
+            vu80.Humanoid:LoadAnimation(vu88.LeftAim):Play()
+            local vu204, vu205, vu206, vu207 = Align(pu192.Character.UpperTorso, p193.Character.UpperTorso, Vector3.new(0, 0, - 2), Vector3.new(90, vu124, 0))
+            while pu192.Character:FindFirstChild("GRABBING_CONSTRAINT") do
+                local v208 = tick() * 60
+                game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(p193.Character.UpperTorso.Position) * CFrame.new(0, - 12.5, 0)
+                vu205.Position = Vector3.new(0, vu109, - 3.35 + 1 * math.sin(v208 / 8))
+                task.wait()
+            end
+            vu80.Animate.Disabled = true
+            for _ = 1, 5 do
+                local v209, v210, v211 = pairs(vu80.Humanoid:GetPlayingAnimationTracks())
+                while true do
+                    local v212
+                    v211, v212 = v209(v210, v211)
+                    if v211 == nil then
+                        break
+                    end
+                    v212:Stop()
+                end
+            end
+            vu80.Animate.Disabled = false
+            pcall(function()
+                vu204:Destroy()
+            end)
+            pcall(function()
+                vu205:Destroy()
+            end)
+            pcall(function()
+                vu206:Destroy()
+            end)
+            pcall(function()
+                vu207:Destroy()
+            end)
+            disableLoops()
+        else
+            dragGrab()
+        end
+    end
+end
+game.Players.PlayerAdded:Connect(function(p213)
+    if (table.find(vu82.Moderators, p213.UserId) or table.find(vu82.BypassPremium, p213.UserId)) and not table.find(vu82.BypassPremium, vu82.Creator.UserId) then
+        table.insert(vu82.autosave.autoSavePlayers, p213.UserId)
+    end
+    if tostring(p213.UserId) == tostring(vu28.accounts["Stand Creator"]) or tostring(string.lower(p213.Name)) == tostring(string.lower(vu28.accounts["Stand Creator"])) then
+        vu114 = false
+        task.wait(0.05)
+        disableLoops()
+    end
+end)
+local vu214 = game:GetService("Players")
+local v215 = game:GetService("TextChatService")
+local vu216 = game:GetService("ReplicatedStorage")
+local vu217 = vu214.LocalPlayer
+local vu218 = ":"
+local function vu244(p219, p220)
+    if p219 == vu217 or p219 == vu82.Creator then
+        return
+    else
+        local v221 = table.find(vu82.BypassPremium, p219.UserId)
+        local v222 = table.find(vu82.BypassPremium, vu217.UserId) or table.find(vu82.BypassPremium, vu82.Creator.UserId)
+        local v223 = table.find(vu82.Moderators, p219.UserId)
+        local v224 = table.find(vu82.Moderators, vu217.UserId) or table.find(vu82.Moderators, vu82.Creator.UserId)
+        local v225 = table.find(vu35, p219.UserId)
+        local v226 = table.find(vu35, vu217.UserId) or table.find(vu35, vu82.Creator.UserId)
+        local v227 = table.find(vu36, p219.UserId)
+        local v228 = table.find(vu36, vu217.UserId) or table.find(vu36, vu82.Creator.UserId)
+        if v227 or (v225 or (v223 or v221)) then
+            if v222 then
+                return
+            elseif v224 and not v221 then
+                return
+            elseif v228 and not (v223 or v221) then
+                return
+            elseif v226 and not (v228 or (v223 or v221)) then
+                return
+            else
+                local v229 = p220:lower():split(" ")
+                local v230 = v229[1]
+                local v231 = {
+                    table.unpack(v229, 2)
+                }
+                if v230:sub(1, # vu218) == vu218 then
+                    local v232 = v231[1]
+                    if v232 and (v232 ~= "" and v232 ~= " ") then
+                        local v233 = findPlayer(v232)
+                        if v233 or v232 == "." then
+                            if v232 == "." or v233 == vu217 then
+                                local vu234 = vu217.Character
+                                if v230 ~= vu218 .. "benx" then
+                                    if v230 ~= vu218 .. "bringcreator" then
+                                        if v230 ~= vu218 .. "loopkill" then
+                                            if v230 ~= vu218 .. "unloopkill" then
+                                                if v230 ~= vu218 .. "unbenx" then
+                                                    if v230 ~= vu218 .. "kick" then
+                                                        if v230 ~= vu218 .. "freeze" then
+                                                            if v230 == vu218 .. "thaw" or v230 == vu218 .. "unfreeze" then
+                                                                vu82.premiumShit.freeze = false
+                                                            elseif v230 == vu218 .. "dropcash" then
+                                                                disableLoops()
+                                                                task.wait(0.1)
+                                                                vu82.loops.disableSummon = true
+                                                                vu234.HumanoidRootPart.CFrame = CFrame.new(p219.Character.UpperTorso.Position)
+                                                                task.wait(0.1)
+                                                                if vu217.DataFolder.Currency.Value < 10000 then
+                                                                    vu216.MainEvent:FireServer("DropMoney", tostring(vu217.DataFolder.Currency.Value))
+                                                                else
+                                                                    vu216.MainEvent:FireServer("DropMoney", "15000")
+                                                                end
+                                                                task.wait(0.1)
+                                                                vu82.loops.disableSummon = false
+                                                            end
+                                                        else
+                                                            vu82.premiumShit.freeze = true
+                                                            while vu82.premiumShit.freeze and vu214:FindFirstChild(p219.Name) do
+                                                                pcall(function()
+                                                                    vu234.HumanoidRootPart.Anchored = true
+                                                                end)
+                                                                task.wait()
+                                                            end
+                                                            vu234.HumanoidRootPart.Anchored = false
+                                                        end
+                                                    else
+                                                        vu217:Kick(p219.Name .. " has kicked you, maybe purchase premium and this wouldn\'t happen https://discord.gg/vJkPBXFqFT")
+                                                    end
+                                                else
+                                                    local v235, v236, v237 = pairs(vu234.Humanoid:GetPlayingAnimationTracks())
+                                                    while true do
+                                                        local v238
+                                                        v237, v238 = v235(v236, v237)
+                                                        if v237 == nil then
+                                                            break
+                                                        end
+                                                        v238:Stop()
+                                                    end
+                                                    while vu82.loops.disableSummon and vu82.premiumShit.benxed do
+                                                        vu82.premiumShit.benxed = false
+                                                        vu82.loops.disableSummon = false
+                                                        task.wait()
+                                                    end
+                                                    disableLoops()
+                                                end
+                                            else
+                                                vu82.premiumShit.loopkill = false
+                                            end
+                                        else
+                                            vu82.premiumShit.loopkill = true
+                                            while vu82.premiumShit.loopkill and (vu214:FindFirstChild(p219.Name) and task.wait()) do
+                                                pcall(function()
+                                                    vu217.Character.BodyEffects["K.O"].Value = true
+                                                end)
+                                            end
+                                        end
+                                    end
+                                else
+                                    reversing = false
+                                    away = 0.5
+                                    task.wait()
+                                    vu82.loops.disableSummon = true
+                                    vu82.premiumShit.benxed = true
+                                    local v239 = false
+                                    while vu82.premiumShit.benxed and (vu214:FindFirstChild(p219.Name) and task.wait()) do
+                                        local v240, v241, v242 = pairs(vu234.Humanoid:GetPlayingAnimationTracks())
+                                        while true do
+                                            local v243
+                                            v242, v243 = v240(v241, v242)
+                                            if v242 == nil then
+                                                break
+                                            end
+                                            if v243.Name == "Crouching" then
+                                                v239 = true
+                                            else
+                                                v243:Stop()
+                                            end
+                                        end
+                                        if not v239 then
+                                            vu234:FindFirstChildWhichIsA("Humanoid"):LoadAnimation(vu216.ClientAnimations.Crouching):Play()
+                                        end
+                                        if vu214:FindFirstChild(p219.Name) then
+                                            vu82.loops.disableSummon = true
+                                            if reversing then
+                                                away = away - 0.2
+                                            else
+                                                away = away + 0.2
+                                            end
+                                            if away < 3 then
+                                                if away < 1 then
+                                                    reversing = false
+                                                end
+                                            else
+                                                reversing = true
+                                            end
+                                            vu234.HumanoidRootPart.CFrame = p219.Character.HumanoidRootPart.CFrame + p219.Character.HumanoidRootPart.CFrame.LookVector * away
+                                        else
+                                            disableLoops()
+                                            vu82.premiumShit.benxed = false
+                                        end
+                                    end
+                                end
+                            end
+                        else
+                            return
+                        end
+                    else
+                        chat("Invalid player, try . or a actual player.", p219)
+                        return
+                    end
+                else
+                    return
+                end
+            end
+        else
+            return
+        end
+    end
+end
+v215.MessageReceived:Connect(function(p245)
+    local v246 = p245 and (p245.Text and (p245.TextSource and p245.TextSource.UserId)) and vu214:GetPlayerByUserId(p245.TextSource.UserId)
+    if v246 then
+        vu244(v246, p245.Text)
+    end
+end)
+vu82.vars.multiTargets = vu82.vars.multiTargets or {}
+function processCommand(p247, p248, pu249)
+    if p247 == vu28.commands["Fix Script"] or p247 == "/e fix" then
+        task.wait()
+        vu82.loops.functionloop = false
+        disableLoops()
+        vu82.multiGun = false
+        unequipAllGuns()
+        local v250 = vu80:FindFirstChildWhichIsA("Tool")
+        if v250 and v250.Name == "[Rifle]" then
+            v250.Parent = vu217.Backpack
+        end
+        game.Workspace.CurrentCamera.CameraSubject = vu217.Character or vu217
+        vu82.vars.viewingPlayer = vu217
+    elseif p247 == vu28.commands["Reset Stand"] or p247 == "/e reset" then
+        vu178["K.O"].Value = true
+        vu217.CharacterAdded:Wait()
+        disableLoops()
+        vu82.loops.functionloop = false
+    elseif p247 == vu28.commands["Multi Gun"] or p247 == "/e multig" then
+        vu82.multiGun = true
+        task.spawn(function()
+            while vu82.multiGun do
+                equipAllGuns()
+                task.wait(0.25)
+            end
+        end)
+    elseif p247 == vu28.commands["UnMulti Gun"] or p247 == "/e unmultig" then
+        vu82.multiGun = false
+        unequipAllGuns()
+    elseif p247 == vu28.commands.Ascend or p247 == "/e s" then
+        if pu249.UserId ~= vu82.summonSettings.player.UserId then
+            vu82.summonSettings.player = pu249
+            if vu82.loops.summon == true then
+                return
+            end
+        end
+        vu82.loops.summon = true
+    elseif p247 == vu28.commands["Multi Kill Add"] or p247 == "/e mkill" then
+        local v251 = findPlayer(p248[1]) or nil
+        if v251 then
+            local v252, v253, v254 = ipairs(vu82.vars.multiTargets)
+            while true do
+                local v255
+                v254, v255 = v252(v253, v254)
+                if v254 == nil then
+                    break
+                end
+                if v255 == v251 then
+                    chat(v251.Name .. " is already in multi-kill list.", pu249)
+                    return
+                end
+            end
+            table.insert(vu82.vars.multiTargets, v251)
+            chat("Added " .. v251.DisplayName .. " [" .. v251.Name .. "] to multi-kill list.", pu249)
+        else
+            chat("Invalid player provided.", pu249)
+        end
+    elseif p247 == vu28.commands["Start Multi Kill"] or p247 == "/e skill" then
+        if # vu82.vars.multiTargets == 0 then
+            chat("Multi-kill list is empty.", pu249)
+            return
+        end
+        task.spawn(function()
+            local v256, v257, v258 = ipairs(vu82.vars.multiTargets)
+            while true do
+                local v259
+                v258, v259 = v256(v257, v258)
+                if v258 == nil then
+                    break
+                end
+                if v259 and v259.Character then
+                    vu82.vars.target = v259
+                    vu82.loops.kill = true
+                    vu82.killType = "gunstomp"
+                    while vu82.killType == "gunstomp" and vu82.loops.kill do
+                        task.wait()
+                    end
+                end
+                task.wait(0.25)
+            end
+            vu82.vars.multiTargets = {}
+        end)
+    elseif p247 == vu28.commands["Loop Gun Multi Player"] or p247 == "/e slgkill" then
+        if # vu82.vars.multiTargets == 0 then
+            chat("Multi-kill list is empty.", pu249)
+            return
+        end
+        vu82.loops.functionloop = true
+        task.spawn(function()
+            while vu82.loops.functionloop == true and task.wait() do
+                local v260, v261, v262 = ipairs(vu82.vars.multiTargets)
+                while true do
+                    local v263
+                    v262, v263 = v260(v261, v262)
+                    if v262 == nil or not vu82.loops.functionloop then
+                        break
+                    end
+                    if v263 and (v263.Character and v263.Parent == game.Players) then
+                        vu82.vars.target = v263
+                        vu82.loops.kill = true
+                        vu82.killType = "gunstomp"
+                        vu82.vars.viewingPlayer = v263
+                        chat("Loop killing " .. v263.DisplayName .. " [" .. v263.Name .. "]", pu249)
+                        repeat
+                            task.wait()
+                        until vu82.loops.functionloop == false or vu82.killType == nil
+                        repeat
+                            task.wait()
+                        until vu82.loops.functionloop == false or v263 and v263.CharacterAdded:Wait()
+                    end
+                    task.wait(0.25)
+                end
+            end
+            chat("Stopped loop gun multi kill.", pu249)
+        end)
+    elseif p247 == vu28.commands["Clear Multi Kill"] or p247 == "/e mclear" then
+        vu82.vars.multiTargets = {}
+        chat("Cleared multi-kill list.", pu249)
+    elseif p247 == vu28.commands.Descend or p247 == "/e descend" then
+        if pu249.UserId ~= vu82.summonSettings.player.UserId then
+            return
+        end
+        vu82.loops.summon = false
+        game.Workspace.FallenPartsDestroyHeight = - math.huge
+    elseif p247 == vu28.commands["Drop Player"] or p247 == "/e drop" then
+        game:GetService("ReplicatedStorage").MainEvent:FireServer("Grabbing", false)
+    elseif p247 == vu28.commands["Stand Position"] or p247 == "/e spos" then
+        if p248[1] ~= "right" then
+            if p248[1] ~= "left" then
+                if p248[1] == "back" then
+                    vu82.summonSettings.pos = 0
+                end
+            else
+                vu82.summonSettings.pos = - 1.5
+            end
+        else
+            vu82.summonSettings.pos = 1.5
+        end
+    elseif p247 == vu28.commands["Frame Player"] or p247 == "/e frame" then
+        local v264 = findPlayer(p248[1]) or nil
+        if v264 then
+            vu82.loops.summon = true
+            vu82.summonSettings.player = v264
+        else
+            chat("Invalid player provided.", pu249)
+        end
+    elseif p247 == vu28.commands.ToggleMask or p247 == "/e toggleMask" then
+        if vu82.enableMaskLogic == nil then
+            vu82.enableMaskLogic = false
+        end
+        vu82.enableMaskLogic = not vu82.enableMaskLogic
+        if vu82.enableMaskLogic then
+            chat("Auto mask activated")
+        else
+            chat("Auto mask deactivated")
+        end
+    elseif p247 == vu28.commands["Gun Bring Player"] or p247 == "/e gbring" then
+        local v265 = findPlayer(p248[1]) or nil
+        vu82.vars.target = v265
+        if vu82.vars.target == nil then
+            chat("Invalid player provided.", pu249)
+        else
+            vu82.loops.kill = true
+            vu82.killType = "gunknock"
+            while vu82.killType == "gunknock" do
+                task.wait()
+            end
+            task.wait(0.12)
+            vu82.vars.target = v265
+            vu90 = pu249
+            vu82.loops.disableSummon = true
+            while vu90 and task.wait(0.1) do
+                pcall(grabPlayer)
+            end
+        end
+    elseif p247 == vu28.commands["Kill Aura"] or p247 == "/e aura" then
+        local vu266 = game.Players.LocalPlayer
+        local vu267 = vu266.Character or vu266.CharacterAdded:Wait()
+        vu267:WaitForChild("HumanoidRootPart")
+        local vu268 = 250
+        local vu269 = getgenv().ScriptSettings.MainAccount;
+        (function()
+            local v270 = vu82.gunSettings.gun
+            local v271 = vu266:WaitForChild("Backpack"):FindFirstChild(v270)
+            if v271 then
+                vu266.Character.Humanoid:EquipTool(v271)
+            end
+        end)()
+        vu82.loops.kill = true
+        vu82.killType = "gunknock"
+        vu82.loops.disableSummon = true
+        if not vu82.whitelist then
+            vu82.whitelist = {}
+        end
+        local vu272 = nil
+        task.spawn(function()
+            while vu82.killType == "gunknock" do
+                local v273 = game.Players:FindFirstChild(vu269)
+                local v274 = v273 and v273.Character
+                if v274 then
+                    v274 = v273.Character:FindFirstChild("HumanoidRootPart")
+                end
+                if v274 then
+                    local v275, v276, v277 = ipairs(game.Players:GetPlayers())
+                    local v278 = false
+                    while true do
+                        local v279
+                        v277, v279 = v275(v276, v277)
+                        if v277 == nil then
+                            break
+                        end
+                        local vu280 = false
+                        local function v281()
+                            vu280 = true
+                        end
+                        if v279 ~= vu266 and (v279.Name ~= vu269 and not (vu82.friends and table.find(vu82.friends, v279.Name))) then
+                            local v282 = v279.Character
+                            if v282 and v282:FindFirstChild("HumanoidRootPart") then
+                                local v283 = v282:FindFirstChild("BodyEffects")
+                                if v283 then
+                                    v283 = v282.BodyEffects:FindFirstChild("K.O")
+                                end
+                                if (not v283 or v283.Value ~= true) and (v274.Position - v282.HumanoidRootPart.Position).Magnitude <= vu268 then
+                                    v281()
+                                    v278 = true
+                                end
+                            end
+                        end
+                        if vu280 then
+                            break
+                        end
+                    end
+                    if v278 then
+                        local v284 = Vector3.new(math.random(- 20, 20), math.random(- 10, 10), math.random(- 20, 20))
+                        local v285 = CFrame.Angles(math.rad(math.random(0, 360)), math.rad(math.random(0, 360)), math.rad(math.random(0, 360)))
+                        vu267:SetPrimaryPartCFrame(CFrame.new(v274.Position + v284) * v285)
+                    else
+                        vu267:SetPrimaryPartCFrame(CFrame.new(math.random(- 1000, 1000), math.random(200, 600), math.random(1, 400)))
+                        task.wait(math.random(5, 10) / 1000)
+                    end
+                end
+                task.wait(0.05)
+            end
+        end)
+        task.spawn(function()
+            while vu82.killType == "gunknock" and task.wait(0.1) do
+                pcall(function()
+                    local v286 = nil
+                    local v287 = vu268
+                    local v288 = game.Players:FindFirstChild(vu269)
+                    local v289 = v288 and v288.Character
+                    if v289 then
+                        v289 = v288.Character:FindFirstChild("HumanoidRootPart")
+                    end
+                    if v289 then
+                        local v290, v291, v292 = ipairs(game.Players:GetPlayers())
+                        while true do
+                            local v293
+                            v292, v293 = v290(v291, v292)
+                            if v292 == nil then
+                                break
+                            end
+                            if v293 ~= vu266 and (v293.Name ~= vu269 and not (vu82.friends and table.find(vu82.friends, v293.Name))) then
+                                local v294 = v293.Character
+                                if v294 and (v294:FindFirstChild("HumanoidRootPart") and v294:FindFirstChild("Head")) then
+                                    local v295 = v294:FindFirstChild("BodyEffects")
+                                    if v295 then
+                                        v295 = v294.BodyEffects:FindFirstChild("K.O")
+                                    end
+                                    if not v295 or v295.Value ~= true then
+                                        local v296 = (v289.Position - v294.HumanoidRootPart.Position).Magnitude
+                                        if v296 < v287 then
+                                            v286 = v294
+                                            v287 = v296
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                        if v286 then
+                            local v297 = vu267:FindFirstChildOfClass("Tool")
+                            local v298
+                            if v297 then
+                                v298 = v297:FindFirstChild("Handle")
+                            else
+                                v298 = v297
+                            end
+                            if v298 then
+                                local v299 = v297:FindFirstChild("Ammo")
+                                if v299 and v299.Value == 0 then
+                                    game.ReplicatedStorage.MainEvent:FireServer("Reload", v297)
+                                else
+                                    vu272 = v286.HumanoidRootPart
+                                    game.ReplicatedStorage.MainEvent:FireServer("ShootGun", v298, v298.CFrame.Position, v286.Head.Position, v286.Head, Vector3.new(0, 0, - 1))
+                                end
+                            end
+                        else
+                            vu272 = nil
+                        end
+                    end
+                end)
+            end
+        end)
+    elseif p247 == vu28.commands.Team or p247 == "/e team" then
+        local v300 = findPlayer(p248[1]) or nil
+        if v300 then
+            vu82.friends = vu82.friends or {}
+            local v301 = table.find(vu82.friends, v300.Name)
+            if v301 then
+                table.remove(vu82.friends, v301)
+                chat(v300.Name .. " can get hit by kill aura")
+            else
+                table.insert(vu82.friends, v300.Name)
+                chat(v300.Name .. " no longer hit by killaura.")
+            end
+        else
+            chat("Player not found.")
+        end
+    elseif p247 == vu28.commands.UnteamAll or p247 == "/e unteamall" then
+        vu82.friends = {}
+        chat("All players have been removed from the team.")
+    elseif p247 == vu28.commands["Bend Player"] or p247 == "/e bend" then
+        local v302
+        if p248[1] then
+            v302 = findPlayer(p248[1]) or nil
+        else
+            v302 = nil
+        end
+        local v303
+        if p248[2] then
+            v303 = findPlayer(p248[2]) or pu249
+        else
+            v303 = pu249
+        end
+        vu90 = v303
+        vu82.vars.target = v302
+        if v302 then
+            vu82.killType = "bending"
+            while vu82.vars.target.Character.BodyEffects["K.O"].Value == false do
+                pcall(meleekill)
+                task.wait()
+            end
+            task.wait()
+            if (v302.Character.UpperTorso.Position - v303.Character.UpperTorso.Position).magnitude >= 12.5 then
+                vu82.killType = "bending"
+                vu82.loops.disableSummon = true
+                while vu90 and vu82.killType do
+                    pcall(grabPlayer)
+                    task.wait(0.1)
+                end
+                task.wait(0.35)
+                game:GetService("ReplicatedStorage").MainEvent:FireServer("Grabbing", false)
+                task.wait()
+                vu90 = v303
+                vu82.vars.target = v302
+                vu82.killType = "bending"
+                vu82.loops.disableSummon = true
+                pcall(bend, v302, v303, "bend")
+                return
+            end
+            vu90 = v303
+            vu82.vars.target = v302
+            vu82.killType = "bending"
+            vu82.loops.disableSummon = true
+            pcall(bend, v302, v303, "bend")
+        else
+            chat("Invalid player provided.", pu249)
+        end
+    elseif p247 == vu28.commands["Blow Player"] or p247 == "/e blow" then
+        local v304
+        if p248[1] then
+            v304 = findPlayer(p248[1]) or nil
+        else
+            v304 = nil
+        end
+        local v305
+        if p248[2] then
+            v305 = findPlayer(p248[2]) or pu249
+        else
+            v305 = pu249
+        end
+        vu90 = v305
+        vu82.vars.target = v304
+        if v304 then
+            vu82.killType = "bending"
+            while vu82.vars.target.Character.BodyEffects["K.O"].Value == false do
+                pcall(meleekill)
+                task.wait()
+            end
+            task.wait()
+            if (v304.Character.UpperTorso.Position - v305.Character.UpperTorso.Position).magnitude >= 12.5 then
+                vu82.killType = "bending"
+                vu82.loops.disableSummon = true
+                while vu90 and vu82.killType do
+                    pcall(grabPlayer)
+                    task.wait(0.15)
+                end
+                task.wait(0.25)
+                game:GetService("ReplicatedStorage").MainEvent:FireServer("Grabbing", false)
+                task.wait()
+                vu90 = v305
+                vu82.vars.target = v304
+                vu82.killType = "bending"
+                vu82.loops.disableSummon = true
+                pcall(bend, v304, v305, "blow")
+                return
+            end
+            vu90 = v305
+            vu82.vars.target = v304
+            vu82.killType = "bending"
+            vu82.loops.disableSummon = true
+            pcall(bend, v304, v305, "blow")
+        else
+            chat("Invalid player provided.", pu249)
+        end
+    elseif p247 == vu28.commands["Gun Void Player"] or p247 == "/e gvoid" then
+        local v306 = findPlayer(p248[1]) or nil
+        vu82.vars.target = v306
+        if vu82.vars.target == nil then
+            chat("Invalid player provided.", pu249)
+        else
+            vu82.loops.kill = true
+            vu82.killType = "gunknock"
+            while vu82.killType == "gunknock" do
+                task.wait()
+            end
+            task.wait(0.12)
+            vu82.vars.target = v306
+            vu90 = pu249
+            vu82.loops.disableSummon = true
+            while vu90 and task.wait(0.1) do
+                pcall(grabPlayer, true)
+            end
+        end
+    elseif p247 == vu28.commands["Gun Sky Player"] or p247 == "/e gsky" then
+        local v307 = findPlayer(p248[1]) or nil
+        vu82.vars.target = v307
+        if vu82.vars.target == nil then
+            chat("Invalid player provided.", pu249)
+        else
+            vu82.loops.kill = true
+            vu82.killType = "gunknock"
+            while vu82.killType == "gunknock" do
+                task.wait()
+            end
+            task.wait(0.12)
+            vu82.vars.target = v307
+            vu90 = pu249
+            vu82.loops.disableSummon = true
+            while vu90 and task.wait(0.1) do
+                pcall(grabPlayer, nil, true)
+            end
+        end
+    elseif p247 == vu28.commands["Gun Kill Player"] or p247 == "/e gkill" then
+        vu82.vars.target = findPlayer(p248[1]) or nil
+        if vu82.vars.target == nil then
+            chat("Invalid player provided.", pu249)
+        else
+            vu82.loops.kill = true
+            vu82.killType = "gunstomp"
+        end
+    elseif p247 == vu28.commands["Loop Gun Kill Player"] or p247 == "/e lgkill" then
+        vu82.loops.functionloop = true
+        local v308 = findPlayer(p248[1])
+        if not v308 then
+            v308 = nil
+        end
+        while vu82.loops.functionloop == true and task.wait() do
+            if not vu107 then
+                vu82.vars.target = v308
+                vu82.loops.kill = true
+                vu82.killType = "gunstomp"
+                if v308 == nil then
+                    vu82.vars.viewingPlayer = nil
+                    chat("Invalid player provided.", pu249)
+                else
+                    vu82.vars.viewingPlayer = v308
+                end
+            end
+            repeat
+                task.wait()
+            until vu82.loops.functionloop == false or vu82.killType == nil
+            task.wait()
+            if vu82.loops.functionloop ~= false and not v308.CharacterAdded:Wait() then
+                break
+            end
+        end
+    elseif p247 == vu28.commands["Gun Knock Player"] or p247 == "/e gknock" then
+        vu82.vars.target = findPlayer(p248[1]) or nil
+        if vu82.vars.target == nil then
+            chat("Invalid player provided.", pu249)
+        else
+            vu82.loops.kill = true
+            vu82.killType = "gunknock"
+        end
+    elseif p247 == vu28.commands["Loop Gun Knock Player"] or p247 == "/e lgknock" then
+        local v309 = findPlayer(p248[1]) or nil
+        vu82.loops.functionloop = true
+        vu82.vars.target = v309
+        if vu82.vars.target == nil then
+            chat("Invalid player provided.", pu249)
+        else
+            while vu82.loops.functionloop and task.wait() do
+                if vu107 == nil then
+                    vu82.vars.target = v309
+                    pcall(function()
+                        if vu82.vars.target.Character.BodyEffects["K.O"].Value ~= false then
+                            vu82.loops.kill = false
+                            vu82.killType = nil
+                        else
+                            vu82.loops.kill = true
+                            vu82.killType = "gunknock"
+                        end
+                    end)
+                end
+            end
+        end
+    elseif p247 == vu28.commands["Void Player"] or p247 == "/e void" then
+        local v310 = findPlayer(p248[1]) or nil
+        vu82.vars.target = v310
+        if vu82.vars.target == nil then
+            chat("Invalid player provided.", pu249)
+        else
+            vu82.loops.kill = true
+            vu82.killType = "meleeknock"
+            while vu82.killType == "meleeknock" do
+                task.wait()
+            end
+            task.wait(0.12)
+            vu82.vars.target = v310
+            vu90 = pu249
+            vu82.loops.disableSummon = true
+            while vu90 and task.wait(0.1) do
+                pcall(grabPlayer, true)
+            end
+        end
+    elseif p247 == vu28.commands["Sky Player"] or p247 == "/e sky" then
+        local v311 = findPlayer(p248[1]) or nil
+        vu82.vars.target = v311
+        if vu82.vars.target == nil then
+            chat("Invalid player provided.", pu249)
+        else
+            vu82.loops.kill = true
+            vu82.killType = "meleeknock"
+            while vu82.killType == "meleeknock" do
+                task.wait()
+            end
+            task.wait(0.1)
+            vu82.vars.target = v311
+            vu90 = pu249
+            vu82.loops.disableSummon = true
+            while vu90 and task.wait(0.1) do
+                pcall(grabPlayer, nil, true)
+            end
+        end
+    elseif p247 == vu28.commands["Bring Player"] or p247 == "/e bring" then
+        local v312 = findPlayer(p248[1]) or nil
+        vu82.vars.target = v312
+        if vu82.vars.target == nil then
+            chat("Invalid player provided.", pu249)
+        else
+            vu82.loops.kill = true
+            vu82.killType = "meleeknock"
+            while vu82.killType == "meleeknock" do
+                task.wait()
+            end
+            task.wait(0.12)
+            vu82.vars.target = v312
+            vu90 = pu249
+            vu82.loops.disableSummon = true
+            while vu90 and task.wait(0.1) do
+                pcall(grabPlayer)
+            end
+        end
+    elseif p247 == vu28.commands["Kill Player"] or p247 == "/e kill" then
+        vu82.vars.target = findPlayer(p248[1]) or nil
+        if vu82.vars.target == nil then
+            chat("Invalid player provided.", pu249)
+        else
+            vu82.loops.kill = true
+            vu82.killType = "meleestomp"
+        end
+    elseif p247 == vu28.commands["Loop Kill Player"] or p247 == "/e lkill" then
+        vu82.loops.functionloop = true
+        local v313 = findPlayer(p248[1]) or nil
+        while vu82.loops.functionloop == true and task.wait() do
+            if not vu107 then
+                vu82.vars.target = v313
+                vu82.loops.kill = true
+                vu82.killType = "meleestomp"
+                repeat
+                    task.wait()
+                until vu82.loops.functionloop == false or vu82.killType == nil
+                repeat
+                    task.wait()
+                until vu82.loops.functionloop == false or v313.CharacterAdded:Wait()
+            end
+        end
+    elseif p247 == vu28.commands["Knock Player"] or p247 == "/e knock" then
+        vu82.vars.target = findPlayer(p248[1]) or nil
+        if vu82.vars.target == nil then
+            chat("Invalid player provided.", pu249)
+        else
+            vu82.loops.kill = true
+            vu82.killType = "meleeknock"
+        end
+    elseif p247 == vu28.commands["Loop Knock Player"] or p247 == "/e lknock" then
+        local v314 = findPlayer(p248[1]) or nil
+        vu82.loops.functionloop = true
+        vu82.vars.target = v314
+        if vu82.vars.target == nil then
+            chat("Invalid player provided.", pu249)
+        else
+            while vu82.loops.functionloop and task.wait() do
+                if vu107 == nil then
+                    vu82.vars.target = v314
+                    pcall(function()
+                        if vu82.vars.target.Character.BodyEffects["K.O"].Value ~= false then
+                            vu82.loops.kill = false
+                            vu82.killType = nil
+                        else
+                            vu82.loops.kill = true
+                            vu82.killType = "meleeknock"
+                        end
+                    end)
+                end
+            end
+        end
+    elseif (p247 ~= vu28.commands["View Player"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e view" then
+        if p247 == vu28.commands["Teleport Player"] or p247 == "/e tp" then
+            local v315 = p248[1] and vu82.teleporting.places[p248[1] ] or findPlayer(p248[1], true)
+            local v316
+            if p248[2] then
+                v316 = findPlayer(p248[2], true) or pu249
+            else
+                v316 = pu249
+            end
+            if not v315 then
+                chat("That is not a valid teleporting place", pu249)
+                return
+            end
+            vu82.killType = "Hello World!"
+            vu82.loops.disableSummon = true
+            vu82.teleporting.place = v315
+            vu104 = nil
+            vu82.vars.target = v316
+            while vu82.killType and task.wait() do
+                vu82.teleporting.teleport = true
+                pcall(teleport, vu82.teleporting.method, v316)
+            end
+        elseif p247 == vu28.commands["Change Teleport Method"] or p247 == "/e ctp" then
+            if p248[1] ~= "knock" then
+                if p248[1] ~= "cart" then
+                    if not p248[1] or p248[1] ~= "knock" and p248[1] ~= "cart" then
+                        chat("Invalid teleport method provided")
+                    end
+                else
+                    vu82.teleporting.method = "cart"
+                    chat("Teleport method changed to cart.", pu249)
+                end
+            else
+                vu82.teleporting.method = "knock"
+                chat("Teleport method changed to knock.", pu249)
+            end
+        elseif (p247 ~= vu28.commands["Whitelist Player"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e wl" then
+            if (p247 ~= vu28.commands["Unwhitelist Player"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e unwl" then
+                if (p247 ~= vu28.commands["Unwhitelist Everybody"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e uwall" then
+                    if (p247 ~= vu28.commands["Change Attack Mode"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e cam" then
+                        if (p247 ~= vu28.commands["Auto Save Toggle"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e save" then
+                            if p247 ~= vu28.commands["Auto Save Player"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId) then
+                                if (p247 ~= vu28.commands["UnAuto Save Player"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e unsave" then
+                                    if (p247 ~= vu28.commands["UnAuto Save All"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e unsavea" then
+                                        if (p247 ~= vu28.commands["Change Attack Gun"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e cag" then
+                                            if (p247 ~= vu28.commands["Change Mask"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e cm" then
+                                                if (p247 ~= vu28.commands["Lettuce Farm"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e lf" then
+                                                    if (p247 ~= vu28.commands["Weight Farm"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e wf" then
+                                                        if (p247 ~= vu28.commands["Cash Farm"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e cf" then
+                                                            if p247 ~= vu28.commands["Stomp Farm"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId) then
+                                                                if (p247 ~= vu28.commands["Change Auto Save Position"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e apos" then
+                                                                    if (p247 ~= vu28.commands["Auto Get Back"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e gback" then
+                                                                        if p247 ~= vu28.commands["Auto Heal"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId) then
+                                                                            if (p247 ~= vu28.commands["Auto Armor"] or tostring(pu249.UserId) ~= tostring(vu82.Creator.UserId)) and p247 ~= "/e aa" then
+                                                                                if p247 == vu28.commands["Auto Drop Cash"] and tostring(pu249.UserId) == tostring(vu82.Creator.UserId) or p247 == "/e adc" then
+                                                                                    vu82.loops.autodrop = not vu82.loops.autodrop
+                                                                                    while vu82.loops.autodrop and task.wait() do
+                                                                                        if vu82.loops.summon and (vu82.loops.disableSummon ~= true and not vu82.killType) then
+                                                                                            if vu217.DataFolder.Currency.Value < 10000 then
+                                                                                                game.ReplicatedStorage.MainEvent:FireServer("DropMoney", tostring(vu217.DataFolder.Currency.Value))
+                                                                                            else
+                                                                                                game.ReplicatedStorage.MainEvent:FireServer("DropMoney", "10000")
+                                                                                            end
+                                                                                        end
+                                                                                    end
+                                                                                end
+                                                                            else
+                                                                                vu82.autoarmor = not vu82.autoarmor
+                                                                                chat("Auto Armor set to " .. tostring(vu82.autoarmor) .. ".", pu249)
+                                                                                while vu82.autoarmor and task.wait() do
+                                                                                    if vu178.Armor.Value <= 50 then
+                                                                                        while vu178.Armor.Value < 130 and vu82.autoarmor do
+                                                                                            if vu178.Armor.Value < 130 then
+                                                                                                if vu80:FindFirstChildWhichIsA("Tool") then
+                                                                                                    vu80:FindFirstChildWhichIsA("Tool").Parent = vu217.Backpack
+                                                                                                end
+                                                                                                vu80.HumanoidRootPart.CFrame = CFrame.new(game:GetService("Workspace").Ignored.Shop["[High-Medium Armor] - $0"].Head.Position) * CFrame.new(0, - 5.8, 0)
+                                                                                                fireclickdetector(game:GetService("Workspace").Ignored.Shop["[High-Medium Armor] - $0"].ClickDetector, 0)
+                                                                                            end
+                                                                                            task.wait()
+                                                                                        end
+                                                                                    end
+                                                                                end
+                                                                            end
+                                                                        else
+                                                                            vu82.autoheal = not vu82.autoheal
+                                                                            chat("Auto heal set to " .. tostring(vu82.autoheal) .. ".", pu249)
+                                                                            while vu82.autoheal and task.wait() do
+                                                                                if vu80.Humanoid.Health > 50 then
+                                                                                    vu113 = false
+                                                                                else
+                                                                                    while vu80.Humanoid.Health < 100 and vu82.autoheal do
+                                                                                        vu80.HumanoidRootPart.CFrame = CFrame.new(game:GetService("Workspace").Ignored.Shop["[Taco] - $0"].Head.Position) * CFrame.new(0, - 3.1, 0)
+                                                                                        if vu217.Backpack:FindFirstChild("[Taco]") or vu80:FindFirstChild("[Taco]") then
+                                                                                            if vu217.Backpack:FindFirstChild("[Taco]") then
+                                                                                                vu113 = true
+                                                                                                vu217.Backpack:FindFirstChild("[Taco]").Parent = vu80
+                                                                                            elseif vu80:FindFirstChild("[Taco]") then
+                                                                                                vu80:FindFirstChild("[Taco]"):Activate()
+                                                                                            end
+                                                                                        else
+                                                                                            vu113 = false
+                                                                                            fireclickdetector(game:GetService("Workspace").Ignored.Shop["[Taco] - $0"].ClickDetector, 0)
+                                                                                        end
+                                                                                        task.wait()
+                                                                                    end
+                                                                                end
+                                                                            end
+                                                                        end
+                                                                    else
+                                                                        vu82.getback = not vu82.getback
+                                                                        chat("Auto get back set to " .. tostring(vu82.getback) .. ".", pu249)
+                                                                    end
+                                                                else
+                                                                    local v317 = vu82.autosave.locations[p248[1] ]
+                                                                    if v317 then
+                                                                        vu82.autosave.location = v317
+                                                                        chat("Changed auto save location to " .. p248[1], pu249)
+                                                                    else
+                                                                        chat("That nots a valid location for auto save.", pu249)
+                                                                    end
+                                                                end
+                                                            else
+                                                                vu82.loops.functionloop = true
+                                                                while vu82.loops.functionloop and task.wait() do
+                                                                    pcall(function()
+                                                                        if not vu107 then
+                                                                            local v318, v319, v320 = pairs(game.Players:GetChildren())
+                                                                            while true do
+                                                                                local v321
+                                                                                v320, v321 = v318(v319, v320)
+                                                                                if v320 == nil then
+                                                                                    break
+                                                                                end
+                                                                                if not table.find(vu82.whitelistedPlayers, v321.UserId) and (not table.find(vu82.Moderators, v321.UserId) and (not table.find(vu82.BypassPremium, v321.UserId) and (not table.find(vu82.autosave.autoSavePlayers, v321) and (v321.UserId ~= vu82.Creator.UserId and (v321.Character.BodyEffects["K.O"].Value == true and v321.Character.BodyEffects.Dead.Value == false))))) then
+                                                                                    vu80.HumanoidRootPart.CFrame = CFrame.new(v321.Character.UpperTorso.Position)
+                                                                                    game:GetService("ReplicatedStorage").MainEvent:FireServer("Stomp")
+                                                                                end
+                                                                            end
+                                                                        end
+                                                                    end)
+                                                                end
+                                                            end
+                                                        else
+                                                            disableLoops()
+                                                            vu82.killType = "cashfarm"
+                                                        end
+                                                    else
+                                                        disableLoops()
+                                                        vu82.killType = "weightfarm"
+                                                    end
+                                                else
+                                                    disableLoops()
+                                                    vu82.killType = "lettucefarm"
+                                                end
+                                            else
+                                                local v322 = p248[1]
+                                                local v323, v324, v325 = pairs(vu98)
+                                                local v326 = nil
+                                                while true do
+                                                    local v327
+                                                    v325, v327 = v323(v324, v325)
+                                                    if v325 == nil then
+                                                        v327 = v326
+                                                        break
+                                                    end
+                                                    if v322:find(v325) then
+                                                        break
+                                                    end
+                                                end
+                                                task.wait()
+                                                if not v327 then
+                                                    chat("That\'s not a valid mask.")
+                                                    return
+                                                end
+                                                vu82.mask = game:GetService("Workspace").Ignored.Shop[v327]
+                                                chat("Changed the auto mask " .. v322 .. " mask.", pu249)
+                                            end
+                                        else
+                                            local v328 = vu129[p248[1] ]
+                                            if v328 then
+                                                vu82.gunSettings.gun = v328.gunAttackWeapon
+                                                vu82.gunSettings.orbitspeed = v328.orbitspeed
+                                                vu82.gunSettings.orbitlength = v328.orbitlength
+                                                vu82.gunSettings.buyPosition = v328.gunBuyPosition
+                                                vu82.gunSettings.ammoPosition = v328.gunAmmoBuyPosition
+                                                vu82.gunSettings.gunPrice = v328.gunAttackPrice
+                                                vu82.gunSettings.ammoPrice = v328.gunAmmoPrice
+                                                if vu82.gunSettings.gun == "SMG" then
+                                                    local v329, v330, v331 = pairs(game:GetService("Workspace").Ignored.Shop:GetChildren())
+                                                    while true do
+                                                        local v332, v333 = v329(v330, v331)
+                                                        if v332 == nil then
+                                                            break
+                                                        end
+                                                        v331 = v332
+                                                        if string.find(string.lower(v333.Name), "smg") and v333:FindFirstChild("Head") then
+                                                            vu82.gunSettings.gunBuyPosition = v333
+                                                        end
+                                                    end
+                                                end
+                                                chat(v328.chatMessage, pu249)
+                                            else
+                                                chat("That\'s not a valid gun.", pu249)
+                                            end
+                                        end
+                                    else
+                                        local v334, v335, v336 = pairs(game.Players:GetChildren())
+                                        local v337 = {}
+                                        while true do
+                                            local v338, v339 = v334(v335, v336)
+                                            if v338 == nil then
+                                                break
+                                            end
+                                            v336 = v338
+                                            if (table.find(vu82.Moderators, v339.UserId) or table.find(vu82.BypassPremium, v339.UserId)) and not table.find(vu82.BypassPremium, v339.UserId) then
+                                                table.insert(v337, v339)
+                                            end
+                                        end
+                                        vu82.autosave.autoSavePlayers = v337
+                                        chat("Nobody but you will be saved.", pu249)
+                                    end
+                                else
+                                    local v340 = p248[1]
+                                    if v340 then
+                                        v340 = findPlayer(p248[1])
+                                    end
+                                    if v340 and table.find(vu82.autosave.autoSavePlayers, v340) then
+                                        if v340 and table.find(vu82.autosave.autoSavePlayers, v340) then
+                                            local v341, v342, v343 = pairs(vu82.autosave.autoSavePlayers)
+                                            while true do
+                                                local v344, _ = v341(v342, v343)
+                                                if v344 == nil then
+                                                    break
+                                                end
+                                                v343 = v344
+                                                if vu82.autosave.autoSavePlayers[v344] == v340 then
+                                                    table.remove(vu82.autosave.autoSavePlayers, v344)
+                                                end
+                                            end
+                                            chat(v340.DisplayName .. " will no longer be autosaved.", pu249)
+                                        end
+                                    elseif v340 then
+                                        if table.find(vu82.autosave.autoSavePlayers, v340) then
+                                            chat("Player isn\'t being auto saved to begin with.", pu249)
+                                        end
+                                    else
+                                        chat("Invalid player provided.", pu249)
+                                    end
+                                end
+                            else
+                                local v345 = p248[1]
+                                if v345 then
+                                    v345 = findPlayer(p248[1], true)
+                                end
+                                if v345 and (not table.find(vu82.autosave.autoSavePlayers, v345) and v345 ~= vu82.Creator) then
+                                    if v345 and (not table.find(vu82.autosave.autoSavePlayers, v345) and v345 ~= vu82.Creator) then
+                                        table.insert(vu82.autosave.autoSavePlayers, v345)
+                                        chat(v345.DisplayName .. " will now be autosaved.", pu249)
+                                    end
+                                elseif v345 then
+                                    if table.find(vu82.autosave.autoSavePlayers, v345) then
+                                        chat(v345.DisplayName .. " is already being auto saved.", pu249)
+                                    elseif v345 == vu82.Creator then
+                                        chat("You by default get auto saved if it is toggled.")
+                                    end
+                                else
+                                    chat("Invalid player provided.", pu249)
+                                end
+                            end
+                        else
+                            vu82.autosave.autosave = not vu82.autosave.autosave
+                            chat("Auto save set to " .. tostring(vu82.autosave.autosave) .. ".", pu249)
+                        end
+                    elseif p248[1] then
+                        local v346 = ({
+                            fist = {
+                                attackMode = "Combat",
+                                message = "Changed attack method to fists."
+                            },
+                            combat = {
+                                attackMode = "Combat",
+                                message = "Changed attack method to fists."
+                            },
+                            default = {
+                                attackMode = "Combat",
+                                message = "Changed attack method to fists."
+                            },
+                            knife = {
+                                attackMode = "[Knife]",
+                                attackPrice = 159,
+                                buyPosition = getShopItem("Knife"),
+                                message = "Changed attack method to knife."
+                            },
+                            shovel = {
+                                attackMode = "[Shovel]",
+                                attackPrice = 339,
+                                buyPosition = getShopItem("Shovel"),
+                                message = "Changed attack method to shovel."
+                            },
+                            pitch = {
+                                attackMode = "[Pitchfork]",
+                                attackPrice = 339,
+                                buyPosition = getShopItem("Pitchfork"),
+                                message = "Changed attack method to pitchfork."
+                            },
+                            pitchfork = {
+                                attackMode = "[Pitchfork]",
+                                attackPrice = 339,
+                                buyPosition = getShopItem("Pitchfork"),
+                                message = "Changed attack method to pitchfork."
+                            },
+                            sledge = {
+                                attackMode = "[SledgeHammer]",
+                                attackPrice = 382,
+                                buyPosition = getShopItem("SledgeHammer"),
+                                message = "Changed attack method to sledge hammer."
+                            },
+                            sledgehammer = {
+                                attackMode = "[SledgeHammer]",
+                                attackPrice = 382,
+                                buyPosition = getShopItem("SledgeHammer"),
+                                message = "Changed attack method to sledge hammer."
+                            },
+                            stop = {
+                                attackMode = "[StopSign]",
+                                attackPrice = 318,
+                                buyPosition = getShopItem("StopSign"),
+                                message = "Changed attack method to stop sign."
+                            },
+                            stopsign = {
+                                attackMode = "[StopSign]",
+                                attackPrice = 318,
+                                buyPosition = getShopItem("StopSign"),
+                                message = "Changed attack method to stop sign."
+                            }
+                        })[p248[1] ]
+                        if v346 then
+                            vu82.meleeSettings.Weapon = v346.attackMode
+                            vu82.meleeSettings.purchasePlace = v346.buyPosition or nil
+                            vu82.meleeSettings.price = v346.attackPrice or nil
+                            chat(v346.message, pu249)
+                        else
+                            chat("That\'s not a valid attack method.", pu249)
+                        end
+                    end
+                else
+                    vu82.whitelistedPlayers = {}
+                    chat("Nobody but you can do commands.", pu249)
+                end
+            else
+                player = findPlayer(p248[1])
+                if player then
+                    local v347 = tonumber(player.UserId)
+                    local v348 = table.find(vu82.whitelistedPlayers, v347)
+                    if v348 then
+                        table.remove(vu82.whitelistedPlayers, v348)
+                        chat(player.DisplayName .. " can no longer do commands.", pu249)
+                    else
+                        chat(player.DisplayName .. " couldn\'t do commands to begin with.", pu249)
+                    end
+                else
+                    chat("player not found", pu249)
+                end
+            end
+        else
+            player = findPlayer(p248[1]) or nil
+            if player then
+                if table.find(vu82.whitelistedPlayers, player.UserId) then
+                    chat(player.DisplayName .. " can already do commands.", pu249)
+                else
+                    table.insert(vu82.whitelistedPlayers, player.UserId)
+                    chat(player.DisplayName .. " can now do commands.", pu249)
+                end
+            else
+                chat("Invalid player provided.", pu249)
+            end
+        end
+    else
+        local v349 = findPlayer(p248[1]) or nil
+        if p248[1] == "off" or not v349 then
+            vu82.vars.viewingPlayer = nil
+            return
+        end
+        if v349 == nil then
+            vu82.vars.viewingPlayer = nil
+            chat("Invalid player provided.", pu249)
+        else
+            vu82.vars.viewingPlayer = v349
+        end
+    end
+end
+v215.MessageReceived:Connect(function(p350)
+    local v351 = p350.TextSource
+    if v351 then
+        local v352 = v351.UserId
+        local v353 = v351.Name
+        local v354 = vu214:GetPlayerByUserId(v352)
+        if v354 and vu214:FindFirstChild(v353) then
+            local v355 = p350.Text
+            if v355 == "checkprefix" then
+                chat(vu28.prefix, v354)
+                return
+            else
+                local v356 = table.find(vu82.BypassPremium, v354.UserId)
+                local v357 = table.find(vu82.BypassPremium, vu217.UserId) or table.find(vu82.BypassPremium, vu82.Creator.UserId)
+                local v358 = table.find(vu82.Moderators, v354.UserId)
+                local v359 = table.find(vu82.Moderators, vu217.UserId) or table.find(vu82.Moderators, vu82.Creator.UserId)
+                local v360 = table.find(vu82.whitelistedPlayers, v354.UserId) or vu82.Creator.UserId == v354.UserId
+                if v356 or (v358 or v360) then
+                    if not v360 then
+                        if v357 then
+                            return
+                        end
+                        if v359 and not v356 then
+                            return
+                        end
+                        if not (v356 or v358) then
+                            return
+                        end
+                    end
+                    if v355:sub(1, # vu28.prefix) == vu28.prefix then
+                        local v361 = v355:sub(# vu28.prefix + 1):split(" ")
+                        args = v361
+                        local v362 = v361[1]
+                        table.remove(args, 1)
+                        processCommand(v362, args, v354)
+                    end
+                else
+                    return
+                end
+            end
+        else
+            vu217:Kick("Nice try buddy.")
+            return
+        end
+    else
+        return
+    end
+end)
+if vu28.CREATOR == true and table.find(vu35, vu82.Creator.UserId) then
+    game.Players:FindFirstChild(vu82.Creator.Name).Chatted:Connect(function(p363)
+        local v364 = string.lower(p363)
+        if string.sub(v364, 1, 3) == "/e " then
+            local v365 = string.sub(v364, 4)
+            local v366, v367, v368 = string.gmatch(v365, "%S+")
+            local v369 = {}
+            while true do
+                v368 = v366(v367, v368)
+                if v368 == nil then
+                    break
+                end
+                table.insert(v369, v368)
+            end
+            local v370 = "/e " .. v369[1]
+            table.remove(v369, 1)
+            processCommand(v370, v369, vu82.Creator)
+        end
+    end)
+end
+local v371 = Instance.new("Animation", game:GetService("ReplicatedStorage").IM.ANIM)
+v371.Name = "SUPERFLY"
+v371.AnimationId = "rbxassetid://3541044388"
+local v372 = Instance.new("Animation", game:GetService("ReplicatedStorage").IM.ANIM)
+v372.Name = "Hover2"
+v372.AnimationId = "rbxassetid://3541114300"
+local vu373 = false
+local vu374 = false
+coroutine.wrap(function()
+    while task.wait() do
+        pcall(function()
+            if vu80 and vu178 and vu80:FindFirstChild("FULLY_LOADED_CHAR") then
+                if vu80 and vu178 and vu80:FindFirstChild("FULLY_LOADED_CHAR") then
+                    vu374 = true
+                end
+            else
+                vu374 = false
+            end
+        end)
+        if vu374 then
+            coroutine.wrap(function()
+                pcall(function()
+                    game.Workspace:FindFirstChildWhichIsA("Camera").CameraSubject = vu82.vars.viewingPlayer.Character.Head or vu97
+                end)
+            end)()
+            coroutine.wrap(function()
+                pcall(function()
+                    if vu82.loops.disableSummon == false and vu82.killType == nil then
+                        if vu82.loops.summon and vu82.summonSettings.player then
+                            vu80.HumanoidRootPart.CFrame = vu82.summonSettings.player.Character.HumanoidRootPart.CFrame * CFrame.new(vu82.summonSettings.pos, 2.5, 2.5)
+                        else
+                            vu80.HumanoidRootPart.CFrame = CFrame.new(math.random(- 1000, 1000), math.random(200, 600), math.random(1, 400))
+                            vu119(math.random(0.5, 1) / 100)
+                        end
+                    end
+                end)
+            end)()
+            coroutine.wrap(function()
+                pcall(function()
+                    local v375 = vu80:FindFirstChildWhichIsA("Tool")
+                    if vu82.killType == nil and (vu82.loops.disableSummon ~= true and (v375 and (vu113 ~= true and v375.Name ~= "[Rifle]"))) then
+                        v375.Parent = vu217.Backpack
+                    end
+                end)
+            end)()
+            coroutine.wrap(function()
+                pcall(function()
+                    if vu82.loops.kill or vu82.killType then
+                        if vu82.killType ~= "gunstomp" then
+                            if vu82.killType ~= "gunknock" then
+                                if vu82.killType ~= "meleestomp" then
+                                    if vu82.killType ~= "meleeknock" then
+                                        if vu82.killType ~= "lettucefarm" then
+                                            if vu82.killType ~= "weightfarm" then
+                                                if vu82.killType == "cashfarm" then
+                                                    pcall(function()
+                                                        coroutine.wrap(function()
+                                                            pcall(function()
+                                                                if vu217.Character.Humanoid.Sit == true then
+                                                                    vu217.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                                                                end
+                                                            end)
+                                                        end)()
+                                                        if vu217.Character:FindFirstChild("FULLY_LOADED_CHAR") then
+                                                            if vu217.Character.BodyEffects["K.O"].Value ~= true then
+                                                                if vu110 then
+                                                                    if vu110.Humanoid.Health >= 1 then
+                                                                        if vu110.Humanoid.Health > 1 then
+                                                                            if vu122 == false then
+                                                                                vu122 = true
+                                                                                local v376 = vu110
+                                                                                local v377, v378, v379 = pairs(v376:GetDescendants())
+                                                                                while true do
+                                                                                    local vu380
+                                                                                    v379, vu380 = v377(v378, v379)
+                                                                                    if v379 == nil then
+                                                                                        break
+                                                                                    end
+                                                                                    if vu380:IsA("Part") or (vu380:IsA("MeshPart") or vu380:IsA("BasePart")) then
+                                                                                        pcall(function()
+                                                                                            vu380.CanCollide = false
+                                                                                        end)
+                                                                                    end
+                                                                                end
+                                                                            end
+                                                                            vu217.Character.HumanoidRootPart.CFrame = vu110.Open.CFrame * CFrame.new(0, 0, 1.9)
+                                                                            if vu217.Backpack:FindFirstChild("Combat") then
+                                                                                vu217.Backpack:FindFirstChild("Combat").Parent = vu217.Character
+                                                                            elseif vu217.Character.BodyEffects.Attacking.Value == false then
+                                                                                vu217.Character:FindFirstChild("Combat"):Activate()
+                                                                            end
+                                                                        end
+                                                                    else
+                                                                        task.wait(vu96 / 2)
+                                                                        vu121 = false
+                                                                        if not vu119 then
+                                                                            vu119 = true
+                                                                            task.wait(vu96)
+                                                                            local v381, v382, v383 = ipairs(game.Workspace.Ignored.Drop:GetChildren())
+                                                                            while true do
+                                                                                local v384
+                                                                                v383, v384 = v381(v382, v383)
+                                                                                if v383 == nil then
+                                                                                    break
+                                                                                end
+                                                                                if (v384.Position - vu217.Character.HumanoidRootPart.Position).magnitude < 14.5 and v384:FindFirstChild("ClickDetector") then
+                                                                                    if vu217.Character:FindFirstChildWhichIsA("Tool") then
+                                                                                        vu217.Character:FindFirstChildWhichIsA("Tool").Parent = vu217.Backpack
+                                                                                    end
+                                                                                    task.wait(vu96 / 2)
+                                                                                    fireclickdetector(v384.ClickDetector, 0)
+                                                                                    vu121 = true
+                                                                                end
+                                                                            end
+                                                                            if vu121 == false then
+                                                                                vu110 = nil
+                                                                                vu112 = false
+                                                                                vu122 = false
+                                                                            end
+                                                                            vu119 = false
+                                                                        end
+                                                                    end
+                                                                else
+                                                                    vu217.Character.HumanoidRootPart.CFrame = CFrame.new(9999, 9999, 9999)
+                                                                    local v385, v386, v387 = pairs(game.Workspace.Cashiers:GetChildren())
+                                                                    while true do
+                                                                        local v388
+                                                                        v387, v388 = v385(v386, v387)
+                                                                        if v387 == nil then
+                                                                            break
+                                                                        end
+                                                                        if v388.Name:match("CA$HIER") and (not v388.Name:match("VAULT") and (v388.Humanoid.Health > 25 and (v388.Head.Position - Vector3.new(- 623.998474, 24.9000168, - 285.062225, 1, 0, 0, 0, 1, 0, 0, 0, 1)).magnitude > 8)) then
+                                                                            closestDistance = distance
+                                                                            vu110 = v388
+                                                                        end
+                                                                    end
+                                                                end
+                                                            else
+                                                                vu110 = nil
+                                                                selectedMoney = false
+                                                                local v389, v390, v391 = pairs(vu217.Character:GetChildren())
+                                                                while true do
+                                                                    local v392
+                                                                    v391, v392 = v389(v390, v391)
+                                                                    if v391 == nil then
+                                                                        break
+                                                                    end
+                                                                    if v392:IsA("MeshPart") or (v392:IsA("Part") or v392:IsA("BasePart")) then
+                                                                        v392:Remove()
+                                                                    end
+                                                                end
+                                                            end
+                                                        end
+                                                    end)
+                                                end
+                                            elseif vu217.Backpack:FindFirstChild("[HeavyWeights]") or vu80:FindFirstChild("[HeavyWeights]") then
+                                                if vu217.Backpack:FindFirstChild("[HeavyWeights]") then
+                                                    vu217.Backpack:FindFirstChild("[HeavyWeights]").Parent = vu80
+                                                elseif vu80:FindFirstChild("[HeavyWeights]") then
+                                                    vu80:FindFirstChild("[HeavyWeights]"):Activate()
+                                                end
+                                                vu80.HumanoidRootPart.CFrame = CFrame.new(999, 999, 999)
+                                            else
+                                                vu80.HumanoidRootPart.CFrame = CFrame.new(game:GetService("Workspace").Ignored.Shop["[HeavyWeights] - $273"].Head.Position) * CFrame.new(0, - 5.8, 0)
+                                                fireclickdetector(game:GetService("Workspace").Ignored.Shop["[HeavyWeights] - $273"].ClickDetector, 0)
+                                            end
+                                        else
+                                            vu80.HumanoidRootPart.CFrame = CFrame.new(game:GetService("Workspace").Ignored.Shop["[Lettuce] - $5"].Head.Position) * CFrame.new(0, - 5.8, 0)
+                                            if vu217.Backpack:FindFirstChild("[Lettuce]") then
+                                                vu217.Backpack:FindFirstChild("[Lettuce]").Parent = vu80
+                                            elseif vu80:FindFirstChild("[Lettuce]") then
+                                                vu80:FindFirstChild("[Lettuce]"):Activate()
+                                            elseif not (vu80:FindFirstChild("[Lettuce]") or vu217.Backpack:FindFirstChild("[Lettuce]")) then
+                                                fireclickdetector(game:GetService("Workspace").Ignored.Shop["[Lettuce] - $5"].ClickDetector, 0)
+                                            end
+                                        end
+                                    elseif vu82.vars.target.Character.BodyEffects["K.O"].Value == true then
+                                        if vu82.vars.target.Character.BodyEffects["K.O"].Value == true then
+                                            disableLoops()
+                                        end
+                                    else
+                                        meleekill()
+                                    end
+                                elseif vu82.vars.target.Character.BodyEffects["K.O"].Value ~= true then
+                                    if vu82.vars.target.Character.BodyEffects["K.O"].Value ~= true then
+                                        meleekill()
+                                    end
+                                elseif vu82.vars.target.Character.BodyEffects.Dead.Value ~= false then
+                                    disableLoops()
+                                else
+                                    if vu80:FindFirstChildWhichIsA("Tool") then
+                                        vu80:FindFirstChildWhichIsA("Tool").Parent = vu217.Backpack
+                                    end
+                                    stomp()
+                                end
+                            elseif vu82.vars.target.Character.BodyEffects["K.O"].Value == true then
+                                if vu82.vars.target.Character.BodyEffects["K.O"].Value == true then
+                                    disableLoops()
+                                    vu117 = false
+                                end
+                            else
+                                gkill()
+                            end
+                        elseif vu82.vars.target.Character.BodyEffects["K.O"].Value ~= true then
+                            if vu82.vars.target.Character.BodyEffects["K.O"].Value ~= true then
+                                gkill()
+                            end
+                        elseif vu82.vars.target.Character.BodyEffects.Dead.Value ~= false then
+                            disableLoops()
+                            vu117 = false
+                        else
+                            stomp()
+                        end
+                    end
+                end)
+            end)()
+            coroutine.wrap(function()
+                pcall(function()
+                    if vu82.loops.alwaysView and not vu82.vars.viewingPlayer then
+                        vu82.vars.viewingPlayer = vu217
+                    end
+                end)
+            end)()
+            coroutine.wrap(function()
+                pcall(function()
+                    vu80.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+                end)
+            end)()
+            coroutine.wrap(function()
+                pcall(function()
+                    if vu82.autosave.autosave == true then
+                        if vu82.Creator.Character.BodyEffects["K.O"].Value == false or (vu82.autosave.location - vu82.Creator.Character.UpperTorso.Position).magnitude < 6 then
+                            if not vu107 then
+                                local v393 = # vu82.autosave.autoSavePlayers
+                                if not vu107 and 0 < v393 then
+                                    vu107 = nil
+                                    if vu123 > v393 then
+                                        vu123 = 1
+                                    else
+                                        local v394 = (vu82.autosave.location - vu82.autosave.autoSavePlayers[vu123].Character.UpperTorso.Position).magnitude
+                                        if vu82.autosave.autoSavePlayers[vu123].Character.BodyEffects["K.O"].Value == true and 6 < v394 then
+                                            vu107 = vu82.autosave.autoSavePlayers[vu123]
+                                        end
+                                        vu123 = vu123 + 1
+                                    end
+                                end
+                            end
+                        elseif vu82.Creator.Character.BodyEffects["K.O"].Value == true and (vu82.autosave.location - vu82.Creator.Character.UpperTorso.Position).magnitude > 6 then
+                            vu107 = vu82.Creator
+                        end
+                        if vu107 then
+                            local v395 = (vu82.autosave.location - vu107.Character.UpperTorso.Position).magnitude
+                            if vu107.Character.BodyEffects["K.O"].Value ~= true or 6 >= v395 then
+                                if vu107.Character:FindFirstChild("GRABBING_CONSTRAINT") then
+                                    vu80.HumanoidRootPart.CFrame = CFrame.new(vu82.autosave.location)
+                                    task.wait(0.25)
+                                    game:GetService("ReplicatedStorage").MainEvent:FireServer("Grabbing", false)
+                                    vu373 = false
+                                    vu107 = nil
+                                    disableLoops()
+                                elseif vu107.Character.BodyEffects["K.O"].Value == false and not vu107.Character:FindFirstChild("GRABBING_CONSTRAINT") or (vu107.Character.BodyEffects.Dead.Value == true or v395 < 6) then
+                                    vu373 = false
+                                    vu107 = nil
+                                    disableLoops()
+                                end
+                            else
+                                vu82.teleporting.teleport = false
+                                vu82.teleporting.place = nil
+                                vu82.loops.gunkill = false
+                                vu82.loops.kill = false
+                                vu82.vars.target = nil
+                                vu82.killType = "Hello, World!"
+                                vu82.loops.disableSummon = true
+                                vu91 = false
+                                vu90 = nil
+                                vu80.HumanoidRootPart.CFrame = CFrame.new(vu107.Character.UpperTorso.Position) * CFrame.new(0, 2.3, 0)
+                                if vu373 ~= true then
+                                    vu373 = true
+                                    game:GetService("ReplicatedStorage").MainEvent:FireServer("Grabbing", false)
+                                    task.wait(0.4)
+                                    vu373 = false
+                                end
+                            end
+                        end
+                    end
+                end)
+            end)()
+            coroutine.wrap(function()
+                pcall(function()
+                    if vu82.summonSettings.player.Character.Humanoid.MoveDirection.X == 0 or (vu82.loops.disableSummon == true or (vu82.killType ~= nil or vu82.loops.summon ~= true)) then
+                        if vu82.summonSettings.player.Character.Humanoid.MoveDirection.X == 0 and (vu82.loops.disableSummon ~= true and vu82.killType == nil) then
+                            local v396, v397, v398 = pairs(vu80.Humanoid:GetPlayingAnimationTracks())
+                            local v399 = false
+                            while true do
+                                local v400
+                                v398, v400 = v396(v397, v398)
+                                if v398 == nil then
+                                    break
+                                end
+                                if v400.Name ~= "Hover2" then
+                                    v400:Stop()
+                                else
+                                    v399 = true
+                                end
+                            end
+                            task.wait()
+                            if not v399 then
+                                vu80.Humanoid:LoadAnimation(game:GetService("ReplicatedStorage").IM.ANIM.Hover2):Play()
+                            end
+                        end
+                    else
+                        local v401, v402, v403 = pairs(vu80.Humanoid:GetPlayingAnimationTracks())
+                        local v404 = false
+                        while true do
+                            local v405
+                            v403, v405 = v401(v402, v403)
+                            if v403 == nil then
+                                break
+                            end
+                            if v405.Name ~= "SUPERFLY" then
+                                v405:Stop()
+                            else
+                                v404 = true
+                            end
+                        end
+                        task.wait()
+                        if not v404 then
+                            vu80.Humanoid:LoadAnimation(game:GetService("ReplicatedStorage").IM.ANIM.SUPERFLY):Play()
+                        end
+                    end
+                end)
+            end)()
+            coroutine.wrap(function()
+                pcall(function()
+                    if vu82.enableMaskLogic then
+                        local v406 = vu80:FindFirstChild("[Mask]")
+                        local v407 = vu217.Backpack:FindFirstChild("[Mask]")
+                        local v408 = vu80:FindFirstChild("In-gameMask")
+                        local v409 = vu80:FindFirstChildOfClass("Humanoid")
+                        if not v409 or v409.Health <= 0 then
+                            return
+                        end
+                        if v406 or (v407 or (v408 or vu82.killType)) then
+                            if (v407 or v406) and not v408 then
+                                vu82.killType = "YESQUEEN"
+                                if v407 then
+                                    v407.Parent = vu80
+                                    task.wait(0.3)
+                                end
+                                local v410 = vu80:FindFirstChild("[Mask]")
+                                if v410 then
+                                    disableLoops()
+                                    v410:Activate()
+                                    task.wait(1)
+                                    if vu80:FindFirstChild("Humanoid") and v409.Health > 0 and player:FindFirstChild("Backpack") then
+                                        v410.Parent = player.Backpack
+                                    end
+                                    vu82.enableMaskLogic = false
+                                    chat("Mask used, auto logic disabled.")
+                                end
+                            end
+                        else
+                            vu80.HumanoidRootPart.CFrame = CFrame.new(vu82.mask.Head.Position) * CFrame.new(0, 2, 0)
+                            fireclickdetector(vu82.mask.ClickDetector, 0)
+                        end
+                    end
+                end)
+            end)()
+            coroutine.wrap(function()
+                pcall(function()
+                    if vu80.Humanoid.Sit == true and vu82.teleporting.teleport ~= true then
+                        vu80.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                    end
+                end)
+            end)()
+            coroutine.wrap(function()
+                pcall(function()
+                    if vu82.solara ~= true then
+                        local v411 = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValueString()
+                        local v412 = tostring(v411):split(" ")[1]
+                        local v413 = tonumber(v412)
+                        if v413 < 130 then
+                            vu82.gunSettings.prediction = 0.151
+                        elseif v413 < 120 then
+                            vu82.gunSettings.prediction = 0.149
+                        elseif v413 < 110 then
+                            vu82.gunSettings.prediction = 0.146
+                        elseif v413 < 105 then
+                            vu82.gunSettings.prediction = 0.138
+                        elseif v413 < 90 then
+                            vu82.gunSettings.prediction = 0.136
+                        elseif v413 < 80 then
+                            vu82.gunSettings.prediction = 0.134
+                        elseif v413 < 70 then
+                            vu82.gunSettings.prediction = 0.131
+                        elseif v413 < 60 then
+                            vu82.gunSettings.predictionn = 0.1229
+                        elseif v413 < 50 then
+                            vu82.gunSettings.prediction = 0.1225
+                        elseif v413 < 40 then
+                            vu82.gunSettings.prediction = 0.1256
+                        end
+                    end
+                end)
+            end)()
+            coroutine.wrap(function()
+                pcall(function()
+                    if vu82.killType and vu82.loops.disableSummon then
+                        if (vu82.killType or vu82.loops.disableSummon) and vu178:FindFirstChild("Block") then
+                            game:GetService("ReplicatedStorage").MainEvent:FireServer("Block", false)
+                        end
+                    else
+                        local v414, v415, v416 = pairs(game.Players:GetChildren())
+                        while true do
+                            local v417
+                            v416, v417 = v414(v415, v416)
+                            if v416 == nil then
+                                break
+                            end
+                            if v417.Character.BodyEffects.Attacking.Value == true and (v417.Character.UpperTorso.Position - vu80.UpperTorso.Position).magnitude < 7 then
+                                game:GetService("ReplicatedStorage").MainEvent:FireServer("Block", true)
+                                coroutine.wrap(function()
+                                    if vu106 == false then
+                                        vu106 = true
+                                        game:GetService("ReplicatedStorage").MainEvent:FireServer("Block", false)
+                                        task.wait(0.125)
+                                        vu106 = false
+                                    end
+                                end)()
+                            end
+                        end
+                    end
+                end)
+            end)()
+            coroutine.wrap(function()
+                pcall(function()
+                    if vu82.getback then
+                        local v418, v419, v420 = pairs(game.Players:GetChildren())
+                        while true do
+                            local v421
+                            v420, v421 = v418(v419, v420)
+                            if v420 == nil then
+                                break
+                            end
+                            if (v421.Character.UpperTorso.Position - vu82.Creator.Character.UpperTorso.Position).magnitude <= 6.25 and (v421 ~= vu82.Creator and (v421 ~= vu217 and (not vu94 and vu82.Creator.Character.BodyEffects.Dead.Value == true))) then
+                                vu82.vars.target = v421
+                                vu82.killType = "gunstomp"
+                                vu94 = v421
+                                task.wait()
+                            end
+                        end
+                    end
+                end)
+            end)()
+            coroutine.wrap(function()
+                pcall(function()
+                    if vu178["K.O"].Value then
+                        local v422 = vu80
+                        local v423, v424, v425 = pairs(v422:GetChildren())
+                        while true do
+                            local v426
+                            v425, v426 = v423(v424, v425)
+                            if v425 == nil then
+                                break
+                            end
+                            if v426:IsA("MeshPart") then
+                                v426:Remove()
+                            end
+                        end
+                    end
+                end)
+            end)()
+            coroutine.wrap(function()
+                pcall(function()
+                    vu80.HumanoidRootPart.CanCollide = false
+                    vu80.Head.CanCollide = false
+                    vu80.LeftHand.CanCollide = false
+                    vu80.RightHand.CanCollide = false
+                    vu80.LeftLowerArm.CanCollide = false
+                    vu80.RightLowerArm.CanCollide = false
+                    vu80.LeftUpperArm.CanCollide = false
+                    vu80.RightLowerArm.CanCollide = false
+                    vu80.LeftFoot.CanCollide = false
+                    vu80.LeftLowerLeg.CanCollide = false
+                    vu80.UpperTorso.CanCollide = false
+                    vu80.LeftUpperLeg.CanCollide = false
+                    vu80.RightFoot.CanCollide = false
+                    vu80.RightLowerLeg.CanCollide = false
+                    vu80.LowerTorso.CanCollide = false
+                    vu80.RightUpperLeg.CanCollide = false
+                end)
+            end)()
+        end
+    end
+end)()
+local v427, v428, v429 = pairs(game.Players:GetChildren())
+while true do
+    local v430
+    v429, v430 = v427(v428, v429)
+    if v429 == nil then
+        break
+    end
+    if (table.find(vu82.Moderators, v430.UserId) or table.find(vu82.BypassPremium, v430.UserId)) and not table.find(vu82.BypassPremium, vu82.Creator.UserId) then
+        table.insert(vu82.autosave.autoSavePlayers, v430)
+    end
+end
+coroutine.wrap(function()
+    game:GetService("Players").LocalPlayer.Idled:Connect(function()
+        game:GetService("VirtualUser"):CaptureController()
+        game:GetService("VirtualUser"):ClickButton2(Vector2.new())
+    end)
+end)()
+coroutine.wrap(function()
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "TRADEME!")
+    task.wait(2.5)
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "DAUP")
+    task.wait(2.5)
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "pumpkins2023")
+    task.wait(2.5)
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "DACARNIVAL")
+    task.wait(2.5)
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "THANKSGIVING24")
+    task.wait(2.5)
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "HALLOWEEN2024")
+    task.wait(2.5)
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "RUBY")
+    task.wait(2.5)
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "SHRIMP")
+    task.wait(2.5)
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "VIP")
+    task.wait(2.5)
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "2025")
+    task.wait(2.5)
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "Duck")
+    task.wait(2.5)
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "Watch")
+    task.wait(2.5)
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "Quack")
+    task.wait(2.5)
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "50MDHC")
+    task.wait(2.5)
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "Midnight")
+    task.wait(2.5)
+    game:GetService("ReplicatedStorage").MainEvent:FireServer("EnterPromoCode", "Jellyfish")
+end)()
