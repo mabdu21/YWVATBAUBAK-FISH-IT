@@ -1,0 +1,1413 @@
+--[[
+    DYHUB - Anime Expedition Macro System
+    Version: v01.30 (Fixed)
+    
+    Folder Structure:
+      DYHUB_AE/
+        Config/
+          config_ae.json     (UI settings)
+        Macro/
+          *.json             (saved macros)
+]]
+
+-- =========================
+local version = "BETA"
+local ver     = "v01.30"
+-- =========================
+
+repeat task.wait() until game:IsLoaded()
+
+-- ====================== LOAD UI ======================
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+if setfpscap then
+    setfpscap(1000000)
+    WindUI:Notify({ Title = "DYHUB", Content = "FPS Unlocked! | " .. ver, Duration = 3, Icon = "cpu" })
+else
+    WindUI:Notify({ Title = "Warning", Content = "Your exploit does not support setfpscap.", Duration = 3, Icon = "ban" })
+end
+
+-- ====================== SERVICES ======================
+local RunService        = game:GetService("RunService")
+local Workspace         = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService  = game:GetService("UserInputService")
+local Players           = game:GetService("Players")
+local HttpService       = game:GetService("HttpService")
+local TeleportService   = game:GetService("TeleportService")
+local ScriptContext     = game:GetService("ScriptContext")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
+local Camera      = Workspace.CurrentCamera
+
+-- ====================== CHARACTER CACHE ======================
+local Character        = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid         = Character:WaitForChild("Humanoid")
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    Character        = char
+    Humanoid         = char:WaitForChild("Humanoid")
+    HumanoidRootPart = char:WaitForChild("HumanoidRootPart")
+end)
+
+-- ====================== FOLDER SETUP ======================
+local ConfigFolder = "DYHUB_AE"
+local MacroFolder  = ConfigFolder .. "/Macro"
+local ConfigPath   = ConfigFolder .. "/Config/config_ae.json"
+
+local function ensureFolder(path)
+    if not isfolder(path) then
+        pcall(makefolder, path)
+    end
+end
+
+ensureFolder(ConfigFolder)
+ensureFolder(ConfigFolder .. "/Config")
+ensureFolder(MacroFolder)
+
+-- ====================== VERSION CHECK ======================
+local function checkVersion(playerName)
+    local url = "https://raw.githubusercontent.com/mabdu21/2askdkn21h3u21ddaa/refs/heads/main/Main/Premium/listpremium.lua"
+    local success, response = pcall(function() return game:HttpGet(url) end)
+    if not success then return "Free Version" end
+    local func = loadstring(response)
+    if not func then return "Free Version" end
+    local ok, premiumData = pcall(func)
+    if not ok then return "Free Version" end
+    return (premiumData and premiumData[playerName]) and "Premium Version" or "Free Version"
+end
+
+local userversion = checkVersion(LocalPlayer.Name)
+local isPremium   = (userversion == "Premium Version")
+
+-- ====================== WINDOW ======================
+local Window = WindUI:CreateWindow({
+    Title      = "DYHUB - Anime Expedition",
+    IconThemed = true,
+    Icon       = "rbxassetid://104487529937663",
+    Author     = "DYHUB | " .. userversion,
+    Folder     = ConfigFolder,
+    Size       = UDim2.fromOffset(520, 420),
+    Transparent = true,
+    Theme      = "Dark",
+    BackgroundImageTransparency = 0.8,
+    HasOutline = false,
+    HideSearchBar    = true,
+    ScrollBarEnabled = true,
+    User = { Enabled = true, Anonymous = false },
+})
+
+Window:SetToggleKey(Enum.KeyCode.K)
+pcall(function() Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") }) end)
+Window:EditOpenButton({
+    Title           = "DYHUB - Open",
+    Icon            = "monitor",
+    CornerRadius    = UDim.new(0, 6),
+    StrokeThickness = 2,
+    Color           = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255)),
+    Draggable       = true,
+})
+
+-- ====================== CONFIG SYSTEM ======================
+local ConfigManager = {}
+ConfigManager.__index = ConfigManager
+
+function ConfigManager.new()
+    local self = setmetatable({}, ConfigManager)
+    self.Data = {}
+    self.Path = ConfigPath
+    self._autoSaveThread = nil
+    self._autoSaveDelay  = 15
+    self:Load()
+    return self
+end
+
+function ConfigManager:Set(key, value) self.Data[key] = value end
+function ConfigManager:Get(key, default)
+    local v = self.Data[key]
+    return v ~= nil and v or default
+end
+
+function ConfigManager:Save()
+    pcall(function()
+        writefile(self.Path, HttpService:JSONEncode(self.Data))
+    end)
+end
+
+function ConfigManager:Load()
+    if isfile(self.Path) then
+        local ok, result = pcall(function()
+            return HttpService:JSONDecode(readfile(self.Path))
+        end)
+        if ok and type(result) == "table" then
+            self.Data = result
+        else
+            self.Data = {}
+        end
+    else
+        self.Data = {}
+    end
+end
+
+function ConfigManager:AutoSave(interval)
+    if self._autoSaveThread then
+        task.cancel(self._autoSaveThread)
+        self._autoSaveThread = nil
+    end
+    if interval and interval > 0 then
+        self._autoSaveDelay  = interval
+        self._autoSaveThread = task.spawn(function()
+            while true do
+                task.wait(self._autoSaveDelay or 15)
+                self:Save()
+            end
+        end)
+    end
+end
+
+local Config = ConfigManager.new()
+if Config:Get("AutoSaveEnabled", true) then
+    Config:AutoSave(Config:Get("AutoSaveDelay", 15))
+end
+
+-- ====================== SETTINGS TABLE ======================
+local settings = {
+    MacroSpeed          = Config:Get("MacroSpeed", 1),
+    AutoSaveEnabled     = Config:Get("AutoSaveEnabled", true),
+    AutoSaveDelay       = Config:Get("AutoSaveDelay", 15),
+    ShowPlaybackLog     = Config:Get("ShowPlaybackLog", true),
+}
+
+-- ====================== TABS ======================
+local InfoTab     = Window:Tab({ Title = "Information", Icon = "info" })
+local MainTab     = Window:Tab({ Title = "Main",        Icon = "rocket" })
+local SettingsTab = Window:Tab({ Title = "Settings",    Icon = "settings" })
+
+Window:SelectTab(1)
+
+-- ============================================================
+-- DISARM ERROR TRAPS
+-- ============================================================
+local function DisarmErrorTraps()
+    local n = 0
+    for _, conn in ipairs(getconnections(ScriptContext.Error)) do
+        if conn.Enabled then
+            local ok = pcall(function() conn:Disable() end)
+            if not ok then pcall(function() conn.Enabled = false end) end
+            n = n + 1
+        end
+    end
+    return n
+end
+
+pcall(DisarmErrorTraps)
+task.spawn(function()
+    while true do
+        task.wait(5)
+        pcall(DisarmErrorTraps)
+    end
+end)
+
+-- ============================================================
+-- GAME ADAPTER (Anime Expedition)
+-- ============================================================
+local function aeRequire(inst)
+    if not inst then return nil end
+    local prev = getthreadidentity and getthreadidentity() or nil
+    if setthreadidentity then setthreadidentity(2) end
+    local ok, mod = pcall(require, inst)
+    if setthreadidentity and prev then setthreadidentity(prev) end
+    return ok and mod or nil
+end
+
+local Shared = ReplicatedStorage:FindFirstChild("Shared")
+local ReplicaClient = Shared and aeRequire(Shared:FindFirstChild("ReplicaClient"))
+local ReplicaSignal = (function()
+    local re = ReplicatedStorage:FindFirstChild("RemoteEvents")
+    return re and re:FindFirstChild("ReplicaSignal")
+end)()
+
+-- === Replica Query ===
+local function aeReplicas()
+    if not ReplicaClient then return {} end
+    local ok, t = pcall(function()
+        return ReplicaClient.Test().Replicas
+    end)
+    return (ok and type(t) == "table") and t or {}
+end
+
+local function aeFind(token, pred)
+    for _, r in pairs(aeReplicas()) do
+        if r.Token == token and r.Data and (not pred or pred(r)) then
+            return r
+        end
+    end
+    return nil
+end
+
+local function aeGameStateReplica()
+    return aeFind("GameState")
+end
+
+local function aeAssetOf(unitID)
+    return unitID and tostring(unitID):match("^([^#]+)") or nil
+end
+
+-- === Game State ===
+local gameSettings = {
+    mapId     = "Unknown",
+    difficulty = "Unknown",
+    modifier  = "None",
+    gamemode  = "Story",
+    actName   = "Act 1",
+}
+
+local isGameRunning   = false
+local gameStartSession = nil
+local gameStartMapId  = nil
+
+local function getSessionTime()
+    local g = aeGameStateReplica()
+    return g and tonumber(g.Data.SessionTime) or nil
+end
+
+local function startGameTimer(mapId, startSession)
+    if isGameRunning then return false end
+    gameStartSession = startSession or getSessionTime() or nil
+    if not gameStartSession then return false end
+    isGameRunning  = true
+    gameStartMapId = mapId or gameSettings.mapId
+    return true
+end
+
+local function getElapsed()
+    if not gameStartSession then return 0 end
+    local now = getSessionTime()
+    if not now then return 0 end
+    return math.max(0, now - gameStartSession)
+end
+
+local hookTaskQueue = {}
+local function queueHookTask(fn) table.insert(hookTaskQueue, fn) end
+local function flushHookTaskQueue()
+    if #hookTaskQueue == 0 then return end
+    local queued = hookTaskQueue
+    hookTaskQueue = {}
+    for _, fn in ipairs(queued) do pcall(fn) end
+end
+
+-- ============================================================
+-- MACRO STATE
+-- ============================================================
+local MacroState = {
+    IsRecording     = false,
+    IsPlaying       = false,
+    RecordOps       = {},
+    RecordStartTime = 0,
+    CurrentMacro    = nil,
+    SelectedMacro   = nil,
+    PlaybackThread  = nil,
+    MacroSpeed      = settings.MacroSpeed or 1,
+}
+
+local placeOrder     = 0
+local orderToGameId  = {}
+local gameIdToOrder  = {}
+local gameIdToCFrame = {}
+local gameIdToUnit   = {}
+
+-- ============================================================
+-- TRACKER CALLBACKS
+-- ============================================================
+local function Tracker_OnPlace(unitName, gameId, cframe, extra)
+    local order = placeOrder
+    placeOrder = placeOrder + 1
+
+    local gid = tostring(gameId)
+    gameIdToOrder[gid]  = order
+    orderToGameId[order] = gid
+    if cframe then gameIdToCFrame[gid] = cframe end
+    gameIdToUnit[gid] = unitName
+
+    if MacroState.IsRecording then
+        local cfArgs = {0, 0, 0, 0}
+        if cframe and typeof(cframe) == "CFrame" then
+            local _, yawRad = cframe:ToOrientation()
+            cfArgs = {cframe.X, cframe.Y, cframe.Z, math.deg(yawRad)}
+        end
+        table.insert(MacroState.RecordOps, {
+            type     = "place",
+            time     = getElapsed(),
+            unitName = unitName,
+            slot     = extra and extra.slot or 1,
+            cframe   = cfArgs,
+            order    = order,
+        })
+    end
+
+    return order
+end
+
+local function Tracker_OnUpgrade(gameId, level)
+    if MacroState.IsRecording then
+        local order = gameIdToOrder[tostring(gameId)]
+        if order then
+            table.insert(MacroState.RecordOps, {
+                type  = "upgrade",
+                time  = getElapsed(),
+                order = order,
+                level = level,
+            })
+        end
+    end
+end
+
+local function Tracker_OnSell(gameId)
+    if MacroState.IsRecording then
+        local order = gameIdToOrder[tostring(gameId)]
+        if order then
+            table.insert(MacroState.RecordOps, {
+                type  = "sell",
+                time  = getElapsed(),
+                order = order,
+            })
+        end
+    end
+end
+
+local function Tracker_OnGameStart(mapId)
+    startGameTimer(mapId)
+    placeOrder     = 0
+    orderToGameId  = {}
+    gameIdToOrder  = {}
+    gameIdToCFrame = {}
+    gameIdToUnit   = {}
+end
+
+local function Tracker_OnGameEnd()
+    isGameRunning   = false
+    gameStartSession = nil
+end
+
+-- ============================================================
+-- GAME STATE LISTENER
+-- ============================================================
+local AE_GAME_OVER_STATES = { Victory = true, Lose = true, Defeat = true }
+
+local function aeApplyGameState(r)
+    local d = r and r.Data
+    if not d then return end
+    pcall(function()
+        local p = d.Parameters or {}
+        gameSettings.mapId     = tostring(p.MapName or "Unknown")
+        gameSettings.difficulty = tostring(p.Difficulty or "Unknown")
+        gameSettings.gamemode  = tostring(p.Gamemode or "Story")
+        gameSettings.actName   = tostring(p.ActName or "Act 1")
+    end)
+
+    local state = d.CurrentGameState
+    if state == "InProgress" then
+        if not isGameRunning then Tracker_OnGameStart(gameSettings.mapId) end
+    elseif isGameRunning and AE_GAME_OVER_STATES[tostring(state)] then
+        Tracker_OnGameEnd()
+    end
+end
+
+-- ============================================================
+-- REPLICA HOOKS
+-- ============================================================
+local AE = {
+    pending  = {},
+    seenId   = {},
+    seenSpot = {},
+    watched  = {},
+    hooked   = false,
+}
+
+local function aeIsClone(d)
+    if d.IsClone == true then return true end
+    local realAsset = d.UnitData and d.UnitData.Asset
+    local idAsset = aeAssetOf(d.UnitID)
+    if type(realAsset) == "string" and type(idAsset) == "string" 
+       and realAsset ~= idAsset and realAsset ~= idAsset .. "EVO" then
+        return true
+    end
+    return false
+end
+
+local function aeHotbar()
+    return aeFind("HotbarData", function(r) return r.Data.PlacementAllowed == true end)
+end
+
+local function aeSlotAsset(slot)
+    local hb = aeHotbar()
+    if not hb then return nil end
+    local s = hb.Data.Slots and hb.Data.Slots[slot]
+    return s and aeAssetOf(s.ID) or nil
+end
+
+local function aeSpotKey(name, cf)
+    if not cf then return nil end
+    local p = cf.Position
+    return string.format("%s@%.1f,%.1f", tostring(name), p.X, p.Z)
+end
+
+local function aeWatchUpgrades(replica)
+    if AE.watched[replica] then return end
+    AE.watched[replica] = true
+    local last = replica.Data and replica.Data.Upgrade or 0
+    pcall(function()
+        replica:OnChange(function()
+            local d = replica.Data
+            if not d then return end
+            local now = d.Upgrade
+            if now == last or type(now) ~= "number" then return end
+            last = now
+            local gid = tostring(d.ID)
+            queueHookTask(function() Tracker_OnUpgrade(gid, now) end)
+        end)
+    end)
+end
+
+local function aeOnNewUnit(replica)
+    local d = replica.Data
+    if not d or d.Owner ~= LocalPlayer then return end
+    if aeIsClone(d) then return end
+
+    aeWatchUpgrades(replica)
+
+    local gid = tostring(d.ID)
+    if AE.seenId[gid] then return end
+
+    local name = aeAssetOf(d.UnitID) or (d.UnitData and d.UnitData.Asset) or "Unknown"
+    local key  = aeSpotKey(name, d.CFrame)
+
+    local prevOrder = key and AE.seenSpot[key]
+    if prevOrder then
+        AE.seenId[gid] = true
+        gameIdToOrder[gid]  = prevOrder
+        orderToGameId[prevOrder] = gid
+        if d.CFrame then gameIdToCFrame[gid] = d.CFrame end
+        gameIdToUnit[gid] = name
+        return
+    end
+
+    AE.seenId[gid] = true
+
+    local slot
+    for i, p in ipairs(AE.pending) do
+        if p.unitName == name then
+            slot = p.slot
+            table.remove(AE.pending, i)
+            break
+        end
+    end
+
+    Tracker_OnPlace(name, gid, d.CFrame, { slot = slot })
+
+    if key then AE.seenSpot[key] = gameIdToOrder[gid] or 0 end
+end
+
+-- ============================================================
+-- SIGNAL HANDLER (PlaceGameUnit, SellGameUnit)
+-- ============================================================
+local function aeHandleSignal(args)
+    local signalName = args[2]
+    if type(signalName) ~= "string" then return end
+
+    if signalName == "PlaceGameUnit" then
+        local slot, cf = args[3], args[4]
+        table.insert(AE.pending, {
+            slot     = slot,
+            cframe   = cf,
+            unitName = aeSlotAsset(slot),
+            t        = tick(),
+        })
+        for i = #AE.pending, 1, -1 do
+            if tick() - AE.pending[i].t > 10 then
+                table.remove(AE.pending, i)
+            end
+        end
+    elseif signalName == "SellGameUnit" then
+        Tracker_OnSell(tostring(args[3]))
+    elseif signalName == "SellAllGameUnits" then
+        for _, r in pairs(aeReplicas()) do
+            if r.Token == "GameUnit" and r.Data and r.Data.Owner == LocalPlayer and not aeIsClone(r.Data) then
+                Tracker_OnSell(tostring(r.Data.ID))
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- ADAPTER INIT (use hookmetamethod for compatibility)
+-- ============================================================
+local function Adapter_Init()
+    if not ReplicaClient or not ReplicaSignal then return end
+    if AE.hooked then return end
+    AE.hooked = true
+
+    -- 1) Hook __namecall via hookmetamethod (more reliable than direct mt)
+    pcall(function()
+        local oldNamecall
+        oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+            local method = getnamecallmethod()
+            if self == ReplicaSignal and method == "FireServer" then
+                local args = table.pack(...)
+                queueHookTask(function() pcall(aeHandleSignal, args) end)
+            end
+            return oldNamecall(self, ...)
+        end))
+    end)
+
+    -- 2) Replica listeners
+    pcall(function()
+        ReplicaClient.OnNew("GameUnit", function(r)
+            queueHookTask(function() aeOnNewUnit(r) end)
+        end)
+        ReplicaClient.OnNew("GamePhantom", function(r)
+            queueHookTask(function() aeOnNewUnit(r) end)
+        end)
+        ReplicaClient.OnNew("GameState", function(r)
+            queueHookTask(function() aeApplyGameState(r) end)
+            pcall(function()
+                r:OnChange(function()
+                    queueHookTask(function() aeApplyGameState(r) end)
+                end)
+            end)
+        end)
+    end)
+
+    -- 3) Backfill existing towers
+    pcall(function()
+        local mine = {}
+        for _, r in pairs(aeReplicas()) do
+            if (r.Token == "GameUnit" or r.Token == "GamePhantom") 
+               and r.Data and r.Data.Owner == LocalPlayer and not aeIsClone(r.Data) then
+                table.insert(mine, r)
+            end
+        end
+        if #mine > 0 then
+            table.sort(mine, function(a, b)
+                return (tonumber(a.Data.PlacedAt) or 0) < (tonumber(b.Data.PlacedAt) or 0)
+            end)
+            local first = tonumber(mine[1].Data.PlacedAt)
+            if first then
+                gameStartSession = first
+                isGameRunning = true
+            end
+            for _, r in ipairs(mine) do aeOnNewUnit(r) end
+        end
+    end)
+end
+
+-- ============================================================
+-- MACRO FILE OPERATIONS
+-- ============================================================
+local function listMacros()
+    local macros = {}
+    pcall(function()
+        if listfiles then
+            for _, fp in ipairs(listfiles(MacroFolder)) do
+                if fp:match("%.json$") then
+                    local name = fp:match("([^/\\]+)%.json$")
+                    if name then table.insert(macros, name) end
+                end
+            end
+        end
+    end)
+    table.sort(macros, function(a, b) return a < b end)
+    return macros
+end
+
+local function getNextAutoName()
+    local existing = listMacros()
+    local maxNum = 0
+    for _, n in ipairs(existing) do
+        local num = n:match("^DYHUB_MACRO_(%d+)$")
+        if num then
+            local v = tonumber(num)
+            if v and v > maxNum then maxNum = v end
+        end
+    end
+    return string.format("DYHUB_MACRO_%d", maxNum + 1)
+end
+
+local function ensureUniqueName(name)
+    local existing = listMacros()
+    if not table.find(existing, name) then return name end
+    local base = name
+    local counter = 1
+    while table.find(existing, name) do
+        name = base .. "_" .. counter
+        counter = counter + 1
+        if counter > 999 then break end
+    end
+    return name
+end
+
+local function saveMacroToFile(name, data)
+    local safeName = name:gsub("[^%w_%-]", "_")
+    if safeName == "" or safeName:match("^_+$") then
+        return false, "Invalid name"
+    end
+    local path = MacroFolder .. "/" .. safeName .. ".json"
+    local ok, err = pcall(function()
+        writefile(path, HttpService:JSONEncode(data))
+    end)
+    return ok, err
+end
+
+local function loadMacroFromFile(name)
+    local safeName = name:gsub("[^%w_%-]", "_")
+    local path = MacroFolder .. "/" .. safeName .. ".json"
+    if not isfile(path) then return nil end
+    local ok, data = pcall(function()
+        return HttpService:JSONDecode(readfile(path))
+    end)
+    if ok and type(data) == "table" then return data end
+    return nil
+end
+
+local function deleteMacroFile(name)
+    local safeName = name:gsub("[^%w_%-]", "_")
+    local path = MacroFolder .. "/" .. safeName .. ".json"
+    pcall(function() delfile(path) end)
+end
+
+-- ============================================================
+-- UI REFS (เก็บ reference ตอนสร้าง)
+-- ============================================================
+local UI = {
+    macroDropdown = nil,
+    nameInput     = nil,
+    speedSlider   = nil,
+    recordToggle  = nil,
+    playToggle    = nil,
+    statusPara    = nil,
+}
+
+-- ============================================================
+-- UI STATUS
+-- ============================================================
+local function getStatusText()
+    if MacroState.IsPlaying then
+        local opCount = MacroState.CurrentMacro and #MacroState.CurrentMacro.operations or 0
+        return "▶ Playing: " .. (MacroState.SelectedMacro or "?") .. " | Ops: " .. opCount .. " | Speed: " .. string.format("%.2fx", MacroState.MacroSpeed)
+    elseif MacroState.IsRecording then
+        return "⏺ Recording | Ops: " .. #MacroState.RecordOps .. " | Time: " .. string.format("%.1fs", getElapsed())
+    else
+        return "⏸ Idle | Game: " .. gameSettings.mapId .. " [" .. gameSettings.actName .. "] | Selected: " .. (MacroState.SelectedMacro or "None")
+    end
+end
+
+local function updateStatus()
+    if UI.statusPara then
+        pcall(function() UI.statusPara:SetDesc(getStatusText()) end)
+    end
+end
+
+-- ============================================================
+-- MACRO RECORD / PLAY
+-- ============================================================
+local function startRecording()
+    if MacroState.IsPlaying then
+        WindUI:Notify({ Title = "Error", Content = "Cannot record while playing!", Duration = 3, Icon = "alert-triangle" })
+        return false
+    end
+    MacroState.IsRecording = true
+    MacroState.RecordOps = {}
+    MacroState.RecordStartTime = tick()
+    WindUI:Notify({
+        Title = "Recording Started",
+        Content = "Play the game now. Turn OFF to stop.",
+        Duration = 3,
+        Icon = "circle",
+    })
+    updateStatus()
+    return true
+end
+
+local function stopRecording()
+    if not MacroState.IsRecording then return false end
+    MacroState.IsRecording = false
+    local opCount = #MacroState.RecordOps
+    WindUI:Notify({
+        Title = "Recording Stopped",
+        Content = string.format("Recorded %d operations. Use 'Save Macro' or 'Create Macro'.", opCount),
+        Duration = 4,
+        Icon = "square",
+    })
+    updateStatus()
+    return true
+end
+
+-- ============================================================
+-- MACRO PLAYBACK (Fixed: use ReplicaSignal:FireServer directly)
+-- ============================================================
+local function findGameIdByOrder(order)
+    return orderToGameId[order]
+end
+
+local function findOrderByCFrame(cframeData, tolerance)
+    tolerance = tolerance or 3
+    if not cframeData then return nil end
+    local x, z = cframeData[1], cframeData[3]
+    for order, gid in pairs(orderToGameId) do
+        local cf = gameIdToCFrame[gid]
+        if cf and typeof(cf) == "CFrame" then
+            local p = cf.Position
+            if math.abs(p.X - x) < tolerance and math.abs(p.Z - z) < tolerance then
+                return order
+            end
+        end
+    end
+    return nil
+end
+
+local function playbackMacro(macroData)
+    if not macroData or not macroData.operations or #macroData.operations == 0 then
+        WindUI:Notify({ Title = "Error", Content = "No operations in macro!", Duration = 3, Icon = "alert-triangle" })
+        return
+    end
+
+    local speed      = MacroState.MacroSpeed or 1
+    local operations = macroData.operations
+    local totalOps   = #operations
+
+    if not ReplicaSignal then
+        WindUI:Notify({ Title = "Error", Content = "ReplicaSignal not found! Cannot play.", Duration = 3, Icon = "x-octagon" })
+        return
+    end
+
+    WindUI:Notify({
+        Title = "Macro Started",
+        Content = string.format("%s | %d ops | Speed: %.2fx", MacroState.SelectedMacro or "?", totalOps, speed),
+        Duration = 4,
+        Icon = "play",
+    })
+
+    -- Reset tracking for new placement session
+    placeOrder     = 0
+    orderToGameId  = {}
+    gameIdToOrder  = {}
+    gameIdToCFrame = {}
+    gameIdToUnit   = {}
+
+    local lastOpTime = 0
+
+    for i, op in ipairs(operations) do
+        if not MacroState.IsPlaying then
+            WindUI:Notify({ Title = "Stopped", Content = "Macro playback stopped.", Duration = 2, Icon = "square" })
+            return
+        end
+
+        local waitTime = (op.time - lastOpTime) / speed
+        if waitTime > 0 then task.wait(waitTime) end
+        lastOpTime = op.time
+
+        if not MacroState.IsPlaying then return end
+
+        -- Get current GameState replica (Id changes per session)
+        local gs = aeGameStateReplica()
+        if not gs or not gs.Id then
+            if settings.ShowPlaybackLog then
+                WindUI:Notify({
+                    Title = "Warning",
+                    Content = "No GameState replica! Op " .. i .. " skipped.",
+                    Duration = 1.5,
+                    Icon = "alert-triangle",
+                })
+            end
+            continue
+        end
+
+        local stateId = tostring(gs.Id)
+
+        if op.type == "place" then
+            local slot   = tonumber(op.slot) or 1
+            local cfData = op.cframe or {0, 0, 0, 0}
+            local cframe = CFrame.new(cfData[1] or 0, cfData[2] or 0, cfData[3] or 0) 
+                            * CFrame.Angles(0, math.rad(cfData[4] or 0), 0)
+
+            local ok, err = pcall(function()
+                ReplicaSignal:FireServer(stateId, "PlaceGameUnit", slot, cframe)
+            end)
+
+            if ok then
+                local order = op.order or (placeOrder + 1)
+                placeOrder = math.max(placeOrder, order)
+            end
+
+            if settings.ShowPlaybackLog then
+                WindUI:Notify({
+                    Title = ok and "Placed" or "Place Failed",
+                    Content = string.format("[%d/%d] Slot %d @ (%.0f, %.0f) | %s",
+                        i, totalOps, slot, cfData[1] or 0, cfData[3] or 0,
+                        ok and "OK" or tostring(err)),
+                    Duration = 1.2,
+                    Icon = ok and "plus-circle" or "x-circle",
+                })
+            end
+
+            task.wait(0.05) -- small delay between ops
+
+        elseif op.type == "sell" then
+            local order = op.order
+            local gid = findGameIdByOrder(order)
+            if not gid and op.cframe then
+                local matchedOrder = findOrderByCFrame(op.cframe)
+                if matchedOrder then gid = findGameIdByOrder(matchedOrder) end
+            end
+
+            if gid then
+                pcall(function()
+                    ReplicaSignal:FireServer(stateId, "SellGameUnit", gid)
+                end)
+                if settings.ShowPlaybackLog then
+                    WindUI:Notify({
+                        Title = "Sold",
+                        Content = string.format("[%d/%d] Unit #%d", i, totalOps, order),
+                        Duration = 1.2,
+                        Icon = "minus-circle",
+                    })
+                end
+            else
+                if settings.ShowPlaybackLog then
+                    WindUI:Notify({
+                        Title = "Sell Skipped",
+                        Content = "Unit not found for op " .. i,
+                        Duration = 1.2,
+                        Icon = "x-circle",
+                    })
+                end
+            end
+
+        elseif op.type == "upgrade" then
+            -- Upgrade is auto-detected by server (no client signal needed)
+            if settings.ShowPlaybackLog then
+                WindUI:Notify({
+                    Title = "Upgrade (auto)",
+                    Content = string.format("[%d/%d] Unit #%d -> Lv%s", i, totalOps, op.order or 0, tostring(op.level or "?")),
+                    Duration = 1.2,
+                    Icon = "arrow-up-circle",
+                })
+            end
+        end
+    end
+
+    WindUI:Notify({
+        Title = "Macro Complete",
+        Content = string.format("%s (%d ops) finished.", MacroState.SelectedMacro or "?", totalOps),
+        Duration = 4,
+        Icon = "check-circle",
+    })
+end
+
+local function startPlayback()
+    if MacroState.IsRecording then
+        WindUI:Notify({ Title = "Error", Content = "Cannot play while recording!", Duration = 3, Icon = "alert-triangle" })
+        return false
+    end
+    if not MacroState.SelectedMacro then
+        WindUI:Notify({ Title = "Error", Content = "No macro selected! Load one from dropdown.", Duration = 3, Icon = "alert-triangle" })
+        return false
+    end
+
+    local data = loadMacroFromFile(MacroState.SelectedMacro)
+    if not data then
+        WindUI:Notify({ Title = "Error", Content = "Failed to load: " .. MacroState.SelectedMacro, Duration = 3, Icon = "alert-triangle" })
+        return false
+    end
+
+    MacroState.CurrentMacro = data
+    MacroState.IsPlaying = true
+    updateStatus()
+
+    MacroState.PlaybackThread = task.spawn(function()
+        local ok, err = pcall(playbackMacro, data)
+        if not ok then
+            WindUI:Notify({ Title = "Playback Error", Content = tostring(err), Duration = 4, Icon = "x-octagon" })
+        end
+        MacroState.IsPlaying = false
+        MacroState.CurrentMacro = nil
+        updateStatus()
+    end)
+    return true
+end
+
+local function stopPlayback()
+    if not MacroState.IsPlaying then return false end
+    MacroState.IsPlaying = false
+    WindUI:Notify({ Title = "Stopping", Content = "Will stop at next operation...", Duration = 2, Icon = "square" })
+    return true
+end
+
+-- ============================================================
+-- DROPDOWN REFRESH
+-- ============================================================
+local function refreshMacroDropdown()
+    if not UI.macroDropdown then return end
+    local macros = listMacros()
+    table.insert(macros, 1, "-- Create New --")
+    pcall(function()
+        UI.macroDropdown:Refresh(macros)
+    end)
+end
+
+local function getInputValue(input)
+    if not input then return "" end
+    if type(input.Get) == "function" then
+        local ok, v = pcall(function() return input:Get() end)
+        if ok and v ~= nil then return tostring(v) end
+    end
+    if input.Value ~= nil then return tostring(input.Value) end
+    return ""
+end
+
+-- ============================================================
+-- UI - MAIN TAB
+-- ============================================================
+MainTab:Divider()
+MainTab:Section({ Title = "Macro System", Icon = "cpu" })
+
+-- Status paragraph
+UI.statusPara = MainTab:Paragraph({
+    Title = "⏸ Status: Idle",
+    Desc  = "Ready to Record. Select a macro or start recording.",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+})
+
+-- Load Macro Dropdown
+local initialMacroList = listMacros()
+table.insert(initialMacroList, 1, "-- Create New --")
+
+UI.macroDropdown = MainTab:Dropdown({
+    Title    = "Load Macro",
+    Desc     = "Select a saved macro to play (or -- Create New --)",
+    Values   = initialMacroList,
+    Value    = "-- Create New --",
+    Callback = function(v)
+        if v == "-- Create New --" or v == nil then
+            MacroState.SelectedMacro = nil
+            WindUI:Notify({ Title = "Macro", Content = "No macro selected", Duration = 2, Icon = "x" })
+        else
+            local data = loadMacroFromFile(v)
+            if data then
+                MacroState.SelectedMacro = v
+                local opCount = data.operations and #data.operations or 0
+                WindUI:Notify({
+                    Title = "Macro Loaded",
+                    Content = string.format("%s | %d ops", v, opCount),
+                    Duration = 3,
+                    Icon = "folder-open",
+                })
+            else
+                WindUI:Notify({ Title = "Error", Content = "Failed to load: " .. v, Duration = 3, Icon = "alert-triangle" })
+            end
+        end
+    end
+})
+
+-- Record Macro Toggle
+UI.recordToggle = MainTab:Toggle({
+    Title    = "Record Macro",
+    Desc     = "Record your placements, upgrades, and sells",
+    Value    = false,
+    Callback = function(v)
+        if v then startRecording() else stopRecording() end
+    end
+})
+
+-- Start Macro Toggle
+UI.playToggle = MainTab:Toggle({
+    Title    = "Start Macro",
+    Desc     = "Play the selected macro automatically",
+    Value    = false,
+    Callback = function(v)
+        if v then startPlayback() else stopPlayback() end
+    end
+})
+
+-- Speed Slider
+UI.speedSlider = MainTab:Slider({
+    Title    = "Playback Speed",
+    Desc     = "1x = normal, 2x = double speed",
+    Value    = { Min = 0.25, Max = 5, Default = settings.MacroSpeed },
+    Step     = 0.25,
+    Callback = function(v)
+        MacroState.MacroSpeed = v
+        settings.MacroSpeed = v
+        Config:Set("MacroSpeed", v)
+        Config:Save()
+    end
+})
+
+MainTab:Divider()
+MainTab:Section({ Title = "Save Macro", Icon = "save" })
+
+-- Name Input
+UI.nameInput = MainTab:Input({
+    Title       = "Name Macro",
+    Desc        = "Enter a name (empty = auto: DYHUB_MACRO_1, 2, 3...)",
+    Value       = "",
+    Placeholder = "MyMacroName",
+    Callback    = function(text)
+        -- Value is stored in UI.nameInput directly
+    end
+})
+
+-- Create Macro Button (NEW)
+MainTab:Button({
+    Title   = "Create Macro",
+    Desc    = "Create a new empty macro file (or initialize selected one)",
+    Callback = function()
+        local name = getInputValue(UI.nameInput)
+        local finalName
+
+        if name == "" then
+            finalName = getNextAutoName()
+        else
+            finalName = ensureUniqueName(name)
+        end
+
+        local data = {
+            name       = finalName,
+            created    = os.date("%Y-%m-%d %H:%M:%S"),
+            gameInfo   = {
+                mapId      = gameSettings.mapId,
+                difficulty = gameSettings.difficulty,
+                gamemode   = gameSettings.gamemode,
+                actName    = gameSettings.actName,
+            },
+            speed      = MacroState.MacroSpeed,
+            operations = MacroState.RecordOps, -- save current recording if any
+        }
+
+        local ok, err = saveMacroToFile(finalName, data)
+        if ok then
+            MacroState.SelectedMacro = finalName
+            Config:Set("LastRecordName", finalName)
+            Config:Save()
+            refreshMacroDropdown()
+            task.wait(0.1)
+            pcall(function() UI.macroDropdown:Set(finalName) end)
+
+            WindUI:Notify({
+                Title   = "Macro Created",
+                Content = string.format("'%s' created with %d ops (if any recorded).", finalName, #data.operations),
+                Duration = 4,
+                Icon    = "file-plus",
+            })
+        else
+            WindUI:Notify({ Title = "Create Failed", Content = tostring(err), Duration = 3, Icon = "x-octagon" })
+        end
+    end
+})
+
+-- Save Macro Button
+MainTab:Button({
+    Title   = "Save Macro",
+    Desc    = "Save current recording to the selected/named macro",
+    Callback = function()
+        if #MacroState.RecordOps == 0 then
+            WindUI:Notify({ Title = "Error", Content = "No recorded operations! Record first.", Duration = 3, Icon = "alert-triangle" })
+            return
+        end
+
+        local name = getInputValue(UI.nameInput)
+        local finalName
+
+        if name == "" then
+            finalName = MacroState.SelectedMacro or getNextAutoName()
+        else
+            finalName = ensureUniqueName(name)
+        end
+
+        local data = {
+            name       = finalName,
+            created    = os.date("%Y-%m-%d %H:%M:%S"),
+            updated    = os.date("%Y-%m-%d %H:%M:%S"),
+            gameInfo   = {
+                mapId      = gameSettings.mapId,
+                difficulty = gameSettings.difficulty,
+                gamemode   = gameSettings.gamemode,
+                actName    = gameSettings.actName,
+            },
+            speed      = MacroState.MacroSpeed,
+            operations = MacroState.RecordOps,
+        }
+
+        local ok, err = saveMacroToFile(finalName, data)
+        if ok then
+            MacroState.SelectedMacro = finalName
+            Config:Set("LastRecordName", finalName)
+            Config:Save()
+            refreshMacroDropdown()
+            task.wait(0.1)
+            pcall(function() UI.macroDropdown:Set(finalName) end)
+
+            WindUI:Notify({
+                Title   = "Saved",
+                Content = string.format("'%s' saved with %d ops.", finalName, #data.operations),
+                Duration = 4,
+                Icon    = "check",
+            })
+        else
+            WindUI:Notify({ Title = "Save Failed", Content = tostring(err), Duration = 3, Icon = "x-octagon" })
+        end
+    end
+})
+
+-- Refresh List Button
+MainTab:Button({
+    Title   = "Refresh Macro List",
+    Desc    = "Reload macros from folder into dropdown",
+    Callback = function()
+        refreshMacroDropdown()
+        WindUI:Notify({ Title = "Refreshed", Content = "Macro list updated.", Duration = 2, Icon = "refresh-cw" })
+    end
+})
+
+-- Delete Selected Button
+MainTab:Button({
+    Title   = "Delete Selected Macro",
+    Desc    = "Delete the currently selected macro file",
+    Callback = function()
+        if not MacroState.SelectedMacro or MacroState.SelectedMacro == "-- Create New --" then
+            WindUI:Notify({ Title = "Error", Content = "No macro selected!", Duration = 2, Icon = "alert-triangle" })
+            return
+        end
+        deleteMacroFile(MacroState.SelectedMacro)
+        WindUI:Notify({
+            Title   = "Deleted",
+            Content = "Macro '" .. MacroState.SelectedMacro .. "' deleted.",
+            Duration = 3,
+            Icon    = "trash-2",
+        })
+        MacroState.SelectedMacro = nil
+        MacroState.CurrentMacro = nil
+        refreshMacroDropdown()
+        task.wait(0.1)
+        pcall(function() UI.macroDropdown:Set("-- Create New --") end)
+    end
+})
+
+-- Clear Recording
+MainTab:Button({
+    Title   = "Clear Recording Buffer",
+    Desc    = "Clear current recording (not saved)",
+    Callback = function()
+        MacroState.RecordOps = {}
+        WindUI:Notify({ Title = "Cleared", Content = "Recording buffer cleared.", Duration = 2, Icon = "trash" })
+        updateStatus()
+    end
+})
+
+-- Force Stop
+MainTab:Button({
+    Title   = "Force Stop All",
+    Desc    = "Stop recording and playback immediately",
+    Callback = function()
+        if MacroState.IsRecording then
+            MacroState.IsRecording = false
+            WindUI:Notify({ Title = "Stopped", Content = "Recording stopped.", Duration = 2, Icon = "square" })
+        end
+        if MacroState.IsPlaying then
+            MacroState.IsPlaying = false
+            WindUI:Notify({ Title = "Stopped", Content = "Playback will stop at next op.", Duration = 2, Icon = "square" })
+        end
+        pcall(function() UI.recordToggle:Set(false) end)
+        pcall(function() UI.playToggle:Set(false) end)
+        updateStatus()
+    end
+})
+
+-- ============================================================
+-- UI - INFO TAB
+-- ============================================================
+do
+InfoTab:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
+InfoTab:Divider()
+InfoTab:Paragraph({
+    Title = "Update: 07/02/2026 | CL: " .. ver,
+    Desc  = [[
+• [ Fixed ] Place Unit remote now uses hookmetamethod
+• [ Fixed ] Dropdown now properly refreshes after save
+• [ Added ] Create Macro button
+• [ Added ] Unique name auto-suffix (_1, _2, _3)
+• [ Added ] Real-time status updates
+• [ Fixed ] Status paragraph updates dynamically
+    ]],
+})
+InfoTab:Divider()
+InfoTab:Section({ Title = "How to Use", TextXAlignment = "Center", TextSize = 17 })
+InfoTab:Divider()
+InfoTab:Paragraph({
+    Title = "Step-by-step",
+    Desc  = [[
+📝 TO RECORD:
+  1. (Optional) Type a name in "Name Macro"
+  2. Turn ON "Record Macro"
+  3. Play the game normally (place, upgrade, sell)
+  4. Turn OFF "Record Macro"
+  5. Click "Create Macro" or "Save Macro"
+
+▶ TO PLAY:
+  1. Select macro from "Load Macro" dropdown
+  2. Adjust "Playback Speed" (optional)
+  3. Turn ON "Start Macro"
+  4. Wait for it to finish
+
+🗑️ TO DELETE:
+  1. Select macro from dropdown
+  2. Click "Delete Selected Macro"
+
+📁 Folders:
+  Config: DYHUB_AE/Config/config_ae.json
+  Macros: DYHUB_AE/Macro/*.json
+    ]],
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+})
+end
+
+-- ============================================================
+-- UI - SETTINGS TAB
+-- ============================================================
+do
+SettingsTab:Divider()
+SettingsTab:Section({ Title = "Save Config", Icon = "save" })
+
+SettingsTab:Button({
+    Title   = "Save Config (NOW)",
+    Desc    = "Saves all current settings immediately.",
+    Callback = function()
+        Config:Save()
+        WindUI:Notify({ Title = "Config Saved", Content = "Config saved!", Duration = 2, Icon = "save" })
+    end
+})
+
+local autoSaveEnabled = settings.AutoSaveEnabled
+local autoSaveDelay   = settings.AutoSaveDelay
+
+SettingsTab:Toggle({
+    Title    = "Auto Save Config",
+    Desc     = "Automatically saves config at set interval.",
+    Value    = autoSaveEnabled,
+    Callback = function(state)
+        autoSaveEnabled = state
+        settings.AutoSaveEnabled = state
+        Config:Set("AutoSaveEnabled", state)
+        Config:Save()
+        if state then Config:AutoSave(autoSaveDelay) else Config:AutoSave(0) end
+    end
+})
+
+SettingsTab:Input({
+    Title       = "Auto Save Delay (seconds)",
+    Desc        = "Interval for auto-save (min 1)",
+    Value       = tostring(autoSaveDelay),
+    Placeholder = "Default: 15",
+    Callback    = function(text)
+        local num = tonumber(text)
+        if num and num >= 1 then
+            autoSaveDelay = num
+            settings.AutoSaveDelay = num
+            Config:Set("AutoSaveDelay", num)
+            Config:Save()
+            if autoSaveEnabled then Config:AutoSave(num) end
+        else
+            WindUI:Notify({ Title = "Invalid", Content = "Enter a number >= 1", Duration = 2, Icon = "x" })
+        end
+    end
+})
+
+SettingsTab:Section({ Title = "Playback Options", Icon = "settings" })
+
+SettingsTab:Toggle({
+    Title    = "Show Playback Notifications",
+    Desc     = "Show notifications for each playback op",
+    Value    = settings.ShowPlaybackLog,
+    Callback = function(v)
+        settings.ShowPlaybackLog = v
+        Config:Set("ShowPlaybackLog", v)
+        Config:Save()
+    end
+})
+
+SettingsTab:Section({ Title = "Server", Icon = "server" })
+
+SettingsTab:Button({
+    Title   = "Serverhop",
+    Desc    = "Teleports you to a different random server.",
+    Callback = function()
+        local servers = {}
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet(
+                "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
+            ))
+        end)
+        if success and result and result.data then
+            for _, server in ipairs(result.data) do
+                if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                    table.insert(servers, server.id)
+                end
+            end
+        end
+        if #servers > 0 then
+            WindUI:Notify({ Title = "Serverhop", Content = "Teleporting...", Duration = 2, Icon = "server" })
+            task.wait(1)
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], LocalPlayer)
+        else
+            WindUI:Notify({ Title = "Serverhop Failed", Content = "No servers found.", Duration = 3, Icon = "alert-triangle" })
+        end
+    end
+})
+
+SettingsTab:Button({
+    Title   = "Rejoin",
+    Desc    = "Rejoins the current game server.",
+    Callback = function()
+        WindUI:Notify({ Title = "Rejoin", Content = "Rejoining...", Duration = 2, Icon = "refresh-cw" })
+        task.wait(1)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+end
+
+-- ============================================================
+-- MAIN LOOP
+-- ============================================================
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        updateStatus()
+    end
+end)
+
+RunService.Heartbeat:Connect(function()
+    flushHookTaskQueue()
+end)
+
+-- ============================================================
+-- INIT
+-- ============================================================
+pcall(Adapter_Init)
+updateStatus()
+
+local lastName = Config:Get("LastRecordName", "")
+if lastName ~= "" and isfile(MacroFolder .. "/" .. lastName .. ".json") then
+    MacroState.SelectedMacro = lastName
+    task.spawn(function()
+        task.wait(0.5)
+        pcall(function() UI.macroDropdown:Set(lastName) end)
+    end)
+end
+
+print("[DYHUB] Anime Expedition Macro System " .. version .. " | " .. ver .. " loaded!")
+print("[DYHUB] Macro folder: " .. MacroFolder)
+print("[DYHUB] Existing macros: " .. tostring(#listMacros()))
