@@ -1,0 +1,1607 @@
+
+
+pcall(function()
+    if queue_on_teleport and getgenv()._DYHUB_script then
+        queue_on_teleport(getgenv()._DYHUB_script)
+    end
+end)
+
+repeat task.wait() until game:IsLoaded()
+task.wait(1)
+
+task.spawn(function()
+    local lp = game:GetService("Players").LocalPlayer
+    while task.wait() do
+        lp.GameplayPaused = false
+    end
+end)
+
+local RS  = game:GetService("RunService")
+local PS  = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local TS  = game:GetService("TweenService")
+local LT  = game:GetService("Lighting")
+local HS  = game:GetService("HttpService")
+local TP  = game:GetService("TeleportService")
+local Cam = workspace.CurrentCamera
+local LP  = PS.LocalPlayer
+
+local function getChar() return LP.Character end
+local function getHRP()
+    local c = getChar()
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+local function getHum()
+    local c = getChar()
+    return c and c:FindFirstChildOfClass("Humanoid")
+end
+
+local function _safeTP(cf)
+    local char = getChar()
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return false end
+    local x, y, z = cf.X, cf.Y, cf.Z
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {char}
+    local hit = workspace:Raycast(Vector3.new(x, y + 60, z), Vector3.new(0, -300, 0), params)
+    local landY = hit and (hit.Position.Y + 4) or (y + 4)
+    root.CFrame = CFrame.new(x, landY, z)
+    root.AssemblyLinearVelocity = Vector3.zero
+    return true
+end
+
+local S = {
+    speed=100, infJumpH=50, flySpeed=100, tweenSpeed=100,
+    aimbotFOV=45, aimbotSens=1, aimbotX=0, aimbotY=0,
+    aimbotMode="Toggle", aimbotActive=false, aimbotEnabled=false,
+    aimbotMethod="Camera", targetPlayers=true, visibleOnly=false, teamCheck=false,
+    brightness=2, freeCamSens=0.3, freeCamSpeed=0.5, fovVal=70,
+    hitboxSize=5, hitboxTrans=0.9,
+    espDist=1000, espFontSize=14, tracerThick=2,
+    mobsRange=1000, mobsDist=0, mobsHeight=0,
+}
+
+local _savedPos = nil
+local _farmMode = "Behind"
+local _farmOffX, _farmOffY, _farmOffZ = 0, 0, 6.5
+local _bringRange = 100
+local _freezeRange = 100
+
+getgenv()._DYHUB_autoM1 = false
+getgenv()._DYHUB_autoCrit = false
+getgenv()._DYHUB_autoEquip = false
+
+if getgenv().__DYHUBUnload then pcall(getgenv().__DYHUBUnload); getgenv().__DYHUBUnload=nil end
+
+local _macSrc = game:HttpGet("https://raw.githubusercontent.com/mabdu21/YWVATBAUBAK-FISH-IT/refs/heads/main/uaiui.lua")
+local _macFn, _macErr = loadstring(_macSrc)
+if not _macFn then error("[ZeroHub] MacLib load failed: " .. tostring(_macErr)) end
+local MacLib = _macFn()
+if not MacLib then error("[ZeroHub] MacLib returned nil") end
+
+local Window = MacLib:Window({
+    Title    = "<",
+    Subtitle = "Catch a Brainrot",
+    Image    = "rbxassetid://83109184888967",
+    Size     = UDim2.fromOffset(980, 760),
+    DragStyle = 1,
+    DisabledWindowControls = {},
+    ShowUserInfo = false,
+    Keybind  = Enum.KeyCode.F5,
+    AcrylicBlur = false,
+})
+
+local Opt = {}
+local Tog = {}
+
+local _cleanupFns = {}
+local function onUnload(fn) table.insert(_cleanupFns, fn) end
+Window.onUnloaded(function()
+    for _, fn in ipairs(_cleanupFns) do pcall(fn) end
+    getgenv().__DYHUBUnload=nil
+end)
+getgenv().__DYHUBUnload=function() Window:Unload() end
+
+local function notify(msg, dur)
+    task.defer(function()
+        pcall(function() Window:Notify({Title="DYHUB", Description=msg, Lifetime=dur or 3}) end)
+    end)
+end
+
+do
+    local _GD_TOKEN   = getgenv()._DYHUB_GD_TOKEN or ""
+    local _GD_CHANNEL = getgenv()._DYHUB_GD_CHANNEL or ""
+    local _gdAlerted  = false
+    local function sendGunDevilEmbed()
+        task.spawn(function()
+            if _GD_TOKEN == "" or _GD_CHANNEL == "" then return end
+            local reqFn = request or (syn and syn.request) or http_request
+            if not reqFn then return end
+            local joinScript = string.format("game:GetService('TeleportService'):TeleportToPlaceInstance(%d, \"%s\")", game.PlaceId, game.JobId)
+            local body = HS:JSONEncode({ embeds = {{
+                title       = "Gun Devil Spawned",
+                description = "Gun Devil is in this server.",
+                color       = 0x9b59b6,
+                fields = {
+                    { name = "Players",     value = tostring(#PS:GetPlayers()) .. "/25", inline = true  },
+                    { name = "JobId",       value = game.JobId,                          inline = false },
+                    { name = "Join Script", value = "```\n" .. joinScript .. "\n```",    inline = false },
+                },
+                footer    = { text = "dsc.gg/dyhub — DYHUB" },
+                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+            }}})
+            pcall(function()
+                reqFn({
+                    Url    = "https://discord.com/api/v10/channels/" .. _GD_CHANNEL .. "/messages",
+                    Method = "POST",
+                    Headers = {
+                        ["Authorization"] = "Bot " .. _GD_TOKEN,
+                        ["Content-Type"]  = "application/json",
+                        ["User-Agent"]    = "DiscordBot (https://discord.com, 10)",
+                    },
+                    Body = body,
+                })
+            end)
+        end)
+    end
+    task.spawn(function()
+        while true do
+            task.wait(3)
+            if not _gdAlerted then
+                local world = workspace:FindFirstChild("World")
+                local ents  = world and world:FindFirstChild("Entities")
+                if ents and ents:FindFirstChild("Gun Devil") then
+                    _gdAlerted = true
+                    notify("⚠ Gun Devil spawned!", 5)
+                    sendGunDevilEmbed()
+                end
+            end
+        end
+    end)
+end
+
+local TabGroup = Window:TabGroup()
+local Tabs = {}
+Tabs.Game      = TabGroup:Tab({Name="Main",       Image="flame"})
+Tabs.Character = TabGroup:Tab({Name="Character",  Image="droplets"})
+Tabs.World      = TabGroup:Tab({Name="World",      Image="mountain"})
+Tabs.Navigation = TabGroup:Tab({Name="Navigation", Image="wind"})
+Tabs.Misc      = TabGroup:Tab({Name="Misc",       Image="sparkles"})
+Tabs.Settings  = TabGroup:Tab({Name="Settings",   Image="snowflake"})
+
+local CharL  = Tabs.Character:Section({Side="Left",  Name="Position",  Image="compass"})
+local CharL2 = Tabs.Character:Section({Side="Left",  Name="Movement",  Image="wind"})
+local CharL3 = Tabs.Character:Section({Side="Left",  Name="Face Lock", Image="target"})
+local CharL4 = Tabs.Character:Section({Side="Left",  Name="Morphs",    Image="ghost"})
+local CharR  = Tabs.Character:Section({Side="Right", Name="Player",    Image="shield"})
+local CharR2 = Tabs.Character:Section({Side="Right", Name="Combat",    Image="target"})
+
+local GameL  = Tabs.Game:Section({Side="Left",  Name="Auto Farm", Image="flame"})
+
+local _Core = require(game:GetService("ReplicatedStorage").Brainrot.Core)
+local _Checks = require(game:GetService("ReplicatedStorage").Modules.Checks)
+local _Heal = game:GetService("ReplicatedStorage").Brainrot.Center.Center.__server__.Heal
+local _RotChiller = require(game:GetService("ReplicatedStorage").Brainrot.RotChiller.Client)
+local _WorldsClient = require(game:GetService("ReplicatedStorage").Brainrot.Worlds.Client)
+local _SetWorldRemote = game:GetService("ReplicatedStorage").Brainrot.Worlds.Server.SetWorld
+local _ZonePositions = {
+    ["Zone 1"] = CFrame.new(-1516, 21, 1046),
+    ["Zone 2"] = CFrame.new(-1474, 21, 858),
+    ["Zone 3 (Tundra)"] = CFrame.new(-1580, 32, 66),
+    ["Zone 4 (Tundra)"] = CFrame.new(-1518, 43, -236),
+    ["Zone 5 (Tundra)"] = CFrame.new(-1605, 28, -724),
+}
+local _ZoneWorld = {
+    ["Zone 1"] = 1, ["Zone 2"] = 1,
+    ["Zone 3 (Tundra)"] = 2, ["Zone 4 (Tundra)"] = 2, ["Zone 5 (Tundra)"] = 2,
+}
+getgenv()._DYHUB_selectedZone = "Zone 1"
+getgenv()._DYHUB_minFarmLevel = 0
+
+local _WorldSpawn = {
+    [1] = CFrame.new(-1529, 20, 1368),
+    [2] = CFrame.new(-1555.9, 18.61, 328.96),
+}
+
+local function _ensureWorld(targetWorld)
+    if _WorldsClient.CurrentWorld == targetWorld then return true end
+    pcall(function() _WorldsClient.SetWorldUnlocked(targetWorld, true) end)
+    pcall(function() _SetWorldRemote:FireServer(targetWorld) end)
+    pcall(function() _WorldsClient.SetWorld(targetWorld) end)
+    task.wait(2.5)
+    return _WorldsClient.CurrentWorld == targetWorld
+end
+getgenv()._DYHUB_maxFarmLevel = 999
+
+getgenv()._DYHUB_autoFarm = false
+getgenv()._DYHUB_farmStats = {kills=0, status="Idle"}
+
+local _collectSellIDs, _doSell
+local _SellRemote = game:GetService("ReplicatedStorage").Brainrot.Sell.Server.RequestSell
+local _MyRots = require(game:GetService("ReplicatedStorage").Brainrot.Rot.MyRots)
+local _bagRef = require(game:GetService("ReplicatedStorage").Brainrot.Bag.MyBag)
+
+local function _buildLevelMap()
+    local map = {}
+    for _, container in pairs(_RotChiller.AllContainers) do
+        if type(container) == "table" and container.Rots then
+            for uid, wrap in pairs(container.Rots) do
+                if type(wrap) == "table" and wrap.RotInstance then
+                    map[uid] = wrap.RotInstance.Level
+                end
+            end
+        end
+    end
+    return map
+end
+
+local function _getWildLevel(uid, levelMap)
+    return levelMap[uid]
+end
+
+local function _getNearestRot()
+    local hrp = getHRP(); if not hrp then return nil end
+    local rotObjs = workspace:FindFirstChild("ROT OBJECTS"); if not rotObjs then return nil end
+    local levelMap = _buildLevelMap()
+    local minL = getgenv()._DYHUB_minFarmLevel or 0
+    local maxL = getgenv()._DYHUB_maxFarmLevel or 999
+    local best, bestDist = nil, math.huge
+    for _, child in ipairs(rotObjs:GetChildren()) do
+        if child:IsA("Model") then
+            local lvl = levelMap[child.Name]
+            local passLevel = (not lvl) or (lvl >= minL and lvl <= maxL)
+            if passLevel then
+                local pp = child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart")
+                if pp and pp.Parent then
+                    local ok, pos = pcall(function() return pp.Position end)
+                    if ok and pos then
+                        local d = (pos - hrp.Position).Magnitude
+                        if d < bestDist then bestDist = d; best = pos end
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function _inBattle()
+    return _Checks.Taken.Battle ~= nil
+end
+
+local _cachedCtx = nil
+
+local function _scanCtx()
+    for _, v in pairs(getgc(true)) do
+        if type(v) == "table" and rawget(v, "BattleInfo") and rawget(v, "ClientDC") and rawget(v, "Dead") == false then
+            _cachedCtx = v
+            return v
+        end
+    end
+    _cachedCtx = nil
+    return nil
+end
+
+local function _getCtx()
+    if _cachedCtx and not _cachedCtx.Dead then return _cachedCtx end
+    if not _inBattle() then _cachedCtx = nil; return nil end
+    return _scanCtx()
+end
+
+local function _getMySection(ctx)
+    return ctx[ctx.IsInvertedOnServer and "SectionB" or "SectionA"]
+end
+
+local function _getBestMove(moveset, energy)
+    local bestIdx, bestPow = nil, -1
+    for i, name in pairs(moveset) do
+        local m = _Core.Moves[name]
+        if m and m.Energy > 0 and m.Energy <= energy and m.Power > bestPow then
+            bestPow = m.Power; bestIdx = i
+        end
+    end
+    return bestIdx
+end
+
+local function _getChargeIdx(moveset)
+    for i, name in pairs(moveset) do if name == "Charge" then return i end end
+    return 1
+end
+
+local _vimRef = cloneref and cloneref(game:GetService("VirtualInputManager")) or game:GetService("VirtualInputManager")
+
+local function _clickDialogue()
+    pcall(function()
+        local cam = workspace.CurrentCamera
+        local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
+        local cx, cy = vp.X / 2, vp.Y * 0.55
+        _vimRef:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
+        task.wait(0.03)
+        _vimRef:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
+    end)
+end
+
+local function _answerConfirmations()
+    pcall(function()
+        local pg = LP:FindFirstChildOfClass("PlayerGui")
+        if not pg then return end
+        local cam = workspace.CurrentCamera
+        local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
+        -- Find a visible "Yes" text label (UserConfirmation YesNo prompt)
+        local yesLabel = nil
+        for _, gui in ipairs(pg:GetChildren()) do
+            if gui:IsA("ScreenGui") then
+                for _, desc in ipairs(gui:GetDescendants()) do
+                    if desc:IsA("TextLabel") and desc.Visible and desc.Text == "Yes" then
+                        local ap, sz = desc.AbsolutePosition, desc.AbsoluteSize
+                        if sz.X > 0 and sz.Y > 0 then yesLabel = desc; break end
+                    end
+                end
+            end
+            if yesLabel then break end
+        end
+        if yesLabel then
+            local ap, sz = yesLabel.AbsolutePosition, yesLabel.AbsoluteSize
+            local cx, cy = ap.X + sz.X / 2, ap.Y + sz.Y / 2
+            _vimRef:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
+            task.wait(0.03)
+            _vimRef:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
+        end
+    end)
+end
+
+local function _tpToZone()
+    local hrp = getHRP()
+    if not hrp then return end
+    local zoneName = getgenv()._DYHUB_selectedZone or "Zone 1"
+    local dest = _ZonePositions[zoneName] or _ZonePositions["Zone 1"]
+    local needWorld = _ZoneWorld[zoneName] or 1
+    if _WorldsClient.CurrentWorld ~= needWorld then
+        _ensureWorld(needWorld)
+        hrp = getHRP()
+        if not hrp then return end
+    end
+    local rotObjs = workspace:FindFirstChild("ROT OBJECTS")
+    local hasRots = rotObjs and #rotObjs:GetChildren() > 0
+    if not hasRots or (hrp.Position - dest.Position).Magnitude > 200 then
+        for i = 1, 5 do
+            _safeTP(dest)
+            task.wait(0.5)
+            hrp = getHRP()
+            if not hrp then return end
+            local ro = workspace:FindFirstChild("ROT OBJECTS")
+            if ro and #ro:GetChildren() > 0 and (hrp.Position - dest.Position).Magnitude < 200 then break end
+        end
+        task.wait(0.5)
+    end
+end
+
+local _farmThread = nil
+
+local function _startFarm()
+    if _farmThread then return end
+    getgenv()._DYHUB_autoFarm = true
+    getgenv()._DYHUB_farmStats = {kills=0, status="Starting"}
+    _farmThread = task.spawn(function()
+        while getgenv()._DYHUB_autoFarm do
+            if not _inBattle() then
+                pcall(function() _Heal:InvokeServer() end)
+                _clickDialogue()
+                _cachedCtx = nil
+                getgenv()._DYHUB_farmStats.status = "Hunting"
+                _tpToZone()
+                local rp = _getNearestRot()
+                if rp then
+                    local hrp = getHRP()
+                    if hrp then
+                        hrp.CFrame = CFrame.new(rp + Vector3.new(0, 1, 0))
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                    end
+                    for i = 1, 25 do
+                        if not getgenv()._DYHUB_autoFarm then break end
+                        task.wait(0.2)
+                        if _inBattle() then break end
+                        local rp2 = _getNearestRot()
+                        if rp2 and hrp then
+                            hrp.CFrame = CFrame.new(rp2 + Vector3.new(0, 1, 0))
+                            hrp.AssemblyLinearVelocity = Vector3.zero
+                        end
+                    end
+                else
+                    task.wait(0.5)
+                end
+            end
+
+            if _inBattle() then
+                task.wait(0.5)
+                local ctx = _scanCtx()
+
+                getgenv()._DYHUB_farmStats.status = "In battle"
+                for i = 1, 30 do
+                    task.wait(0.3)
+                    ctx = _getCtx()
+                    if ctx and ctx.UI and ctx.UI.UIState == "MENU" then break end
+                    _answerConfirmations()
+                    if not _inBattle() then break end
+                end
+
+                while getgenv()._DYHUB_autoFarm and _inBattle() do
+                    ctx = _getCtx()
+                    if not ctx then
+                        _answerConfirmations()
+                        task.wait(0.4)
+                        continue
+                    end
+
+                    if not ctx.UI or ctx.UI.UIState ~= "MENU" then
+                        _answerConfirmations()
+                        task.wait(0.3)
+                        continue
+                    end
+
+                    local holdsFree = true
+                    pcall(function()
+                        if ctx.BattleHoldChecks and next(ctx.BattleHoldChecks.Checks) then
+                            holdsFree = false
+                        end
+                    end)
+                    if not holdsFree then
+                        task.wait(0.3)
+                        continue
+                    end
+
+                    local section = _getMySection(ctx)
+                    if not section or not section.BattleRot or not section.BattleRot.RotInstance then
+                        _answerConfirmations()
+                        task.wait(0.4)
+                        continue
+                    end
+                    local ri = section.BattleRot.RotInstance
+
+                    if math.floor(ri.Health) < 1 and section.Team then
+                        local switchIdx = nil
+                        for i, rot in pairs(section.Team) do
+                            if math.floor(rot.Health) >= 1 and rot.UniqueID ~= ri.UniqueID then
+                                switchIdx = i
+                                break
+                            end
+                        end
+                        if switchIdx then
+                            getgenv()._DYHUB_farmStats.status = "Switching rot"
+                            pcall(function() ctx:OnInput({Type = "Switch", TeamIndex = switchIdx}) end)
+                            task.wait(2)
+                            continue
+                        else
+                            getgenv()._DYHUB_farmStats.status = "All rots dead"
+                            pcall(function() ctx:OnInput({Type = "Run"}) end)
+                            task.wait(2)
+                            pcall(function() _Heal:InvokeServer() end)
+                            break
+                        end
+                    end
+
+                    local energy = section.EnergyBar and section.EnergyBar.Energy or 0
+
+                    local oppKey = ctx.IsInvertedOnServer and "SectionA" or "SectionB"
+                    local oppSection = ctx[oppKey]
+                    local oppRi = oppSection and oppSection.BattleRot and oppSection.BattleRot.RotInstance
+                    if getgenv()._DYHUB_autoCatch and oppRi and oppRi.Health > 0 then
+                        local maxHP = _Core.Formula.CalculateHP(oppRi)
+                        local hpPct = (oppRi.Health / maxHP) * 100
+                        local ballName = getgenv()._DYHUB_catchBall or "Rot Box"
+                        local hasBall = _bagRef.Bag[ballName] and _bagRef.Bag[ballName] > 0
+                        if hpPct <= (getgenv()._DYHUB_catchBelow or 50) and hasBall then
+                            getgenv()._DYHUB_farmStats.status = "Catching! " .. ballName
+                            pcall(function() ctx:OnInput({Type = "Catch", BallName = ballName}) end)
+                            for i = 1, 40 do
+                                task.wait(0.3)
+                                _answerConfirmations()
+                                if ctx.Dead or not _inBattle() then break end
+                                if ctx.UI and ctx.UI.UIState == "MENU" then break end
+                            end
+                            if getgenv()._DYHUB_autoSell and not _inBattle() then
+                                task.wait(1)
+                                if _doSell then pcall(_doSell) end
+                            end
+                            continue
+                        end
+                    end
+
+                    local atkIdx = _getBestMove(ri.Moveset, energy)
+                    if atkIdx then
+                        getgenv()._DYHUB_farmStats.status = "ATK:" .. ri.Moveset[atkIdx]
+                        pcall(function() ctx:OnInput({Type = "Fight", MoveIndex = atkIdx}) end)
+                    else
+                        getgenv()._DYHUB_farmStats.status = "Charge E:" .. energy
+                        pcall(function() ctx:OnInput({Type = "Fight", MoveIndex = _getChargeIdx(ri.Moveset)}) end)
+                    end
+
+                    for i = 1, 20 do
+                        task.wait(0.3)
+                        _answerConfirmations()
+                        if ctx.Dead or not _inBattle() then break end
+                        if ctx.UI and ctx.UI.UIState == "MENU" then break end
+                    end
+                end
+
+                getgenv()._DYHUB_farmStats.kills = getgenv()._DYHUB_farmStats.kills + 1
+                getgenv()._DYHUB_farmStats.status = "Kill #" .. getgenv()._DYHUB_farmStats.kills
+
+                for i = 1, 15 do
+                    task.wait(0.3)
+                    _answerConfirmations()
+                    _clickDialogue()
+                    if not _Checks.Taken.Battle then break end
+                end
+                pcall(function() for k in pairs(_Checks.Taken) do _Checks:SetOff(k) end end)
+                _cachedCtx = nil
+                task.wait(1)
+            else
+                _clickDialogue()
+                task.wait(1)
+            end
+        end
+        getgenv()._DYHUB_farmStats.status = "Stopped"
+        _farmThread = nil
+    end)
+end
+
+local function _stopFarm()
+    getgenv()._DYHUB_autoFarm = false
+    _farmThread = nil
+end
+
+Tog.AutoFarm = GameL:Toggle({ Name="Auto Farm", Default=false,
+    Callback=function(p) if p then _startFarm() else _stopFarm() end end }, "AutoFarm")
+
+getgenv()._DYHUB_autoHeal = false
+Tog.AutoHeal = GameL:Toggle({ Name="Auto Heal", Default=false,
+    Callback=function(p)
+        getgenv()._DYHUB_autoHeal = p
+        if p then
+            task.spawn(function()
+                while getgenv()._DYHUB_autoHeal do
+                    pcall(function() _Heal:InvokeServer() end)
+                    task.wait(3)
+                end
+            end)
+        end
+    end }, "AutoHeal")
+
+getgenv()._DYHUB_autoClick = false
+Tog.AutoClick = GameL:Toggle({ Name="Auto Click", Default=false,
+    Callback=function(p)
+        getgenv()._DYHUB_autoClick = p
+        if p then
+            task.spawn(function()
+                while getgenv()._DYHUB_autoClick do
+                    pcall(function()
+                        local cam = workspace.CurrentCamera
+                        local vp = cam and cam.ViewportSize or Vector2.new(1280, 720)
+                        _vimRef:SendMouseButtonEvent(vp.X/2, vp.Y*0.55, 0, true, game, 1)
+                        task.wait(0.05)
+                        _vimRef:SendMouseButtonEvent(vp.X/2, vp.Y*0.55, 0, false, game, 1)
+                    end)
+                    task.wait(10)
+                end
+            end)
+        end
+    end }, "AutoClick")
+
+local _zoneNames = {}
+for name in pairs(_ZonePositions) do table.insert(_zoneNames, name) end
+table.sort(_zoneNames)
+Opt.FarmZone = GameL:Dropdown({ Name="Farm Zone", Options=_zoneNames, Default=1, Multi=false,
+    Callback=function(v) local sel = type(v) == "table" and next(v) or v; getgenv()._DYHUB_selectedZone = sel end }, "FarmZone")
+
+Opt.MinFarmLevel = GameL:Slider({ Name="Min Rot Level", Default=0, Minimum=0, Maximum=100, Precision=0,
+    Callback=function(v) getgenv()._DYHUB_minFarmLevel = v end }, "MinFarmLevel")
+Opt.MaxFarmLevel = GameL:Slider({ Name="Max Rot Level", Default=100, Minimum=1, Maximum=100, Precision=0,
+    Callback=function(v) getgenv()._DYHUB_maxFarmLevel = v end }, "MaxFarmLevel")
+
+local _bagRef2 = _bagRef
+
+local GameR = Tabs.Game:Section({Side="Right", Name="Catching", Image="leaf"})
+
+getgenv()._DYHUB_autoCatch = false
+getgenv()._DYHUB_catchBall = "Rot Box"
+getgenv()._DYHUB_catchBelow = 50
+
+Tog.AutoCatch = GameR:Toggle({ Name="Auto Catch", Default=false,
+    Callback=function(p) getgenv()._DYHUB_autoCatch = p end }, "AutoCatch")
+
+local function _getBagBalls()
+    local balls = {}
+    for name, count in pairs(_bagRef.Bag) do
+        if name ~= "Coins" and _Core.BallInfos.AllBalls[name] and type(count) == "number" and count > 0 then
+            table.insert(balls, name)
+        end
+    end
+    if #balls == 0 then table.insert(balls, "Rot Box") end
+    table.sort(balls)
+    return balls
+end
+
+Opt.CatchBall = GameR:Dropdown({ Name="Ball", Options=_getBagBalls(), Default=1, Multi=false,
+    Callback=function(v) local sel = type(v) == "table" and next(v) or v; getgenv()._DYHUB_catchBall = sel end }, "CatchBall")
+GameR:Button({ Name="Refresh Balls", Callback=function()
+    pcall(function() Opt.CatchBall:Refresh(_getBagBalls()) end)
+    notify("Refreshed from bag",2)
+end })
+
+Opt.CatchBelow = GameR:Slider({ Name="Catch Below HP %", Default=50, Minimum=1, Maximum=100, Precision=0,
+    Callback=function(v) getgenv()._DYHUB_catchBelow = v end }, "CatchBelow")
+
+local MiscL = Tabs.Misc:Section({Side="Left", Name="Utilities", Image="star"})
+MiscL:Button({ Name="Heal", Callback=function() pcall(function() _Heal:InvokeServer() end); notify("Healed",2) end })
+MiscL:Button({ Name="Clear Locks", Callback=function() pcall(function() for k in pairs(_Checks.Taken) do _Checks:SetOff(k) end end); notify("Locks cleared",2) end })
+MiscL:Button({ Name="TP to Farm Zone", Callback=function()
+    local zoneName = getgenv()._DYHUB_selectedZone or "Zone 1"
+    local needWorld = _ZoneWorld[zoneName] or 1
+    if _WorldsClient.CurrentWorld ~= needWorld then
+        _ensureWorld(needWorld)
+        local hrp = getHRP()
+        if hrp and _WorldSpawn[needWorld] then hrp.CFrame = _WorldSpawn[needWorld]; hrp.AssemblyLinearVelocity = Vector3.zero; task.wait(1) end
+    end
+    local dest = _ZonePositions[zoneName] or _ZonePositions["Zone 1"]
+    _safeTP(dest)
+    notify("TP'd to " .. zoneName, 2)
+end })
+
+local _attemptPurchase = game:GetService("ReplicatedStorage").Brainrot.ShopViewer.__server__.AttemptPurchase
+local _shopItems = {"Rot Box", "Silver Box", "Gold Box", "Snow Box", "Snowman Box", "Miner Box", "Frozen Box"}
+getgenv()._DYHUB_buyItem = "Rot Box"
+
+Opt.BuyItem = MiscL:Dropdown({ Name="Buy Item", Options=_shopItems, Default=1, Multi=false,
+    Callback=function(v) local sel = type(v)=="table" and next(v) or v; getgenv()._DYHUB_buyItem = sel end }, "BuyItem")
+
+MiscL:Button({ Name="Buy", Callback=function()
+    local item = getgenv()._DYHUB_buyItem or "Rot Box"
+    local world = _WorldsClient.CurrentWorld
+    local ok, res = pcall(function() return _attemptPurchase:InvokeServer(item, world) end)
+    if ok and res then
+        notify("Bought " .. item, 2)
+    else
+        notify("Can't buy " .. item, 2)
+    end
+end })
+
+MiscL:Button({ Name="Buy x10", Callback=function()
+    local item = getgenv()._DYHUB_buyItem or "Rot Box"
+    local world = _WorldsClient.CurrentWorld
+    local bought = 0
+    for i = 1, 10 do
+        local ok, res = pcall(function() return _attemptPurchase:InvokeServer(item, world) end)
+        if ok and res then bought = bought + 1 else break end
+        task.wait(0.1)
+    end
+    notify("Bought " .. bought .. "x " .. item, 2)
+end })
+
+getgenv()._DYHUB_autoBuy = false
+Tog.AutoBuy = MiscL:Toggle({ Name="Auto Buy", Default=false,
+    Callback=function(p)
+        getgenv()._DYHUB_autoBuy = p
+        if p then
+            task.spawn(function()
+                while getgenv()._DYHUB_autoBuy do
+                    local item = getgenv()._DYHUB_buyItem or "Rot Box"
+                    local world = _WorldsClient.CurrentWorld
+                    local ok, res = pcall(function() return _attemptPurchase:InvokeServer(item, world) end)
+                    if not ok or not res then
+                        getgenv()._DYHUB_autoBuy = false
+                        notify("Auto Buy stopped (can't afford)", 3)
+                        pcall(function() Tog.AutoBuy:Set(false) end)
+                        break
+                    end
+                    task.wait(0.3)
+                end
+            end)
+        end
+    end }, "AutoBuy")
+
+local MiscR = Tabs.Misc:Section({Side="Right", Name="Auto Sell", Image="sparkles"})
+local _rarityNames = {"Common", "Uncommon", "Rare", "Epic", "Insane"}
+
+getgenv()._DYHUB_sellRarities = {}
+getgenv()._DYHUB_sellMaxLevel = 0
+
+Opt.SellRarities = MiscR:Dropdown({ Name="Sell Rarities", Options=_rarityNames, Default={}, Multi=true,
+    Callback=function(v) getgenv()._DYHUB_sellRarities = v end }, "SellRarities")
+
+Opt.SellMaxLevel = MiscR:Slider({ Name="Max Sell Level", Default=0, Minimum=0, Maximum=100, Precision=0,
+    Callback=function(v) getgenv()._DYHUB_sellMaxLevel = v end }, "SellMaxLevel")
+
+MiscR:Label({ Text="Sells team + PC rots" })
+
+_collectSellIDs = function()
+    local sellSet = getgenv()._DYHUB_sellRarities or {}
+    if not next(sellSet) then return {} end
+    local maxLvl = getgenv()._DYHUB_sellMaxLevel or 0
+    local toSell = {}
+    local function consider(rot)
+        if type(rot) ~= "table" or not rot.UniqueID then return end
+        local sp = _Core.Species[rot.Name]
+        local rarity = sp and sp.Rarity and sp.Rarity.Name or "?"
+        if not sellSet[rarity] then return end
+        if maxLvl > 0 and (rot.Level or 0) > maxLvl then return end
+        table.insert(toSell, rot.UniqueID)
+    end
+    for _, rot in pairs(_MyRots.PC) do consider(rot) end
+    for _, rot in pairs(_MyRots.Team) do consider(rot) end
+    return toSell
+end
+
+_doSell = function()
+    local toSell = _collectSellIDs()
+    if #toSell == 0 then notify("Nothing matches filters",2); return end
+    local ok, res = pcall(function() return _SellRemote:InvokeServer(toSell) end)
+    if ok and res and res.Type == "Success" then
+        notify("Sold " .. #toSell .. " rots",3)
+    else
+        notify("Sell failed",3)
+    end
+end
+
+MiscR:Button({ Name="Sell Now", Callback=_doSell })
+
+getgenv()._DYHUB_autoSell = false
+Tog.AutoSell = MiscR:Toggle({ Name="Auto Sell After Catch", Default=false,
+    Callback=function(p) getgenv()._DYHUB_autoSell = p end }, "AutoSell")
+
+
+local NavL = Tabs.Navigation:Section({Side="Left", Name="NPC Teleport", Image="map-pin"})
+local NavR = Tabs.Navigation:Section({Side="Right", Name="Zones", Image="compass"})
+
+local _npcDests = {
+    ["W1 Rot Center"] = {cf=CFrame.new(-1530, 66, 1439), world=1},
+    ["W1 Sell Shop"] = {cf=CFrame.new(-1495, 19, 1389), world=1},
+    ["W1 Lucky Shop"] = {cf=CFrame.new(-1546, 20, 1332), world=1},
+    ["W1 Vending Machine"] = {cf=CFrame.new(-1514, 22, 1351), world=1},
+    ["W1 Player House"] = {cf=CFrame.new(-1499, 19, 1336), world=1},
+    ["W1 Spawn"] = {cf=CFrame.new(-1529, 16, 1368), world=1},
+    ["W2 Rot Center"] = {cf=CFrame.new(-1532, 59, 362), world=2},
+    ["W2 Sell Shop"] = {cf=CFrame.new(-1588, 19, 363), world=2},
+    ["W2 Lucky Shop"] = {cf=CFrame.new(-1634, 20, 299), world=2},
+    ["W2 Vending Machine"] = {cf=CFrame.new(-1539, 22, 311), world=2},
+    ["W2 Gym"] = {cf=CFrame.new(-1491, 16, 326), world=2},
+    ["W2 Exchange Machine"] = {cf=CFrame.new(-1572, 20, 309), world=2},
+    ["W2 Spawn"] = {cf=CFrame.new(-1555.9, 18.61, 328.96), world=2},
+}
+local _npcNames = {}
+for name in pairs(_npcDests) do _npcNames[#_npcNames+1] = name end
+table.sort(_npcNames)
+
+getgenv()._DYHUB_selectedNPC = _npcNames[1]
+Opt.NPCDrop = NavL:Dropdown({ Name="NPC / Location", Options=_npcNames, Default=1, Multi=false,
+    Callback=function(v) local sel = type(v)=="table" and next(v) or v; getgenv()._DYHUB_selectedNPC = sel end }, "NPCDrop")
+
+NavL:Button({ Name="Teleport", Callback=function()
+    local name = getgenv()._DYHUB_selectedNPC
+    local dest = _npcDests[name]
+    if not dest then notify("Select a location",2); return end
+    if _WorldsClient.CurrentWorld ~= dest.world then
+        _ensureWorld(dest.world)
+        local hrp = getHRP()
+        if hrp and _WorldSpawn[dest.world] then
+            hrp.CFrame = _WorldSpawn[dest.world]
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            task.wait(1.5)
+        end
+    end
+    local hrp = getHRP()
+    if hrp then hrp.CFrame = dest.cf; hrp.AssemblyLinearVelocity = Vector3.zero end
+    notify("TP'd to " .. name, 2)
+end })
+
+NavL:Button({ Name="Nearest Wild Rot", Callback=function()
+    local rp = _getNearestRot()
+    if rp then local hrp = getHRP(); if hrp then hrp.CFrame = CFrame.new(rp + Vector3.new(0,3,0)); hrp.AssemblyLinearVelocity = Vector3.zero end; notify("TP'd to nearest rot", 2)
+    else notify("No rots nearby", 2) end
+end })
+for _, z in ipairs(_zoneNames) do
+    NavR:Button({ Name=z, Callback=function()
+        local needWorld = _ZoneWorld[z] or 1
+        _ensureWorld(needWorld)
+        local hrp = getHRP()
+        if hrp then hrp.CFrame = _ZonePositions[z]; hrp.AssemblyLinearVelocity = Vector3.zero end
+        notify("TP'd to " .. z, 2)
+    end })
+end
+
+local WorldL = Tabs.Game:Section({Side="Right", Name="Rarity ESP", Image="eye"})
+local WorldR = Tabs.World:Section({Side="Left", Name="World Travel", Image="mountain"})
+
+local _rarityColorMap = {}
+for _, r in ipairs(_Core.Rarities.Array) do
+    local parts = {}
+    for n in tostring(r.Color):gmatch("[%d%.]+") do parts[#parts+1] = tonumber(n) end
+    _rarityColorMap[r.Name] = Color3.new(parts[1] or 0.8, parts[2] or 0.8, parts[3] or 0.8)
+end
+local function _rarityColor(name)
+    return _rarityColorMap[name] or Color3.new(0.8, 0.8, 0.8)
+end
+
+local _RARE_TIERS = { Epic = true, Insane = true }
+
+getgenv()._DYHUB_esp = false
+getgenv()._DYHUB_espRainbowRare = true
+getgenv()._DYHUB_espMinRarity = "Common"
+local _rarityRank = { Common=1, Uncommon=2, Rare=3, Epic=4, Insane=5 }
+local _espDrawings = {}
+
+local function _clearESP()
+    for _, d in pairs(_espDrawings) do pcall(function() d.text:Remove() end) end
+    _espDrawings = {}
+end
+
+local function _espLoop()
+    local RunService = game:GetService("RunService")
+    local cam = workspace.CurrentCamera
+    local conn
+    conn = RunService.RenderStepped:Connect(function()
+        if not getgenv()._DYHUB_esp then
+            _clearESP()
+            conn:Disconnect()
+            return
+        end
+        local rotObjs = workspace:FindFirstChild("ROT OBJECTS")
+        if not rotObjs then return end
+
+        local levelMap = {}
+        for _, c in pairs(_RotChiller.AllContainers) do
+            if type(c) == "table" and c.Rots then
+                for uid, w in pairs(c.Rots) do
+                    if type(w) == "table" and w.RotInstance then
+                        levelMap[uid] = { name = w.Species, level = w.RotInstance.Level }
+                    end
+                end
+            end
+        end
+
+        local seen = {}
+        local minRank = _rarityRank[getgenv()._DYHUB_espMinRarity] or 1
+        local t = tick()
+        for _, child in ipairs(rotObjs:GetChildren()) do
+            local info = levelMap[child.Name]
+            if info then
+                local sp = _Core.Species[info.name]
+                local rarity = sp and sp.Rarity and sp.Rarity.Name or "Common"
+                if (_rarityRank[rarity] or 1) >= minRank then
+                    local pp = child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart")
+                    if pp and pp.Parent then
+                        local ok, pos = pcall(function() return pp.Position end)
+                        if ok and pos then
+                            local sp2, onScreen = cam:WorldToViewportPoint(pos + Vector3.new(0, 3, 0))
+                            if onScreen then
+                                seen[child] = true
+                                local d = _espDrawings[child]
+                                if not d then
+                                    local txt = Drawing.new("Text")
+                                    txt.Size = 18
+                                    txt.Center = true
+                                    txt.Outline = true
+                                    d = { text = txt }
+                                    _espDrawings[child] = d
+                                end
+                                local col
+                                if getgenv()._DYHUB_espRainbowRare and _RARE_TIERS[rarity] then
+                                    col = Color3.fromHSV((t * 0.5) % 1, 1, 1)
+                                else
+                                    col = _rarityColor(rarity)
+                                end
+                                d.text.Position = Vector2.new(sp2.X, sp2.Y)
+                                d.text.Text = string.format("%s [%s] Lv%d", info.name, rarity, info.level)
+                                d.text.Color = col
+                                d.text.Visible = true
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        for child, d in pairs(_espDrawings) do
+            if not seen[child] then
+                pcall(function() d.text:Remove() end)
+                _espDrawings[child] = nil
+            end
+        end
+    end)
+end
+
+Tog.ESP = WorldL:Toggle({ Name="Rarity ESP", Default=false,
+    Callback=function(p) getgenv()._DYHUB_esp = p; if p then _espLoop() else _clearESP() end end }, "ESP")
+
+Tog.ESPRainbow = WorldL:Toggle({ Name="Rainbow on Epic+", Default=true,
+    Callback=function(p) getgenv()._DYHUB_espRainbowRare = p end }, "ESPRainbow")
+
+Opt.ESPMinRarity = WorldL:Dropdown({ Name="Min Rarity", Options={"Common","Uncommon","Rare","Epic","Insane"}, Default=1, Multi=false,
+    Callback=function(v) local sel = type(v) == "table" and next(v) or v; getgenv()._DYHUB_espMinRarity = sel end }, "ESPMinRarity")
+
+WorldR:Button({ Name="Unlock World 2", Callback=function()
+    pcall(function() _WorldsClient.SetWorldUnlocked(2, true) end)
+    notify("World 2 unlocked", 2)
+end })
+
+onUnload(function() getgenv()._DYHUB_autoFarm = false; getgenv()._DYHUB_autoHeal = false; getgenv()._DYHUB_autoCatch = false; getgenv()._DYHUB_autoSell = false; getgenv()._DYHUB_autoClick = false; getgenv()._DYHUB_autoBuy = false; getgenv()._DYHUB_esp = false; _clearESP() end)
+
+Opt.Coordinates = CharL:Input({ Name="Coordinates", Default="", Placeholder="X, Y, Z", Callback=function() end }, "Coordinates")
+CharL:Button({ Name="Tween To", Callback=function() notify("Tween feature",2) end })
+CharL:Button({ Name="Copy Position", Callback=function() local hrp=getHRP(); if hrp then setclipboard(tostring(hrp.Position)); notify("Copied") end end })
+CharL:Button({ Name="Save Position", Callback=function() local hrp=getHRP(); if hrp then _savedPos=hrp.CFrame; notify("Saved",2) end end })
+CharL:Button({ Name="TP to Saved", Callback=function() if not _savedPos then notify("No position saved",2); return end; local hrp=getHRP(); if hrp then hrp.CFrame=_savedPos; hrp.AssemblyLinearVelocity=Vector3.zero end end })
+
+Tog.Fly = CharL2:Toggle({ Name="Fly", Default=false, Keybind=Enum.KeyCode.Y,
+    Callback=function(p)
+        if p then
+            RS:BindToRenderStep("_DYHUBFly",Enum.RenderPriority.Input.Value,function(dt)
+                local c=getChar(); if not c then return end
+                local hrp=c:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+                if not getgenv()._DYHUB_flyFrame then getgenv()._DYHUB_flyFrame=hrp.CFrame end
+                local frame=getgenv()._DYHUB_flyFrame; local cf=Cam.CFrame; local mv=Vector3.zero
+                if UIS:IsKeyDown(Enum.KeyCode.W) then mv=mv+cf.LookVector end
+                if UIS:IsKeyDown(Enum.KeyCode.S) then mv=mv-cf.LookVector end
+                if UIS:IsKeyDown(Enum.KeyCode.A) then mv=mv-cf.RightVector end
+                if UIS:IsKeyDown(Enum.KeyCode.D) then mv=mv+cf.RightVector end
+                if UIS:IsKeyDown(Enum.KeyCode.Space) then mv=mv+Vector3.new(0,1,0) end
+                if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then mv=mv-Vector3.new(0,1,0) end
+                if mv.Magnitude>0 then frame=frame+mv.Unit*S.flySpeed*dt end
+                getgenv()._DYHUB_flyFrame=frame; hrp.AssemblyLinearVelocity=Vector3.zero; hrp.CFrame=frame
+            end)
+        else RS:UnbindFromRenderStep("_DYHUBFly"); getgenv()._DYHUB_flyFrame=nil end
+    end }, "Fly")
+Opt.FlySpeed = CharL2:Slider({ Name="Fly Speed", Default=100, Minimum=0, Maximum=5000, Precision=0,
+    Callback=function(v) S.flySpeed=v end }, "FlySpeed")
+
+Tog.Speedhack = CharL2:Toggle({ Name="Speedhack", Default=false, Keybind=Enum.KeyCode.N,
+    Callback=function(p)
+        if p then
+            RS:BindToRenderStep("_DYHUBSpeed",Enum.RenderPriority.Input.Value,function(dt)
+                local c=getChar(); if not c then return end
+                local hum=c:FindFirstChildOfClass("Humanoid"); if not hum or hum.Health<=0 then return end
+                local hrp=c:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+                if hum.MoveDirection.Magnitude>0 then hrp.CFrame=hrp.CFrame+hum.MoveDirection*S.speed*dt end
+            end)
+        else RS:UnbindFromRenderStep("_DYHUBSpeed") end
+    end }, "Speedhack")
+Opt.SpeedhackSpeed = CharL2:Slider({ Name="Speed", Default=100, Minimum=0, Maximum=5000, Precision=0,
+    Callback=function(v) S.speed=v end }, "SpeedhackSpeed")
+
+local ijConn=nil
+Tog.InfiniteJump = CharL2:Toggle({ Name="Infinite Jump", Default=false, Keybind=Enum.KeyCode.H,
+    Callback=function(p)
+        if ijConn then ijConn:Disconnect(); ijConn=nil end
+        if p then ijConn=UIS.JumpRequest:Connect(function()
+            local hrp=getHRP(); if hrp then hrp.AssemblyLinearVelocity=Vector3.new(hrp.AssemblyLinearVelocity.X,S.infJumpH,hrp.AssemblyLinearVelocity.Z) end
+        end) end
+    end }, "InfiniteJump")
+Opt.InfiniteJumpHeight = CharL2:Slider({ Name="Jump Height", Default=50, Minimum=0, Maximum=1000, Precision=0,
+    Callback=function(v) S.infJumpH=v end }, "InfiniteJumpHeight")
+
+local noclipConn=nil
+Tog.Noclip = CharL2:Toggle({ Name="Noclip", Default=false, Keybind=Enum.KeyCode.Unknown,
+    Callback=function(p)
+        if noclipConn then noclipConn:Disconnect(); noclipConn=nil end
+        if p then noclipConn=RS.RenderStepped:Connect(function()
+            local c=getChar(); if not c then return end
+            for _,part in ipairs(c:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide=false end end
+        end) end
+    end }, "Noclip")
+
+CharR:Button({ Name="Kill Yourself", Callback=function() local hum=getHum(); if hum then hum.Health=0 end end })
+CharR:Divider()
+
+local noAnimsThread=nil
+local forcedTracks={}
+local origTracks={}
+Tog.NoAnims = CharR:Toggle({ Name="No Animations", Default=false,
+    Callback=function(p)
+        if noAnimsThread then pcall(task.cancel,noAnimsThread); noAnimsThread=nil end
+        if p then
+            local c=getChar(); if not c then return end
+            local hum=c:FindFirstChildOfClass("Humanoid"); if not hum then return end
+            local anim=hum:FindFirstChildOfClass("Animator"); if not anim then return end
+            local dummy=Instance.new("Animation"); dummy.AnimationId="rbxassetid://109212722752"
+            noAnimsThread=task.spawn(function()
+                while Tog.NoAnims and Tog.NoAnims.State and hum and hum.Parent do
+                    for _,track in ipairs(anim:GetPlayingAnimationTracks()) do
+                        if track.Animation.AnimationId~=dummy.AnimationId then
+                            if not table.find(origTracks,track) then table.insert(origTracks,track) end
+                            pcall(function() track:Stop(); task.defer(track.Destroy,track) end)
+                        end
+                    end
+                    task.wait(0.1)
+                end
+            end)
+        else
+            for _,track in pairs(forcedTracks) do pcall(function() track:Stop(); track:Destroy() end) end
+            forcedTracks={}
+            for _,track in pairs(origTracks) do pcall(function() track:Play() end) end
+            origTracks={}
+        end
+    end }, "NoAnims")
+
+local _animSpeedConn=nil
+local _animSpeed=1
+local function applyAnimSpeed(speed)
+    pcall(function()
+        local char=getChar(); if not char then return end
+        local hum=char:FindFirstChildOfClass("Humanoid"); if not hum then return end
+        local anim=hum:FindFirstChildOfClass("Animator"); if not anim then return end
+        for _,track in ipairs(anim:GetPlayingAnimationTracks()) do pcall(function() track:AdjustSpeed(speed) end) end
+    end)
+end
+Tog.AnimSpeed = CharR:Toggle({ Name="Animation Speed", Default=false,
+    Callback=function(p)
+        if _animSpeedConn then _animSpeedConn:Disconnect(); _animSpeedConn=nil end
+        if p then _animSpeedConn=RS.Heartbeat:Connect(function() applyAnimSpeed(_animSpeed) end)
+        else applyAnimSpeed(1) end
+    end }, "AnimSpeed")
+Opt.AnimSpeedSlider = CharR:Slider({ Name="Speed", Default=1, Minimum=0.1, Maximum=200, Precision=1,
+    Callback=function(v) _animSpeed=v end }, "AnimSpeedSlider")
+CharR:Divider()
+
+Opt.AutoTPHP = CharR:Slider({ Name="HP Threshold", Default=20, Minimum=1, Maximum=99, Precision=0,
+    Callback=function() end }, "AutoTPHP")
+local _autoTPConn=nil
+Tog.AutoTPSafe = CharR:Toggle({ Name="Auto TP on Low HP", Default=false,
+    Callback=function(p)
+        if _autoTPConn then _autoTPConn:Disconnect(); _autoTPConn=nil end
+        if not p then return end
+        _autoTPConn=RS.Heartbeat:Connect(function()
+            if not _savedPos then return end
+            local hum=getHum(); if not hum or hum.Health<=0 then return end
+            if (hum.Health/hum.MaxHealth*100)<=(Opt.AutoTPHP and Opt.AutoTPHP.Value or 20) then
+                local hrp=getHRP(); if hrp then hrp.CFrame=_savedPos; hrp.AssemblyLinearVelocity=Vector3.zero; notify("Low HP — safe!",2) end
+            end
+        end)
+    end }, "AutoTPSafe")
+CharR:Divider()
+
+local afkConn=nil
+Tog.AntiAFK = CharR:Toggle({ Name="Anti AFK", Default=true,
+    Callback=function(p)
+        if afkConn then pcall(task.cancel,afkConn); afkConn=nil end
+        if not p then return end
+        local VU=cloneref and cloneref(Instance.new("VirtualUser")) or game:GetService("VirtualUser")
+        afkConn=task.spawn(function()
+            while Tog.AntiAFK and Tog.AntiAFK.State do
+                pcall(function() VU:Button2Down(Vector2.zero,Cam.CFrame); task.wait(0.1); VU:Button2Up(Vector2.zero,Cam.CFrame) end)
+                task.wait(20)
+            end
+        end)
+    end }, "AntiAFK")
+CharR:Divider()
+
+local desyncThread=nil; local desyncTarget="Nearest"
+local function getDesyncPart()
+    local myHRP=getHRP(); if not myHRP then return nil end
+    if desyncTarget=="Nearest" then
+        local best,bestDist=nil,math.huge
+        for _,plr in ipairs(PS:GetPlayers()) do if plr~=LP and plr.Character then
+            local hrp=plr.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then local d=(hrp.Position-myHRP.Position).Magnitude; if d<bestDist then bestDist=d; best=hrp end end
+        end end
+        return best
+    else local plr=PS:FindFirstChild(desyncTarget); return plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") end
+end
+Tog.Desync = CharR:Toggle({ Name="Physics Desync", Default=false,
+    Callback=function(p)
+        if desyncThread then pcall(task.cancel,desyncThread); desyncThread=nil end
+        if not p then pcall(function() local hrp=getHRP(); if hrp then sethiddenproperty(hrp,"PhysicsRepRootPart",nil) end end); return end
+        desyncThread=task.spawn(function()
+            local char=LP.Character; local hrp=char and char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+            while RS.Heartbeat:Wait() do
+                if LP.Character~=char then break end
+                pcall(function() sethiddenproperty(hrp,"PhysicsRepRootPart",getDesyncPart()) end)
+            end
+        end)
+    end }, "Desync")
+local dList={"Nearest"}; for _,plr in ipairs(PS:GetPlayers()) do if plr~=LP then table.insert(dList,plr.Name) end end
+Opt.DesyncTarget = CharR:Dropdown({ Name="Desync Target", Options=dList, Default=1, Multi=false,
+    Callback=function(v) desyncTarget=type(v)=="table" and next(v) or v end }, "DesyncTarget")
+PS.PlayerAdded:Connect(function() task.defer(function()
+    if Opt.DesyncTarget then local list={"Nearest"}; for _,plr in ipairs(PS:GetPlayers()) do if plr~=LP then table.insert(list,plr.Name) end end; pcall(function() Opt.DesyncTarget:ClearOptions(); Opt.DesyncTarget:InsertOptions(list) end) end
+end) end)
+PS.PlayerRemoving:Connect(function() task.defer(function()
+    if Opt.DesyncTarget then local list={"Nearest"}; for _,plr in ipairs(PS:GetPlayers()) do if plr~=LP then table.insert(list,plr.Name) end end; pcall(function() Opt.DesyncTarget:ClearOptions(); Opt.DesyncTarget:InsertOptions(list) end) end
+end) end)
+
+Tog.RaknetDesync = CharR:Toggle({ Name="Raknet Desync", Default=false, Risky=true,
+    Callback=function(p)
+        local rn=getgenv().raknet
+        if p then
+            if not rn or not rn.add_send_hook then notify("raknet not available",3); Tog.RaknetDesync:SetState(false); return end
+            if shared._DYHUB_desync then pcall(function() rn.remove_send_hook(shared._DYHUB_desync) end) end
+            local packets_sent=0; local last_t1=nil
+            local function on_send(packet)
+                pcall(function()
+                    local data=packet.AsBuffer; local pos=0
+                    local function ru8()  local v=buffer.readu8(data,pos);  pos=pos+1; return v end
+                    local function ru32() local v=buffer.readu32(data,pos); pos=pos+4; return v end
+                    local function ru64() local l=ru32(); local h=ru32(); return h*4294967296+l end
+                    local id=ru8(); if id~=0x1B then return end
+                    local t1=ru64(); local t2=ru64(); local wid=ru8()
+                    if wid~=0x85 then return end
+                    packets_sent=packets_sent+1
+                    local forced_t1=t1
+                    if last_t1 and packets_sent%10~=0 then forced_t1=last_t1-1 end
+                    last_t1=t1
+                    local w=buffer.create(buffer.len(data)); local wp=0
+                    local function wu8(v)  buffer.writeu8(w,wp,v);  wp=wp+1 end
+                    local function wu32(v) buffer.writeu32(w,wp,v); wp=wp+4 end
+                    local function wu64(v) wu32(bit32.band(v,0xFFFFFFFF)); wu32(bit32.rshift(v,32)) end
+                    wu8(0x1B); wu64(forced_t1); wu64(t2); wu8(wid)
+                    for i=pos,buffer.len(data)-1 do wu8(buffer.readu8(data,i)) end
+                    rn.send(buffer.create(wp),packet.Priority,packet.Reliability,packet.OrderingChannel)
+                    packet:Block()
+                end)
+            end
+            shared._DYHUB_desync=on_send; rn.add_send_hook(on_send); notify("Desync ON",2)
+        else
+            if shared._DYHUB_desync and rn and rn.remove_send_hook then pcall(function() rn.remove_send_hook(shared._DYHUB_desync) end); shared._DYHUB_desync=nil end
+            notify("Desync OFF",2)
+        end
+    end }, "RaknetDesync")
+
+Tog.FakeLag = CharR:Toggle({ Name="Fake Lag", Default=false, Risky=true,
+    Callback=function(p)
+        local rn=getgenv().raknet
+        if p then
+            if not rn or not rn.add_send_hook then notify("raknet not available",3); Tog.FakeLag:SetState(false); return end
+            if shared._DYHUB_fakelag then pcall(function() rn.remove_send_hook(shared._DYHUB_fakelag) end) end
+            local queued={}
+            local function on_send(packet)
+                local lagMs=Opt.FakeLagMs and Opt.FakeLagMs.Value or 200
+                table.insert(queued,{ buf=packet.AsBuffer, pri=packet.Priority, rel=packet.Reliability, ord=packet.OrderingChannel, sendAt=tick()+lagMs/1000 })
+                packet:Block()
+            end
+            shared._DYHUB_fakelag=on_send; rn.add_send_hook(on_send)
+            task.spawn(function()
+                while Tog.FakeLag and Tog.FakeLag.State do
+                    local now=tick()
+                    for i=#queued,1,-1 do
+                        if queued[i].sendAt<=now then local pk=queued[i]; pcall(function() rn.send(pk.buf,pk.pri,pk.rel,pk.ord) end); table.remove(queued,i) end
+                    end
+                    task.wait(0.016)
+                end
+                if shared._DYHUB_fakelag and rn and rn.remove_send_hook then pcall(function() rn.remove_send_hook(shared._DYHUB_fakelag) end); shared._DYHUB_fakelag=nil end
+                for _,pk in ipairs(queued) do pcall(function() rn.send(pk.buf,pk.pri,pk.rel,pk.ord) end) end
+            end)
+            notify("Fake Lag ON",2)
+        else
+            if shared._DYHUB_fakelag and rn and rn.remove_send_hook then pcall(function() rn.remove_send_hook(shared._DYHUB_fakelag) end); shared._DYHUB_fakelag=nil end
+            notify("Fake Lag OFF",2)
+        end
+    end }, "FakeLag")
+Opt.FakeLagMs = CharR:Slider({ Name="Lag (ms)", Default=200, Minimum=50, Maximum=2000, Precision=0, Callback=function() end }, "FakeLagMs")
+CharR:Divider()
+
+CharR:Label({ Text="Auto Rejoin" })
+Tog.AutoRejoin = CharR:Toggle({ Name="Auto Rejoin on Kick", Default=false,
+    Callback=function(p)
+        if p then
+            LP.OnTeleport:Connect(function(state)
+                if not (Tog.AutoRejoin and Tog.AutoRejoin.State) then return end
+                if state==Enum.TeleportState.Failed or state==Enum.TeleportState.Started then
+                    task.wait(3); pcall(function() TP:TeleportToPlaceInstance(game.PlaceId,game.JobId,LP) end)
+                end
+            end)
+            game.Close:Connect(function()
+                if not (Tog.AutoRejoin and Tog.AutoRejoin.State) then return end
+                pcall(function() TP:TeleportToPlaceInstance(game.PlaceId,game.JobId,LP) end)
+            end)
+            notify("Auto Rejoin ON",2)
+        end
+    end }, "AutoRejoin")
+
+do
+    local FL = { enabled=false, sticky=false, vertInfl=false, smoothing=false, smoothFactor=0.1, stickyTarget=nil, conn=nil }
+    local origAutoRotate=nil; local origAutoRotateHum=nil
+    local function saveAutoRotate(hum)
+        if origAutoRotate==nil then origAutoRotateHum=hum; origAutoRotate=hum.AutoRotate end
+        hum.AutoRotate=false
+    end
+    local function restoreAutoRotate()
+        if origAutoRotate~=nil and origAutoRotateHum and origAutoRotateHum.Parent then pcall(function() origAutoRotateHum.AutoRotate=origAutoRotate end) end
+        origAutoRotate=nil; origAutoRotateHum=nil
+    end
+    local function getFLTarget()
+        local c=getChar(); if not c then return nil end
+        local hrp=c:FindFirstChild("HumanoidRootPart"); if not hrp then return nil end
+        local ents=workspace:FindFirstChild("World") and workspace.World:FindFirstChild("Entities"); if not ents then return nil end
+        local best,bestDist=nil,math.huge
+        for _,entity in ipairs(ents:GetChildren()) do
+            if entity==c then continue end
+            local hum=entity:FindFirstChildWhichIsA("Humanoid"); local root=entity:FindFirstChild("HumanoidRootPart")
+            if not hum or not root or hum.Health<=0 then continue end
+            local d=(root.Position-hrp.Position).Magnitude
+            if d<bestDist then bestDist=d; best={character=entity,humanoid=hum,root=root} end
+        end
+        return best
+    end
+    local function startFL()
+        if FL.conn then FL.conn:Disconnect(); FL.conn=nil end
+        FL.conn=RS.RenderStepped:Connect(function()
+            if not FL.enabled then restoreAutoRotate(); FL.stickyTarget=nil; return end
+            local c=getChar(); if not c then return end
+            local hum=c:FindFirstChildOfClass("Humanoid"); local hrp=c:FindFirstChild("HumanoidRootPart")
+            if not hum or not hrp or hum.PlatformStand then return end
+            if FL.sticky then FL.stickyTarget=FL.stickyTarget or getFLTarget() end
+            local target=FL.stickyTarget or getFLTarget()
+            if not target or not target.character.Parent or target.humanoid.Health<=0 then restoreAutoRotate(); FL.stickyTarget=nil; return end
+            local targetPos=target.root.Position
+            if not FL.vertInfl then targetPos=Vector3.new(targetPos.X,hrp.Position.Y,targetPos.Z) end
+            saveAutoRotate(hum)
+            local targetCF=CFrame.lookAt(hrp.Position,targetPos)
+            if FL.smoothing then local alpha=math.clamp(1-FL.smoothFactor,0,1); hrp.CFrame=hrp.CFrame:Lerp(targetCF,alpha)
+            else hrp.CFrame=targetCF end
+        end)
+    end
+    Tog.FaceLockEnabled = CharL3:Toggle({ Name="Face Lock", Default=false, Keybind=Enum.KeyCode.Unknown,
+        Callback=function(p)
+            FL.enabled=p
+            if p then startFL()
+            else restoreAutoRotate(); FL.stickyTarget=nil; if FL.conn then FL.conn:Disconnect(); FL.conn=nil end end
+        end }, "FaceLockEnabled")
+    Tog.FaceLockSticky = CharL3:Toggle({ Name="Sticky Target", Default=false, Callback=function(p) FL.sticky=p; FL.stickyTarget=nil end }, "FaceLockSticky")
+    Tog.FaceLockVert = CharL3:Toggle({ Name="Vertical Influence", Default=false, Callback=function(p) FL.vertInfl=p end }, "FaceLockVert")
+    Tog.FaceLockSmooth = CharL3:Toggle({ Name="Smoothing", Default=false, Callback=function(p) FL.smoothing=p end }, "FaceLockSmooth")
+    Opt.FaceLockSmoothFactor = CharL3:Slider({ Name="Smooth Factor", Default=10, Minimum=1, Maximum=99, Precision=0, Callback=function(v) FL.smoothFactor=v/100 end }, "FaceLockSmoothFactor")
+    onUnload(function() FL.enabled=false; restoreAutoRotate(); if FL.conn then FL.conn:Disconnect(); FL.conn=nil end end)
+    LP.CharacterAdded:Connect(function() FL.stickyTarget=nil; origAutoRotate=nil; if FL.enabled then task.wait(1); startFL() end end)
+end
+
+do
+    local function removeClothingAndHead(char)
+        if not char then return end
+        pcall(function()
+            for _,cls in ipairs({"Shirt","Pants"}) do local v=char:FindFirstChildOfClass(cls); if v then v:Destroy() end end
+            for _,v in ipairs(char:GetChildren()) do if v:IsA("Accessory") then pcall(function() v:Destroy() end) end end
+            local head=char:FindFirstChild("Head")
+            if head then head.Transparency=1; for _,v in ipairs(head:GetDescendants()) do if v:IsA("Decal") then v:Destroy() end end end
+        end)
+    end
+    local function attachAccessory(assetId,char,offset,rotation)
+        if not char or not assetId then return end
+        pcall(function()
+            local obj=game:GetObjects("rbxassetid://"..tostring(assetId))[1]; if not obj then return end
+            local torso=char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso"); if not torso then return end
+            obj.Parent=char
+            local handle=obj:FindFirstChild("Handle"); if not handle then return end
+            local weld=Instance.new("Weld"); weld.Part0=torso; weld.Part1=handle
+            weld.C0=CFrame.new(offset or Vector3.zero)*CFrame.Angles(math.rad(rotation and rotation.X or 0),math.rad(rotation and rotation.Y or 0),math.rad(rotation and rotation.Z or 0))
+            weld.Parent=handle; handle.Anchored=false
+        end)
+    end
+    local function setShirtPants(shirtId,pantsId,char)
+        if not char then return end
+        pcall(function()
+            if shirtId then local s=char:FindFirstChildOfClass("Shirt") or Instance.new("Shirt",char); s.ShirtTemplate="rbxassetid://"..tostring(shirtId) end
+            if pantsId then local p=char:FindFirstChildOfClass("Pants") or Instance.new("Pants",char); p.PantsTemplate="rbxassetid://"..tostring(pantsId) end
+        end)
+    end
+    local MORPHS = {
+        ["None"]=nil,
+        ["Goku"]=function(c) removeClothingAndHead(c); attachAccessory(96778240725860,c,Vector3.new(0,2.3,0)); setShirtPants(18642081551,13980707182,c) end,
+        ["Naruto"]=function(c) removeClothingAndHead(c); attachAccessory(129818847988995,c,Vector3.new(0,1.8,0),Vector3.new(0,-90,0)); setShirtPants(6469644436,2733834231,c) end,
+        ["Gojo"]=function(c) removeClothingAndHead(c); attachAccessory(132501783778842,c,Vector3.new(0,1.9,0)); setShirtPants(73084050138865,15312673306,c) end,
+        ["Toji"]=function(c) removeClothingAndHead(c); attachAccessory(135664715112347,c,Vector3.new(0,1.7,0)); setShirtPants(121088463088431,16149857407,c) end,
+        ["Aizen"]=function(c) removeClothingAndHead(c); attachAccessory(117644781784979,c,Vector3.new(0,1.7,0)); setShirtPants(87853669951881,118029167731205,c) end,
+        ["Guts"]=function(c) removeClothingAndHead(c); attachAccessory(117337600216775,c,Vector3.new(0,1.6,0)); setShirtPants(13381096342,13381103162,c) end,
+        ["Vasto Lorde"]=function(c) removeClothingAndHead(c); attachAccessory(107798985962651,c,Vector3.new(0,1.7,0)); setShirtPants(15549196125,15886594659,c) end,
+        ["Luffy"]=function(c) removeClothingAndHead(c); attachAccessory(103832443149308,c,Vector3.new(0,1.5,0)); setShirtPants(8483860912,6274345723,c) end,
+        ["Zero Two"]=function(c) removeClothingAndHead(c); attachAccessory(93023559996037,c,Vector3.new(0,1.2,0)); setShirtPants(6392201226,5896597102,c) end,
+    }
+    local morphNames={"None"}
+    for k in pairs(MORPHS) do if k~="None" then table.insert(morphNames,k) end end
+    table.sort(morphNames)
+    Opt.MorphSelect = CharL4:Dropdown({ Name="Morph", Options=morphNames, Default=1, Multi=false,
+        Callback=function(v)
+            local sel=type(v)=="table" and next(v) or v
+            if sel=="None" or not sel then return end
+            local fn=MORPHS[sel]; if not fn then return end
+            local c=LP and LP.Character; if not c then notify("No character",2); return end
+            fn(c); notify("Morph: "..sel,3)
+        end }, "MorphSelect")
+    CharL4:Button({ Name="Reset", Callback=function()
+        pcall(function() local char=LP and LP.Character; if not char then return end; local head=char:FindFirstChild("Head"); if head then head.Transparency=0 end; notify("Reload character to fully reset",3) end)
+    end})
+end
+
+local aimbotConn=nil
+local fovCircle=nil
+local function getFOVScale() return Cam.ViewportSize.Y/2/math.tan(math.rad(Cam.FieldOfView/2)) end
+local function getAimTargets()
+    local list={}
+    if S.targetPlayers then
+        for _,plr in ipairs(PS:GetPlayers()) do
+            if plr~=LP and plr.Character then
+                if not S.teamCheck or not LP.Team or plr.Team~=LP.Team then table.insert(list,plr.Character) end
+            end
+        end
+    end
+    return list
+end
+local function getAimPart(char)
+    local v=Opt.AimPart and Opt.AimPart.Value or "Head"
+    if type(v)=="table" then v=next(v) end
+    if v=="Head" then return char:FindFirstChild("Head") end
+    if v=="Torso" then return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") end
+    if v=="Random" then
+        local parts={}; for _,n in ipairs({"Head","HumanoidRootPart","Torso"}) do local p=char:FindFirstChild(n); if p then table.insert(parts,p) end end
+        return #parts>0 and parts[math.random(1,#parts)] or nil
+    end
+    return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Head")
+end
+local function isVisible(part)
+    if not S.visibleOnly then return true end
+    local c=getChar(); if not c then return false end
+    local ray=Ray.new(Cam.CFrame.Position,(part.Position-Cam.CFrame.Position).Unit*1000)
+    local hit=workspace:FindPartOnRayWithIgnoreList(ray,{c,Cam})
+    return hit and hit:IsDescendantOf(part.Parent)
+end
+UIS.InputBegan:Connect(function(inp,gpe)
+    if gpe then return end
+    local n=inp.UserInputType==Enum.UserInputType.MouseButton1 and "MB1" or inp.UserInputType==Enum.UserInputType.MouseButton2 and "MB2" or inp.KeyCode.Name
+    local key=Opt.AimbotKeybind and tostring(Opt.AimbotKeybind.Value) or "MB2"
+    if n==key and S.aimbotMode=="Hold" then S.aimbotActive=true end
+end)
+UIS.InputEnded:Connect(function(inp)
+    local n=inp.UserInputType==Enum.UserInputType.MouseButton1 and "MB1" or inp.UserInputType==Enum.UserInputType.MouseButton2 and "MB2" or inp.KeyCode.Name
+    local key=Opt.AimbotKeybind and tostring(Opt.AimbotKeybind.Value) or "MB2"
+    if n==key and S.aimbotMode=="Hold" then S.aimbotActive=false end
+end)
+
+Opt.AimbotMode = CharR2:Dropdown({ Name="Aimbot Mode", Options={"Toggle","Hold","Always"}, Default=1, Multi=false,
+    Callback=function(v) S.aimbotMode=type(v)=="table" and next(v) or v; if S.aimbotMode=="Always" then S.aimbotActive=true elseif S.aimbotMode~="Hold" then S.aimbotActive=false end end }, "AimbotMode")
+Opt.AimbotMethod = CharR2:Dropdown({ Name="Aimbot Method", Options={"Camera","mousemoverel"}, Default=1, Multi=false,
+    Callback=function(v) S.aimbotMethod=type(v)=="table" and next(v) or v end }, "AimbotMethod")
+Opt.AimPart = CharR2:Dropdown({ Name="Aim Part", Options={"Head","Torso","Random"}, Default=1, Multi=false, Callback=function() end }, "AimPart")
+Opt.AimbotKeybind = CharR2:Keybind({ Name="Aimbot Keybind", Default=Enum.KeyCode.Unknown,
+    onBinded=function() if S.aimbotMode=="Toggle" then S.aimbotActive=not S.aimbotActive end end }, "AimbotKeybind")
+Tog.Aimbot = CharR2:Toggle({ Name="Aimbot", Default=false,
+    Callback=function(p)
+        S.aimbotEnabled=p
+        if aimbotConn then aimbotConn:Disconnect(); aimbotConn=nil end
+        if not p then S.aimbotActive=false; return end
+        if S.aimbotMode=="Always" then S.aimbotActive=true end
+        local accum=Vector2.zero
+        aimbotConn=RS.RenderStepped:Connect(function()
+            if not S.aimbotActive then return end
+            local vpSize=Cam.ViewportSize; local cx=vpSize.X/2+S.aimbotX; local cy=vpSize.Y/2+S.aimbotY
+            local fovPx=math.tan(math.rad(S.aimbotFOV/2))*getFOVScale()
+            local best,bestDist=nil,fovPx
+            for _,char in ipairs(getAimTargets()) do
+                local part=getAimPart(char); if not part then continue end
+                local hum=char:FindFirstChildOfClass("Humanoid"); if not hum or hum.Health<=0 then continue end
+                if not isVisible(part) then continue end
+                local sp,onScreen=Cam:WorldToViewportPoint(part.Position); if not onScreen then continue end
+                local d=((sp.X-cx)^2+(sp.Y-cy)^2)^0.5; if d<bestDist then bestDist=d; best=part end
+            end
+            if best then
+                local target=best.Position
+                if S.aimbotX~=0 or S.aimbotY~=0 then
+                    local v=Cam:WorldToViewportPoint(target)
+                    local shifted=Vector2.new(v.X+S.aimbotX,v.Y+S.aimbotY)
+                    local ray=Cam:ViewportPointToRay(shifted.X,shifted.Y)
+                    target=ray.Origin+ray.Direction*100
+                end
+                if S.aimbotMethod=="Camera" then
+                    local t=math.clamp(S.aimbotSens*0.1,0.01,1)
+                    local lv=Cam.CFrame.LookVector:Lerp((target-Cam.CFrame.Position).Unit,t)
+                    Cam.CFrame=CFrame.new(Cam.CFrame.Position,Cam.CFrame.Position+lv)
+                else
+                    local sp2=Cam:WorldToViewportPoint(target)
+                    local mouse=UIS:GetMouseLocation()
+                    accum=accum+(Vector2.new(sp2.X,sp2.Y)-mouse)*S.aimbotSens
+                    local cap=10
+                    local clamped=Vector2.new(math.clamp(accum.X,-cap,cap),math.clamp(accum.Y,-cap,cap))
+                    pcall(function() mousemoverel(clamped.X,clamped.Y) end)
+                    accum=accum-clamped
+                end
+            end
+        end)
+    end }, "Aimbot")
+CharR2:Divider()
+Tog.AimbotPlayers = CharR2:Toggle({ Name="Target Players", Default=true, Callback=function(p) S.targetPlayers=p end }, "AimbotPlayers")
+Tog.VisibleOnly = CharR2:Toggle({ Name="Visible Only", Default=false, Callback=function(p) S.visibleOnly=p end }, "VisibleOnly")
+Tog.TeamCheck = CharR2:Toggle({ Name="Team Check", Default=false, Callback=function(p) S.teamCheck=p end }, "TeamCheck")
+Opt.AimbotSens = CharR2:Slider({ Name="Sensitivity", Default=1, Minimum=0.1, Maximum=5, Precision=2, Callback=function(v) S.aimbotSens=v end }, "AimbotSens")
+Opt.AimbotXOffset = CharR2:Slider({ Name="X Offset", Default=0, Minimum=-300, Maximum=300, Precision=0, Callback=function(v) S.aimbotX=v end }, "AimbotXOffset")
+Opt.AimbotYOffset = CharR2:Slider({ Name="Y Offset", Default=0, Minimum=-300, Maximum=300, Precision=0, Callback=function(v) S.aimbotY=v end }, "AimbotYOffset")
+Tog.ShowFOV = CharR2:Toggle({ Name="Show FOV", Default=false,
+    Callback=function(p)
+        if p then
+            if not fovCircle then fovCircle=Drawing.new("Circle"); fovCircle.Thickness=1; fovCircle.NumSides=100; fovCircle.Filled=false; fovCircle.Color=Color3.fromRGB(255,255,255) end
+            fovCircle.Radius=S.aimbotFOV*getFOVScale(); fovCircle.Position=Vector2.new(Cam.ViewportSize.X/2,Cam.ViewportSize.Y/2); fovCircle.Visible=true
+        elseif fovCircle then fovCircle.Visible=false end
+    end }, "ShowFOV")
+Opt.AimbotFOV = CharR2:Slider({ Name="Aimbot FOV", Default=45, Minimum=1, Maximum=120, Precision=0,
+    Callback=function(v) S.aimbotFOV=v; if fovCircle and fovCircle.Visible then fovCircle.Radius=v*getFOVScale() end end }, "AimbotFOV")
+
+local WorldL2 = Tabs.World:Section({Side="Left",  Name="Detection",   Image="radar"})
+local WorldL3 = Tabs.World:Section({Side="Left",  Name="Utilities",   Image="hammer"})
+local WorldL4 = Tabs.World:Section({Side="Left",  Name="Server",      Image="globe"})
+local WorldR  = Tabs.World:Section({Side="Right", Name="Scene",       Image="sun"})
+local WorldR2 = Tabs.World:Section({Side="Right", Name="Camera",      Image="telescope"})
+local WorldR4 = Tabs.World:Section({Side="Right", Name="Performance", Image="bolt"})
+
+Opt.MobsRange = WorldL2:Slider({ Name="Range", Default=1000, Minimum=0, Maximum=10000, Precision=0, Callback=function(v) S.mobsRange=v end }, "MobsRange")
+Opt.MobsDistance = WorldL2:Slider({ Name="Distance", Default=0, Minimum=-50, Maximum=50, Precision=0, Callback=function(v) S.mobsDist=v end }, "MobsDistance")
+Opt.MobsHeight = WorldL2:Slider({ Name="Height", Default=0, Minimum=-50, Maximum=50, Precision=0, Callback=function(v) S.mobsHeight=v end }, "MobsHeight")
+
+local nearbyConn=nil; local nearbyTracked={}
+Tog.NearbyNotifier = WorldL3:Toggle({ Name="Nearby Players Notifier", Default=false,
+    Callback=function(p)
+        if nearbyConn then nearbyConn:Disconnect(); nearbyConn=nil end; nearbyTracked={}
+        if not p then return end
+        nearbyConn=RS.Heartbeat:Connect(function()
+            local myHRP=getHRP(); if not myHRP then return end
+            local dist=Opt.NearbyDist and Opt.NearbyDist.Value or 500
+            for _,plr in ipairs(PS:GetPlayers()) do
+                if plr~=LP and plr.Character then
+                    local hrp=plr.Character:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        local mag=(myHRP.Position-hrp.Position).Magnitude
+                        if mag<=dist and not nearbyTracked[hrp] then nearbyTracked[hrp]=true; notify(string.format("%s is nearby [%d]",plr.Name,mag),10)
+                        elseif mag>dist and nearbyTracked[hrp] then nearbyTracked[hrp]=nil; notify(string.format("%s left nearby [%d]",plr.Name,mag),10) end
+                    end
+                end
+            end
+        end)
+    end }, "NearbyNotifier")
+Opt.NearbyDist = WorldL3:Slider({ Name="Notifier Distance", Default=500, Minimum=0, Maximum=10000, Precision=0, Callback=function() end }, "NearbyDist")
+WorldL3:Button({ Name="Copy Coordinates", Callback=function()
+    local hrp=getHRP(); if not hrp then return end
+    local p=hrp.Position; local str=math.round(p.X*100)/100 .. ", " .. math.round(p.Y*100)/100 .. ", " .. math.round(p.Z*100)/100
+    setclipboard(str); notify("Copied: "..str)
+end})
+
+WorldL4:Button({ Name="Serverhop", Callback=function()
+    local ok,res=pcall(function() return HS:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100")) end)
+    if ok and res then for _,s in ipairs(res.data or {}) do if s.id~=game.JobId and s.playing<s.maxPlayers then TP:TeleportToPlaceInstance(game.PlaceId,s.id,LP); return end end end
+    TP:Teleport(game.PlaceId,LP); notify("No servers found",3)
+end})
+Opt.MinPlayers = WorldL4:Input({ Name="Min Players", Default="", Placeholder="0", Callback=function() end }, "MinPlayers")
+WorldL4:Button({ Name="Serverhop (Min Players)", Callback=function()
+    local minP=tonumber(Opt.MinPlayers and Opt.MinPlayers.Value) or 0
+    local ok,res=pcall(function() return HS:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100")) end)
+    if ok and res then for _,s in ipairs(res.data or {}) do if s.id~=game.JobId and s.playing>=minP and s.playing<s.maxPlayers then TP:TeleportToPlaceInstance(game.PlaceId,s.id,LP); return end end end
+    notify("No servers with "..minP.."+ players",3)
+end})
+WorldL4:Button({ Name="Rejoin", Callback=function() TP:TeleportToPlaceInstance(game.PlaceId,game.JobId,LP) end })
+Opt.JobID = WorldL4:Input({ Name="JobID", Default="", Placeholder="Paste job id...", Callback=function() end }, "JobID")
+WorldL4:Button({ Name="Join Server", Callback=function() local id=Opt.JobID and Opt.JobID.Value or ""; if id~="" then TP:TeleportToPlaceInstance(game.PlaceId,id,LP) end end })
+WorldL4:Button({ Name="Copy Server JobId", Callback=function() setclipboard(game.JobId); notify(game.JobId.." Copied!",5) end })
+
+local specTarget=nil; local specConn=nil
+local specList={"-- Select --"}; for _,plr in ipairs(PS:GetPlayers()) do if plr~=LP then table.insert(specList,plr.Name) end end
+Opt.SpectatePlayers = WorldR:Dropdown({ Name="Spectate Player", Options=specList, Default=1, Multi=false,
+    Callback=function(v) specTarget=type(v)=="table" and next(v) or v end }, "SpectatePlayers")
+WorldR:Button({ Name="Spectate / Stop", Callback=function()
+    if specConn then pcall(function() specConn:Disconnect() end); specConn=nil; local c=getChar(); Cam.CameraSubject=c and c:FindFirstChildOfClass("Humanoid") or c; Cam.CameraType=Enum.CameraType.Custom; notify("Stopped spectating",2); return end
+    local name=specTarget; local plr=PS:FindFirstChild(name or ""); local char=plr and plr.Character; local hum=char and char:FindFirstChildOfClass("Humanoid")
+    if not hum then notify("Player not found",2); return end
+    Cam.CameraSubject=hum; Cam.CameraType=Enum.CameraType.Custom
+    specConn=plr.CharacterAdded:Connect(function(c) task.wait(0.5); local h=c:FindFirstChildOfClass("Humanoid"); if h then Cam.CameraSubject=h end end)
+    notify("Spectating "..name,2)
+end})
+local noFogConn=nil
+Tog.NoFog = WorldR:Toggle({ Name="No Fog", Default=false,
+    Callback=function(p)
+        if noFogConn then noFogConn:Disconnect(); noFogConn=nil end
+        local atmos=LT:FindFirstChildOfClass("Atmosphere")
+        if p then LT.FogStart=1e9; LT.FogEnd=1e9; if atmos then atmos.Density=0; atmos.Haze=0; atmos.Glare=0 end
+            noFogConn=LT:GetPropertyChangedSignal("FogEnd"):Connect(function() if LT.FogEnd<1e8 then LT.FogStart=1e9; LT.FogEnd=1e9 end end)
+        else LT.FogStart=0; LT.FogEnd=100000; if atmos then atmos.Density=0.395; atmos.Haze=0; atmos.Glare=0 end end
+    end }, "NoFog")
+Tog.NoAtmosphere = WorldR:Toggle({ Name="No Atmosphere", Default=false,
+    Callback=function(p) pcall(function() local atmos=LT:FindFirstChildOfClass("Atmosphere"); if not atmos then return end; if p then atmos.Density=0; atmos.Offset=0; atmos.Haze=0; atmos.Glare=0 else atmos.Density=0.395; atmos.Offset=0; atmos.Haze=0; atmos.Glare=0 end end) end }, "NoAtmosphere")
+local fbConn=nil
+Tog.FullBright = WorldR:Toggle({ Name="FullBright", Default=false,
+    Callback=function(p)
+        if fbConn then fbConn:Disconnect(); fbConn=nil end
+        if p then fbConn=RS.RenderStepped:Connect(function() LT.Brightness=S.brightness; LT.ClockTime=14; LT.FogEnd=100000; LT.GlobalShadows=false; LT.OutdoorAmbient=Color3.fromRGB(128,128,128) end)
+        else LT.Brightness=1; LT.ClockTime=14; LT.FogEnd=1000000; LT.GlobalShadows=true end
+    end }, "FullBright")
+Opt.Brightness = WorldR:Slider({ Name="Brightness", Default=2, Minimum=0, Maximum=10, Precision=1, Callback=function(v) S.brightness=v end }, "Brightness")
+
+local freecamConns={}
+Tog.Freecam = WorldR2:Toggle({ Name="Free Cam", Default=false,
+    Callback=function(p)
+        for _,c in ipairs(freecamConns) do pcall(function() c:Disconnect() end) end; freecamConns={}
+        if not p then Cam.CameraType=Enum.CameraType.Custom; return end
+        Cam.CameraType=Enum.CameraType.Scriptable
+        local keys={}; local rmb=false
+        table.insert(freecamConns, RS.RenderStepped:Connect(function()
+            if rmb then
+                local d=UIS:GetMouseDelta(); local cf=Cam.CFrame
+                local ax=cf*CFrame.Angles(-math.rad(d.Y)*S.freeCamSens,0,0)
+                Cam.CFrame=CFrame.Angles(0,-math.rad(d.X)*S.freeCamSens,0)*(ax-ax.Position)+ax.Position
+                UIS.MouseBehavior=Enum.MouseBehavior.LockCurrentPosition
+            else UIS.MouseBehavior=Enum.MouseBehavior.Default end
+            if keys["W"] then Cam.CFrame=Cam.CFrame*CFrame.new(0,0,-S.freeCamSpeed) end
+            if keys["S"] then Cam.CFrame=Cam.CFrame*CFrame.new(0,0,S.freeCamSpeed) end
+            if keys["A"] then Cam.CFrame=Cam.CFrame*CFrame.new(-S.freeCamSpeed,0,0) end
+            if keys["D"] then Cam.CFrame=Cam.CFrame*CFrame.new(S.freeCamSpeed,0,0) end
+        end))
+        table.insert(freecamConns, UIS.InputBegan:Connect(function(inp)
+            if inp.KeyCode==Enum.KeyCode.W then keys["W"]=true elseif inp.KeyCode==Enum.KeyCode.A then keys["A"]=true
+            elseif inp.KeyCode==Enum.KeyCode.S then keys["S"]=true elseif inp.KeyCode==Enum.KeyCode.D then keys["D"]=true
+            elseif inp.UserInputType==Enum.UserInputType.MouseButton2 then rmb=true end
+        end))
+        table.insert(freecamConns, UIS.InputEnded:Connect(function(inp)
+            if inp.KeyCode==Enum.KeyCode.W then keys["W"]=false elseif inp.KeyCode==Enum.KeyCode.A then keys["A"]=false
+            elseif inp.KeyCode==Enum.KeyCode.S then keys["S"]=false elseif inp.KeyCode==Enum.KeyCode.D then keys["D"]=false
+            elseif inp.UserInputType==Enum.UserInputType.MouseButton2 then rmb=false end
+        end))
+    end }, "Freecam")
+Opt.FreeCamSens = WorldR2:Slider({ Name="Sensitivity", Default=0.3, Minimum=0, Maximum=5, Precision=1, Callback=function(v) S.freeCamSens=v end }, "FreeCamSens")
+Opt.FreeCamSpeed = WorldR2:Slider({ Name="Speed", Default=0.5, Minimum=0, Maximum=50, Precision=1, Callback=function(v) S.freeCamSpeed=v end }, "FreeCamSpeed")
+WorldR2:Divider()
+Tog.FOVChanger = WorldR2:Toggle({ Name="FOV Changer", Default=false,
+    Callback=function(p) if p then Cam.FieldOfView=S.fovVal else Cam.FieldOfView=70 end end }, "FOVChanger")
+Opt.FOV = WorldR2:Slider({ Name="Camera FOV", Default=70, Minimum=0, Maximum=120, Precision=1,
+    Callback=function(v) S.fovVal=v; if Tog.FOVChanger and Tog.FOVChanger.State then Cam.FieldOfView=v end end }, "FOV")
+
+WorldR4:Button({ Name="Boost FPS", Callback=function()
+    pcall(function()
+        for _,v in ipairs(game:GetDescendants()) do
+            if v:IsA("ParticleEmitter") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then v.Enabled=false end
+            if v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("DepthOfFieldEffect") or v:IsA("SunRaysEffect") then v.Enabled=false end
+        end
+        LT.GlobalShadows=false; LT.Brightness=5; notify("FPS boost applied",3)
+    end)
+end})
+
+local SettL = Tabs.Settings:Section({Side="Left",  Name="Interface", Image="hexagon"})
+local SettR = Tabs.Settings:Section({Side="Right", Name="Controls",  Image="gamepad-2"})
+
+SettL:Header({ Text="Interface" })
+SettL:Button({ Name="Unload", Callback=function() Window:Unload() end })
+SettL:Divider()
+Tog.HideUI = SettL:Toggle({ Name="Hide UI", Default=false, Callback=function(p) Window:SetState(not p) end }, "HideUI")
+SettL:Divider()
+SettL:Slider({ Name="UI Transparency", Default=5, Minimum=0, Maximum=50, Precision=0,
+    Callback=function(v) Window:SetTransparency(v/100) end })
+SettL:Divider()
+
+Opt.TweenMode = SettL:Dropdown({ Name="Tween Mode", Options={"Normal","Safe"}, Default=1, Multi=false, Callback=function() end }, "TweenMode")
+Opt.TweenSpeed = SettL:Slider({ Name="Tween Speed", Default=100, Minimum=0, Maximum=700, Precision=0, Callback=function(v) S.tweenSpeed=v end }, "TweenSpeed")
+Opt.SafeModeHeight = SettL:Slider({ Name="Safe Height", Default=1000, Minimum=0, Maximum=100000, Precision=0, Callback=function() end }, "SafeModeHeight")
+Opt.FlyMode = SettL:Dropdown({ Name="Fly Mode", Options={"MoveDirection","Camera LookVector"}, Default=1, Multi=false, Callback=function() end }, "FlyMode")
+SettL:Divider()
+
+MacLib:SetFolder("ZeroHub/configs")
+Tabs.Settings:InsertConfigSection("Left")
+
+Tog.AntiBan = SettL:Toggle({ Name="Anti Ban", Default=true, Callback=function() end }, "AntiBan")
+
+SettR:Header({ Text="Controls" })
+SettR:Keybind({ Name="Menu Toggle", Default=Enum.KeyCode.F5, onBinded=function(k) pcall(function() Window:SetKeybind(k) end) end }, "KbMenu")
+
+local SettR2 = Tabs.Settings:Section({ Side="Right", Name="Theme", Image="palette" })
+SettR2:Header({ Text="Theme" })
+SettR2:Colorpicker({ Name="Accent Color", Default=Color3.fromRGB(138,79,255), Alpha=0,
+    Callback=function(c) pcall(function() MacLib:SetAccent(c) end) end }, "ThemeAccent")
+if MacLib.Options and MacLib.Options["ThemeAccent"] then MacLib.Options["ThemeAccent"].ThemeOnly=true end
+SettR2:Colorpicker({ Name="Background", Default=Color3.fromRGB(12,12,12), Alpha=0,
+    Callback=function(c) pcall(function() MacLib:SetScheme("BackgroundColor",c) end) end }, "ThemeBG")
+if MacLib.Options and MacLib.Options["ThemeBG"] then MacLib.Options["ThemeBG"].ThemeOnly=true end
+SettR2:Colorpicker({ Name="Main Color", Default=Color3.fromRGB(24,24,24), Alpha=0,
+    Callback=function(c) pcall(function() MacLib:SetScheme("MainColor",c) end) end }, "ThemeMain")
+if MacLib.Options and MacLib.Options["ThemeMain"] then MacLib.Options["ThemeMain"].ThemeOnly=true end
+SettR2:Colorpicker({ Name="Outline Color", Default=Color3.fromRGB(45,45,45), Alpha=0,
+    Callback=function(c) pcall(function() MacLib:SetScheme("OutlineColor",c) end) end }, "ThemeOutline")
+if MacLib.Options and MacLib.Options["ThemeOutline"] then MacLib.Options["ThemeOutline"].ThemeOnly=true end
+
+Tabs.Game:Select()
+
+task.defer(function()
+    task.wait(3)
+    pcall(function() MacLib:LoadAutoLoadConfig() end)
+end)
+
+notify("DYHUB loaded", 4)
