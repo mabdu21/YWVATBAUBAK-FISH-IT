@@ -1,0 +1,1053 @@
+local version = "BETA"
+local ver     = "v01.26"
+
+-- ====================== WAIT FOR LOAD ======================
+repeat task.wait() until game:IsLoaded()
+
+-- ====================== LOAD UI ======================
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+if setfpscap then
+    setfpscap(1000000)
+    WindUI:Notify({ Title = "DYHUB", Content = "FPS Unlocked! | " .. ver, Duration = 3, Icon = "cpu" })
+else
+    WindUI:Notify({ Title = "DYHUB", Content = "setfpscap not supported.", Duration = 3, Icon = "ban" })
+end
+
+-- ====================== SERVICES ======================
+local RunService        = game:GetService("RunService")
+local Workspace         = game:GetService("Workspace")
+local Lighting          = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService  = game:GetService("UserInputService")
+local Players           = game:GetService("Players")
+local HttpService       = game:GetService("HttpService")
+local StarterGui        = game:GetService("StarterGui")
+local TeleportService   = game:GetService("TeleportService")
+local TweenService      = game:GetService("TweenService")
+local VirtualUser       = game:GetService("VirtualUser")
+local VIM               = game:GetService("VirtualInputManager")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
+local Camera      = Workspace.CurrentCamera
+
+-- ====================== CHARACTER CACHE ======================
+local Character        = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid         = Character:WaitForChild("Humanoid")
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    Character        = char
+    Humanoid         = char:WaitForChild("Humanoid")
+    HumanoidRootPart = char:WaitForChild("HumanoidRootPart")
+    -- Re-apply God Mode if enabled
+    task.wait(0.5)
+    if settings and settings.GodMode and Humanoid then
+        Humanoid.Health = Humanoid.MaxHealth
+    end
+end)
+
+-- ====================== WINDOW ======================
+local Window = WindUI:CreateWindow({
+    Title      = "DYHUB",
+    IconThemed = true,
+    Icon       = "rbxassetid://104487529937663",
+    Author     = "Universal Script | Free Version",
+    Folder     = "DYHUB_US",
+    Size       = UDim2.fromOffset(500, 400),
+    Transparent = true,
+    Theme      = "Dark",
+    BackgroundImageTransparency = 0.8,
+    HasOutline = false,
+    HideSearchBar    = true,
+    ScrollBarEnabled = true,
+    User = { Enabled = true, Anonymous = false },
+})
+
+Window:SetToggleKey(Enum.KeyCode.K)
+pcall(function() Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") }) end)
+Window:EditOpenButton({
+    Title           = "DYHUB - Open",
+    Icon            = "monitor",
+    CornerRadius    = UDim.new(0, 6),
+    StrokeThickness = 2,
+    Color           = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255)),
+    Draggable       = true,
+})
+
+-- ====================== CONFIG SYSTEM ======================
+local ConfigFolder = "DYHUB_US"
+local CustomConfig = {}
+CustomConfig.__index = CustomConfig
+
+function CustomConfig.new()
+    local self = setmetatable({}, CustomConfig)
+    self.ConfigData = {}
+    self.ConfigPath = ConfigFolder .. "/US_config.json"
+    self._autoSaveThread = nil
+    self._autoSaveDelay = 15
+    if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
+    self:Load()
+    return self
+end
+
+function CustomConfig:Set(key, value) self.ConfigData[key] = value end
+
+function CustomConfig:Get(key, default)
+    local v = self.ConfigData[key]
+    if v ~= nil then return v end
+    return default
+end
+
+function CustomConfig:Save()
+    local ok, err = pcall(function()
+        writefile(self.ConfigPath, HttpService:JSONEncode(self.ConfigData))
+    end)
+    if not ok then warn("[DYHUB] Save failed:", err) end
+end
+
+function CustomConfig:Load()
+    if isfile(self.ConfigPath) then
+        local ok, result = pcall(function()
+            return HttpService:JSONDecode(readfile(self.ConfigPath))
+        end)
+        if ok and type(result) == "table" then
+            self.ConfigData = result
+            print("[DYHUB] Config loaded!")
+        else
+            warn("[DYHUB] Failed to load config, using defaults")
+            self.ConfigData = {}
+        end
+    else
+        print("[DYHUB] No config found, creating new one")
+        self.ConfigData = {}
+    end
+end
+
+function CustomConfig:AutoSave(interval)
+    if self._autoSaveThread then
+        task.cancel(self._autoSaveThread)
+        self._autoSaveThread = nil
+    end
+    if interval and interval > 0 then
+        self._autoSaveDelay = interval
+        self._autoSaveThread = task.spawn(function()
+            while true do
+                task.wait(self._autoSaveDelay or 15)
+                self:Save()
+            end
+        end)
+    end
+end
+
+local Config = CustomConfig.new()
+if Config:Get("AutoSaveEnabled", true) then
+    Config:AutoSave(Config:Get("AutoSaveDelay", 15))
+end
+
+-- ====================== SETTINGS TABLE ======================
+local settings = {
+    AutoSaveEnabled    = Config:Get("AutoSaveEnabled", true),
+    AutoSaveDelay      = Config:Get("AutoSaveDelay", 15),
+    GodMode            = Config:Get("GodMode", false),
+    FullBright         = Config:Get("FullBright", false),
+    NoFog              = Config:Get("NoFog", false),
+    NoToolAppear       = Config:Get("NoToolAppear", false),
+    SelectedTool       = Config:Get("SelectedTool", ""),
+    ESPEnabled         = Config:Get("ESPEnabled", true),
+    ESPRange           = Config:Get("ESPRange", 500),
+    IncludeLocalPlayer = Config:Get("IncludeLocalPlayer", false),
+}
+
+-- ====================== ESP SHARED SETTINGS ======================
+local ESPSettings = {
+    ESPEnabled        = settings.ESPEnabled,
+    Range             = settings.ESPRange,
+    IncludeLocalPlayer = settings.IncludeLocalPlayer,
+    UpdateRate        = 0.25,
+}
+
+-- ====================== TABS ======================
+local InfoTab     = Window:Tab({ Title = "Information", Icon = "info" })
+Window:Divider()
+local MainTab     = Window:Tab({ Title = "Main",        Icon = "rocket" })
+local EspTab      = Window:Tab({ Title = "ESP",         Icon = "eye" })
+Window:Divider()
+local SettingTab  = Window:Tab({ Title = "Settings",    Icon = "settings" })
+
+Window:SelectTab(1)
+
+-- =====================================================================
+-- ========================== MAIN TAB =================================
+-- =====================================================================
+MainTab:Section({ Title = "Tool Giver", Icon = "package" })
+
+local selectedToolString = settings.SelectedTool
+
+local function refreshToolList()
+    local tools = {}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local backpack = player:FindFirstChild("Backpack")
+            if backpack then
+                for _, item in pairs(backpack:GetChildren()) do
+                    if item:IsA("Tool") then
+                        table.insert(tools, player.Name .. " | " .. item.Name)
+                    end
+                end
+            end
+            local char = player.Character
+            if char then
+                for _, item in pairs(char:GetChildren()) do
+                    if item:IsA("Tool") then
+                        table.insert(tools, player.Name .. " | " .. item.Name)
+                    end
+                end
+            end
+        end
+    end
+    return tools
+end
+
+MainTab:Paragraph({
+    Title = "Tool Giver",
+    Desc  = "• เลือก Tool จากผู้เล่นอื่น\n• กด Give Tool เพื่อ CUT ย้ายของมาใส่กระเป๋าเรา\n• ไม่ใช่ Copy (ป้องกัน Visual)",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+})
+
+local ToolDropdown = MainTab:Dropdown({
+    Title    = "Select Tool",
+    Desc     = "เลือก Tool จากกระเป๋าผู้เล่นอื่น",
+    Values   = refreshToolList(),
+    Multi    = false,
+    Value    = (selectedToolString ~= "" and selectedToolString) or nil,
+    Callback = function(v)
+        selectedToolString = v or ""
+        settings.SelectedTool = selectedToolString
+        Config:Set("SelectedTool", selectedToolString)
+        Config:Save()
+    end
+})
+
+local function giveTool()
+    if not selectedToolString or selectedToolString == "" then
+        WindUI:Notify({Title = "Error", Content = "กรุณาเลือก Tool ก่อน!", Duration = 2, Icon = "alert-triangle"})
+        return
+    end
+
+    local playerName, toolName = selectedToolString:match("^(.-) | (.*)$")
+    if not playerName or not toolName then
+        WindUI:Notify({Title = "Error", Content = "รูปแบบ Tool ไม่ถูกต้อง!", Duration = 2, Icon = "alert-triangle"})
+        return
+    end
+
+    local targetPlayer = Players:FindFirstChild(playerName)
+    if not targetPlayer then
+        WindUI:Notify({Title = "Error", Content = "ไม่พบผู้เล่น '" .. playerName .. "'!", Duration = 2, Icon = "alert-triangle"})
+        return
+    end
+
+    local sourceTool = nil
+    local backpack = targetPlayer:FindFirstChild("Backpack")
+    if backpack then
+        sourceTool = backpack:FindFirstChild(toolName)
+    end
+    if not sourceTool and targetPlayer.Character then
+        sourceTool = targetPlayer.Character:FindFirstChild(toolName)
+    end
+
+    if not sourceTool then
+        WindUI:Notify({Title = "Error", Content = "ไม่พบ '" .. toolName .. "' ในกระเป๋าของ " .. playerName, Duration = 3, Icon = "alert-triangle"})
+        return
+    end
+
+    local myBackpack = LocalPlayer:FindFirstChild("Backpack")
+    if not myBackpack then
+        WindUI:Notify({Title = "Error", Content = "ไม่พบ Backpack ของคุณ!", Duration = 2, Icon = "alert-triangle"})
+        return
+    end
+
+    -- ลบของเดิมที่ชื่อเหมือนกัน (กันซ้ำ)
+    for _, item in pairs(myBackpack:GetChildren()) do
+        if item:IsA("Tool") and item.Name == toolName then
+            pcall(function() item:Destroy() end)
+        end
+    end
+
+    -- Clone และย้าย (CUT ไม่ใช่ COPY)
+    local ok, clonedTool = pcall(function()
+        local c = sourceTool:Clone()
+        c.Parent = myBackpack
+        return c
+    end)
+
+    if not ok or not clonedTool then
+        WindUI:Notify({Title = "Error", Content = "ไม่สามารถย้าย Tool ได้!", Duration = 2, Icon = "alert-triangle"})
+        return
+    end
+
+    -- ตัดของเดิมออก (client-side)
+    pcall(function()
+        sourceTool.Parent = nil
+    end)
+
+    WindUI:Notify({
+        Title = "Success",
+        Content = "ได้รับ " .. toolName .. " จาก " .. playerName .. " (Cut)",
+        Duration = 3,
+        Icon = "check"
+    })
+end
+
+MainTab:Button({
+    Title    = "🔄 Refresh Tool List",
+    Desc     = "สแกนหา Tool ใหม่จากผู้เล่นทุกคน",
+    Callback = function()
+        local newList = refreshToolList()
+        pcall(function() ToolDropdown:Refresh(newList) end)
+        WindUI:Notify({Title = "Refreshed", Content = "พบ " .. #newList .. " Tool(s)", Duration = 2, Icon = "refresh-cw"})
+    end
+})
+
+MainTab:Button({
+    Title    = "🎁 Give Tool",
+    Desc     = "CUT ย้าย Tool ที่เลือกมาใส่กระเป๋าเรา",
+    Callback = giveTool
+})
+
+-- ====================== No Tool Appear ======================
+local noToolThread = nil
+
+local function startNoToolAppear()
+    if noToolThread then task.cancel(noToolThread) end
+    noToolThread = task.spawn(function()
+        while settings.NoToolAppear do
+            task.wait(1)
+            if not selectedToolString or selectedToolString == "" then continue end
+
+            local playerName, toolName = selectedToolString:match("^(.-) | (.*)$")
+            if not playerName or not toolName then continue end
+
+            local myBackpack = LocalPlayer:FindFirstChild("Backpack")
+            if not myBackpack then continue end
+
+            local hasTool = false
+            for _, item in pairs(myBackpack:GetChildren()) do
+                if item:IsA("Tool") and item.Name == toolName then
+                    hasTool = true
+                    break
+                end
+            end
+
+            if not hasTool and Character then
+                for _, item in pairs(Character:GetChildren()) do
+                    if item:IsA("Tool") and item.Name == toolName then
+                        hasTool = true
+                        break
+                    end
+                end
+            end
+
+            if not hasTool then
+                local targetPlayer = Players:FindFirstChild(playerName)
+                if targetPlayer then
+                    local sourceTool = nil
+                    local bp = targetPlayer:FindFirstChild("Backpack")
+                    if bp then sourceTool = bp:FindFirstChild(toolName) end
+                    if not sourceTool and targetPlayer.Character then
+                        sourceTool = targetPlayer.Character:FindFirstChild(toolName)
+                    end
+
+                    if sourceTool and myBackpack then
+                        pcall(function()
+                            local cloned = sourceTool:Clone()
+                            cloned.Parent = myBackpack
+                            sourceTool.Parent = nil
+                        end)
+                        WindUI:Notify({
+                            Title = "Tool Restored",
+                            Content = toolName .. " ถูกเรียกคืนแล้ว!",
+                            Duration = 2,
+                            Icon = "shield"
+                        })
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function stopNoToolAppear()
+    if noToolThread then
+        task.cancel(noToolThread)
+        noToolThread = nil
+    end
+end
+
+MainTab:Toggle({
+    Title    = "🛡️ No Tool Appear",
+    Desc     = "หาก Tool ที่เลือกหายไป (ตาย/หล่น) จะเรียกคืนอัตโนมัติ",
+    Value    = settings.NoToolAppear,
+    Callback = function(state)
+        settings.NoToolAppear = state
+        Config:Set("NoToolAppear", state)
+        Config:Save()
+        if state then
+            startNoToolAppear()
+        else
+            stopNoToolAppear()
+        end
+    end
+})
+
+-- ====================== Unity Section ======================
+MainTab:Section({ Title = "Unity", Icon = "shield" })
+
+-- God Mode
+local godModeThread = nil
+local function startGodMode()
+    if godModeThread then task.cancel(godModeThread) end
+    godModeThread = task.spawn(function()
+        while settings.GodMode do
+            task.wait(0.1)
+            if Character and Humanoid and Humanoid.Parent and Humanoid.Health > 0 then
+                if Humanoid.Health < Humanoid.MaxHealth then
+                    pcall(function() Humanoid.Health = Humanoid.MaxHealth end)
+                end
+            end
+        end
+    end)
+end
+
+local function stopGodMode()
+    if godModeThread then
+        task.cancel(godModeThread)
+        godModeThread = nil
+    end
+end
+
+MainTab:Toggle({
+    Title    = "❤️ God Mode",
+    Desc     = "เลือดเต็มตลอด - ถ้าโดนตีก็เติมกลับทันที",
+    Value    = settings.GodMode,
+    Callback = function(state)
+        settings.GodMode = state
+        Config:Set("GodMode", state)
+        Config:Save()
+        if state then
+            if Character and Humanoid then
+                pcall(function() Humanoid.Health = Humanoid.MaxHealth end)
+            end
+            startGodMode()
+        else
+            stopGodMode()
+        end
+    end
+})
+
+-- Full Bright
+local fullBrightThread = nil
+local fullBrightEnabled = false
+local function applyFullBright()
+    pcall(function()
+        Lighting.Brightness = 2
+        Lighting.ClockTime = 14
+        Lighting.FogEnd = 100000
+        Lighting.FogStart = 0
+        Lighting.GlobalShadows = false
+        Lighting.Ambient = Color3.new(1, 1, 1)
+        Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+    end)
+end
+
+local function startFullBright()
+    fullBrightEnabled = true
+    applyFullBright()
+    if fullBrightThread then task.cancel(fullBrightThread) end
+    fullBrightThread = task.spawn(function()
+        while fullBrightEnabled do
+            task.wait(0.5)
+            applyFullBright()
+        end
+    end)
+end
+
+local function stopFullBright()
+    fullBrightEnabled = false
+    if fullBrightThread then
+        task.cancel(fullBrightThread)
+        fullBrightThread = nil
+    end
+end
+
+MainTab:Toggle({
+    Title    = "☀️ Full Bright",
+    Desc     = "สว่างสุด - กลางคืนเป็นกลางวัน",
+    Value    = settings.FullBright,
+    Callback = function(state)
+        settings.FullBright = state
+        Config:Set("FullBright", state)
+        Config:Save()
+        if state then
+            startFullBright()
+        else
+            stopFullBright()
+        end
+    end
+})
+
+-- No Fog
+local noFogThread = nil
+local noFogEnabled = false
+local function applyNoFog()
+    pcall(function()
+        Lighting.FogEnd = 100000
+        Lighting.FogStart = 0
+    end)
+end
+
+local function startNoFog()
+    noFogEnabled = true
+    applyNoFog()
+    if noFogThread then task.cancel(noFogThread) end
+    noFogThread = task.spawn(function()
+        while noFogEnabled do
+            task.wait(0.5)
+            applyNoFog()
+        end
+    end)
+end
+
+local function stopNoFog()
+    noFogEnabled = false
+    if noFogThread then
+        task.cancel(noFogThread)
+        noFogThread = nil
+    end
+end
+
+MainTab:Toggle({
+    Title    = "🌫️ No Fog",
+    Desc     = "ลบหมอกทั้งหมด - ถ้าโดนเปลี่ยนก็ลบใหม่อัตโนมัติ",
+    Value    = settings.NoFog,
+    Callback = function(state)
+        settings.NoFog = state
+        Config:Set("NoFog", state)
+        Config:Save()
+        if state then
+            startNoFog()
+        else
+            stopNoFog()
+        end
+    end
+})
+
+-- =====================================================================
+-- ========================== ESP TAB ==================================
+-- =====================================================================
+EspTab:Section({ Title = "ESP Configuration", Icon = "eye" })
+
+EspTab:Paragraph({
+    Title = "Humanoid ESP",
+    Desc  = "• แสดง Highlight + ชื่อ + HP ของทุก Humanoid\n• แยกสี: Player (ฟ้า) / Monster (แดง) / NPC (เหลือง)\n• ทำงานเฉพาะในระยะที่กำหนด",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+})
+
+EspTab:Toggle({
+    Title    = "👁️ ESP Enabled",
+    Desc     = "เปิด/ปิด ระบบ ESP",
+    Value    = settings.ESPEnabled,
+    Callback = function(state)
+        settings.ESPEnabled = state
+        ESPSettings.ESPEnabled = state
+        Config:Set("ESPEnabled", state)
+        Config:Save()
+    end
+})
+
+EspTab:Slider({
+    Title    = "📏 ESP Range",
+    Desc     = "ระยะสูงสุดในการแสดง ESP (studs)",
+    Value    = { Min = 50, Max = 2000, Default = settings.ESPRange },
+    Step     = 50,
+    Callback = function(v)
+        settings.ESPRange = v
+        ESPSettings.Range = v
+        Config:Set("ESPRange", v)
+        Config:Save()
+    end
+})
+
+EspTab:Toggle({
+    Title    = "🪞 Include Local Player",
+    Desc     = "แสดง ESP ของตัวเองด้วย",
+    Value    = settings.IncludeLocalPlayer,
+    Callback = function(state)
+        settings.IncludeLocalPlayer = state
+        ESPSettings.IncludeLocalPlayer = state
+        Config:Set("IncludeLocalPlayer", state)
+        Config:Save()
+    end
+})
+
+-- =====================================================================
+-- ======================== SETTINGS TAB ===============================
+-- =====================================================================
+SettingTab:Section({ Title = "Save Config", Icon = "save" })
+
+SettingTab:Button({
+    Title    = "💾 Save Config (NOW)",
+    Desc     = "บันทึก Config ทันที",
+    Callback = function()
+        Config:Save()
+        WindUI:Notify({Title = "Config Saved", Content = "บันทึก Config สำเร็จ!", Duration = 2, Icon = "save"})
+    end
+})
+
+SettingTab:Toggle({
+    Title    = "🔄 Auto Save Config",
+    Desc     = "บันทึก Config อัตโนมัติตามเวลาที่ตั้ง",
+    Value    = settings.AutoSaveEnabled,
+    Callback = function(state)
+        settings.AutoSaveEnabled = state
+        Config:Set("AutoSaveEnabled", state)
+        Config:Save()
+        if state then
+            Config:AutoSave(settings.AutoSaveDelay)
+        else
+            Config:AutoSave(0)
+        end
+    end
+})
+
+SettingTab:Input({
+    Title       = "⏱️ Delay Save Config",
+    Desc        = "เวลาในการ Auto Save (วินาที, ขั้นต่ำ 1)",
+    Value       = tostring(settings.AutoSaveDelay),
+    Placeholder = "Default: 15",
+    Callback    = function(text)
+        local num = tonumber(text)
+        if num and num >= 1 then
+            settings.AutoSaveDelay = num
+            Config:Set("AutoSaveDelay", num)
+            Config:Save()
+            if settings.AutoSaveEnabled then
+                Config:AutoSave(num)
+            end
+            WindUI:Notify({Title = "Updated", Content = "Auto Save = " .. num .. "s", Duration = 2, Icon = "check"})
+        else
+            WindUI:Notify({Title = "Invalid", Content = "กรุณาใส่ตัวเลข >= 1", Duration = 2, Icon = "alert-triangle"})
+        end
+    end
+})
+
+SettingTab:Section({ Title = "Server Status", Icon = "server" })
+
+SettingTab:Button({
+    Title    = "🌍 Serverhop",
+    Desc     = "ย้ายไปเซิร์ฟเวอร์อื่นแบบสุ่ม",
+    Callback = function()
+        local servers = {}
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet(
+                "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
+            ))
+        end)
+        if success and result and result.data then
+            for _, server in ipairs(result.data) do
+                if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                    table.insert(servers, server.id)
+                end
+            end
+        end
+        if #servers > 0 then
+            WindUI:Notify({Title = "Serverhop", Content = "กำลังย้ายเซิร์ฟเวอร์...", Duration = 2, Icon = "server"})
+            task.wait(1)
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], LocalPlayer)
+        else
+            WindUI:Notify({Title = "Serverhop Failed", Content = "ไม่พบเซิร์ฟเวอร์ที่ว่าง", Duration = 3, Icon = "alert-triangle"})
+        end
+    end
+})
+
+SettingTab:Button({
+    Title    = "🔁 Rejoin",
+    Desc     = "กลับเข้าเซิร์ฟเวอร์เดิม",
+    Callback = function()
+        WindUI:Notify({Title = "Rejoin", Content = "กำลังกลับเข้าเซิร์ฟ...", Duration = 2, Icon = "refresh-cw"})
+        task.wait(1)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+-- =====================================================================
+-- ========================== INFO TAB =================================
+-- =====================================================================
+InfoTab:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
+InfoTab:Divider()
+InfoTab:Paragraph({
+    Title = "Update: " .. ver .. " | " .. version,
+    Desc  = [[
+• [ Added ] Tool Giver - CUT ย้าย Tool จากผู้เล่นอื่น
+• [ Added ] No Tool Appear - เรียกคืน Tool อัตโนมัติ
+• [ Added ] God Mode - เลือดเต็มตลอด
+• [ Added ] Full Bright - สว่างสุด
+• [ Added ] No Fog - ลบหมอก
+• [ Added ] Humanoid ESP - แสดง Player/Monster/NPC
+• [ Improved ] ระบบ Auto Save
+    ]],
+})
+InfoTab:Divider()
+
+-- Discord Info
+do
+    if not ui then ui = {} end
+    if not ui.Creator then ui.Creator = {} end
+
+    ui.Creator.Request = function(requestData)
+        local success, result = pcall(function()
+            if HttpService.RequestAsync then
+                local response = HttpService:RequestAsync({
+                    Url = requestData.Url,
+                    Method = requestData.Method or "GET",
+                    Headers = requestData.Headers or {}
+                })
+                return {Body = response.Body, StatusCode = response.StatusCode, Success = response.Success}
+            else
+                local body = HttpService:GetAsync(requestData.Url)
+                return {Body = body, StatusCode = 200, Success = true}
+            end
+        end)
+        if success then return result else error("HTTP Request failed: " .. tostring(result)) end
+    end
+
+    local InviteCode = "jWNDPNMmyB"
+    local DiscordAPI = "https://discord.com/api/v10/invites/" .. InviteCode .. "?with_counts=true&with_expiration=true"
+
+    local function LoadDiscordInfo()
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(ui.Creator.Request({
+                Url = DiscordAPI,
+                Method = "GET",
+                Headers = {["User-Agent"] = "RobloxBot/1.0", ["Accept"] = "application/json"}
+            }).Body)
+        end)
+
+        if success and result and result.guild then
+            local DiscordInfo = InfoTab:Paragraph({
+                Title = result.guild.name,
+                Desc = ' <font color="#52525b">●</font> Members: ' .. tostring(result.approximate_member_count) ..
+                       '\n <font color="#16a34a">●</font> Online: ' .. tostring(result.approximate_presence_count),
+                Image = "https://cdn.discordapp.com/icons/" .. result.guild.id .. "/" .. result.guild.icon .. ".png?size=1024",
+                ImageSize = 42,
+            })
+            InfoTab:Button({
+                Title = "🔄 Update Info",
+                Callback = function()
+                    local ok, r = pcall(function()
+                        return HttpService:JSONDecode(ui.Creator.Request({Url = DiscordAPI, Method = "GET"}).Body)
+                    end)
+                    if ok and r and r.guild then
+                        DiscordInfo:SetDesc(' <font color="#52525b">●</font> Members: ' .. tostring(r.approximate_member_count) ..
+                                           '\n <font color="#16a34a">●</font> Online: ' .. tostring(r.approximate_presence_count))
+                        WindUI:Notify({Title = "Updated", Content = "Discord info refreshed!", Duration = 2, Icon = "refresh-cw"})
+                    end
+                end
+            })
+            InfoTab:Button({
+                Title = "📋 Copy Discord Invite",
+                Callback = function()
+                    setclipboard("https://discord.gg/" .. InviteCode)
+                    WindUI:Notify({Title = "Copied!", Content = "Discord invite copied!", Duration = 2, Icon = "clipboard-check"})
+                end
+            })
+        else
+            InfoTab:Paragraph({
+                Title = "Error fetching Discord Info",
+                Desc = "Unable to load.",
+                Image = "triangle-alert",
+                ImageSize = 26,
+                Color = "Red"
+            })
+        end
+    end
+    pcall(LoadDiscordInfo)
+end
+
+InfoTab:Divider()
+InfoTab:Section({Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17})
+InfoTab:Divider()
+InfoTab:Paragraph({
+    Title = "Main Owner",
+    Desc = "@dyumraisgoodguy",
+    Image = "rbxassetid://119789418015420",
+    ImageSize = 30
+})
+InfoTab:Paragraph({
+    Title = "Social",
+    Desc = "Copy link social media for follow!",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+    Buttons = {{
+        Icon = "copy",
+        Title = "Copy Link",
+        Callback = function() setclipboard("https://guns.lol/DYHUB") end
+    }}
+})
+InfoTab:Paragraph({
+    Title = "Discord",
+    Desc = "Join our discord for more scripts!",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+    Buttons = {{
+        Icon = "copy",
+        Title = "Copy Link",
+        Callback = function() setclipboard("https://discord.gg/jWNDPNMmyB") end
+    }}
+})
+
+-- =====================================================================
+-- ====================== ESP MODULE (Bottom) ==========================
+-- =====================================================================
+do
+    local ESPColors = {
+        PlayerHighlight  = Color3.fromRGB(70, 150, 255),
+        PlayerText       = Color3.fromRGB(70, 150, 255),
+        MonsterHighlight = Color3.fromRGB(255, 60, 60),
+        MonsterText      = Color3.fromRGB(255, 90, 90),
+        NPCHighlight     = Color3.fromRGB(255, 220, 60),
+        NPCText          = Color3.fromRGB(255, 220, 60),
+    }
+
+    local Tracked = {}
+    local ESPObjects = {}
+
+    local function getGuiParent()
+        local ok, core = pcall(function() return game:GetService("CoreGui") end)
+        if ok and core then return core end
+        return LocalPlayer:WaitForChild("PlayerGui")
+    end
+
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "DYHUB_ESP_UI"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.IgnoreGuiInset = true
+    ScreenGui.Parent = getGuiParent()
+
+    local ESPFolder = Instance.new("Folder")
+    ESPFolder.Name = "ESP_Objects"
+    ESPFolder.Parent = ScreenGui
+
+    local function getCharacter()
+        return LocalPlayer.Character
+    end
+
+    local function getRoot(model)
+        return model:FindFirstChild("HumanoidRootPart")
+            or model:FindFirstChild("Head")
+            or model.PrimaryPart
+            or model:FindFirstChildWhichIsA("BasePart")
+    end
+
+    local function getVisualData(model, hum)
+        local plr = Players:GetPlayerFromCharacter(model)
+        if plr then
+            return "Player", ESPColors.PlayerHighlight, ESPColors.PlayerText
+        elseif hum.WalkSpeed > 16 then
+            return "Monster", ESPColors.MonsterHighlight, ESPColors.MonsterText
+        else
+            return "NPC", ESPColors.NPCHighlight, ESPColors.NPCText
+        end
+    end
+
+    local function removeESP(hum)
+        local data = ESPObjects[hum]
+        if not data then return end
+        if data.Highlight then pcall(function() data.Highlight:Destroy() end) end
+        if data.Billboard then pcall(function() data.Billboard:Destroy() end) end
+        ESPObjects[hum] = nil
+    end
+
+    local function createESP(model, hum)
+        if ESPObjects[hum] then return end
+        local root = getRoot(model)
+        if not root then return end
+
+        local _, highlightColor, textColor = getVisualData(model, hum)
+
+        local ok1, highlight = pcall(function()
+            local h = Instance.new("Highlight")
+            h.Name = "DYHUB_ESP_Highlight"
+            h.Adornee = model
+            h.FillColor = highlightColor
+            h.OutlineColor = highlightColor
+            h.FillTransparency = 0.72
+            h.OutlineTransparency = 0
+            h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            h.Parent = ESPFolder
+            return h
+        end)
+        if not ok1 then return end
+
+        local ok2, billboard = pcall(function()
+            local b = Instance.new("BillboardGui")
+            b.Name = "DYHUB_ESP_Label"
+            b.Adornee = root
+            b.AlwaysOnTop = true
+            b.Size = UDim2.new(0, 145, 0, 24)
+            b.StudsOffset = Vector3.new(0, 3.2, 0)
+            b.Parent = ESPFolder
+
+            local text = Instance.new("TextLabel")
+            text.Size = UDim2.new(1, 0, 1, 0)
+            text.BackgroundTransparency = 1
+            text.TextColor3 = textColor
+            text.TextStrokeTransparency = 0.35
+            text.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+            text.TextSize = 11
+            text.Font = Enum.Font.GothamSemibold
+            text.Text = "[ " .. model.Name .. " / HP: " .. math.floor(hum.Health) .. " ]"
+            text.Parent = b
+            return b
+        end)
+        if not ok2 then
+            pcall(function() highlight:Destroy() end)
+            return
+        end
+
+        ESPObjects[hum] = {
+            Model = model,
+            Humanoid = hum,
+            Highlight = highlight,
+            Billboard = billboard,
+            Text = billboard:FindFirstChildWhichIsA("TextLabel"),
+        }
+    end
+
+    local function updateESP(hum)
+        local data = ESPObjects[hum]
+        if not data then return end
+
+        local model = hum.Parent
+        local root = model and getRoot(model)
+
+        if not model or not root or hum.Health <= 0 then
+            removeESP(hum)
+            return
+        end
+
+        local _, highlightColor, textColor = getVisualData(model, hum)
+
+        pcall(function()
+            data.Highlight.Adornee = model
+            data.Highlight.FillColor = highlightColor
+            data.Highlight.OutlineColor = highlightColor
+
+            data.Billboard.Adornee = root
+            if data.Text then
+                data.Text.TextColor3 = textColor
+                data.Text.Text = "[ " .. model.Name .. " / HP: " .. math.floor(hum.Health) .. " ]"
+            end
+        end)
+    end
+
+    local function trackHumanoid(hum)
+        if not hum or not hum:IsA("Humanoid") then return end
+        if Tracked[hum] then return end
+        Tracked[hum] = true
+
+        hum.Destroying:Connect(function()
+            Tracked[hum] = nil
+            removeESP(hum)
+        end)
+
+        hum.Died:Connect(function()
+            removeESP(hum)
+        end)
+    end
+
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("Humanoid") then
+            trackHumanoid(obj)
+        end
+    end
+
+    Workspace.DescendantAdded:Connect(function(obj)
+        if obj:IsA("Humanoid") then
+            task.wait(0.05)
+            trackHumanoid(obj)
+        end
+    end)
+
+    local function clearAllESP()
+        for hum in pairs(ESPObjects) do
+            removeESP(hum)
+        end
+    end
+
+    -- Main ESP loop
+    task.spawn(function()
+        while ScreenGui and ScreenGui.Parent do
+            task.wait(ESPSettings.UpdateRate or 0.25)
+
+            if not ESPSettings.ESPEnabled then
+                clearAllESP()
+                continue
+            end
+
+            local char = getCharacter()
+            local myRoot = char and char:FindFirstChild("HumanoidRootPart")
+            if not myRoot then
+                clearAllESP()
+                continue
+            end
+
+            local maxRange = ESPSettings.Range or 500
+
+            for hum in pairs(Tracked) do
+                local model = hum.Parent
+
+                if not model or hum.Health <= 0 then
+                    Tracked[hum] = nil
+                    removeESP(hum)
+                elseif not ESPSettings.IncludeLocalPlayer and model == char then
+                    removeESP(hum)
+                else
+                    local root = getRoot(model)
+                    if root then
+                        local distance = (myRoot.Position - root.Position).Magnitude
+                        if distance <= maxRange then
+                            createESP(model, hum)
+                            updateESP(hum)
+                        else
+                            removeESP(hum)
+                        end
+                    else
+                        removeESP(hum)
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- =====================================================================
+-- ====================== RESTORE TOGGLES ON RELOAD ====================
+-- =====================================================================
+if settings.GodMode then
+    task.defer(function()
+        if Character and Humanoid then
+            pcall(function() Humanoid.Health = Humanoid.MaxHealth end)
+        end
+        startGodMode()
+    end)
+end
+if settings.FullBright then startFullBright() end
+if settings.NoFog then startNoFog() end
+if settings.NoToolAppear then startNoToolAppear() end
+
+print("[DYHUB] Universal Script " .. version .. " | " .. ver .. " loaded successfully!")
+print("[DYHUB] Config active | Auto saving every " .. tostring(settings.AutoSaveDelay) .. "s")
