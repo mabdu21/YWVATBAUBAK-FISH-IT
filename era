@@ -1,0 +1,1885 @@
+local version = "BETA"
+local ver     = "v01.27"
+
+-- ============================================================
+-- WAIT FOR LOAD
+-- ============================================================
+repeat task.wait() until game:IsLoaded()
+
+-- ============================================================
+-- LOAD UI
+-- ============================================================
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+if setfpscap then
+    setfpscap(1000000)
+    WindUI:Notify({ Title = "DYHUB", Content = "FPS Unlocked Successfully | " .. ver, Duration = 3, Icon = "cpu" })
+else
+    WindUI:Notify({ Title = "DYHUB", Content = "Your exploit does not support setfpscap", Duration = 3, Icon = "ban" })
+end
+
+-- ============================================================
+-- SERVICES
+-- ============================================================
+local RunService        = game:GetService("RunService")
+local Workspace         = game:GetService("Workspace")
+local Lighting          = game:GetService("Lighting")
+local UserInputService  = game:GetService("UserInputService")
+local Players           = game:GetService("Players")
+local HttpService       = game:GetService("HttpService")
+local TeleportService   = game:GetService("TeleportService")
+local TweenService      = game:GetService("TweenService")
+local StarterGui        = game:GetService("StarterGui")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera      = Workspace.CurrentCamera
+local isMobile    = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+-- ============================================================
+-- CHARACTER CACHE
+-- ============================================================
+local Character        = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid         = Character:WaitForChild("Humanoid")
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    Character        = char
+    Humanoid         = char:WaitForChild("Humanoid")
+    HumanoidRootPart = char:WaitForChild("HumanoidRootPart")
+    task.wait(0.5)
+    if settings then
+        if settings.GodMode and Humanoid then
+            pcall(function() Humanoid.Health = Humanoid.MaxHealth end)
+        end
+        if settings.JumpPower and Humanoid then
+            pcall(function() Humanoid.JumpPower = settings.JumpPower end)
+        end
+        if settings.WalkSpeed and Humanoid then
+            pcall(function() Humanoid.WalkSpeed = settings.WalkSpeed end)
+        end
+    end
+end)
+
+-- ============================================================
+-- WINDOW
+-- ============================================================
+local Window = WindUI:CreateWindow({
+    Title      = "DYHUB",
+    IconThemed = true,
+    Icon       = "rbxassetid://104487529937663",
+    Author     = "Universal Script | Free Version",
+    Folder     = "DYHUB_US",
+    Size       = UDim2.fromOffset(500, 400),
+    Transparent = true,
+    Theme      = "Dark",
+    BackgroundImageTransparency = 0.8,
+    HasOutline = false,
+    HideSearchBar    = true,
+    ScrollBarEnabled = true,
+    User = { Enabled = true, Anonymous = false },
+})
+
+Window:SetToggleKey(Enum.KeyCode.K)
+pcall(function() Window:Tag({ Title = version, Color = Color3.fromHex("#db7093") }) end)
+Window:EditOpenButton({
+    Title           = "DYHUB - Open",
+    Icon            = "monitor",
+    CornerRadius    = UDim.new(0, 6),
+    StrokeThickness = 2,
+    Color           = ColorSequence.new(Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255)),
+    Draggable       = true,
+})
+
+-- ============================================================
+-- CONFIG SYSTEM
+-- ============================================================
+local ConfigFolder = "DYHUB_US"
+local CustomConfig = {}
+CustomConfig.__index = CustomConfig
+
+function CustomConfig.new()
+    local self = setmetatable({}, CustomConfig)
+    self.ConfigData = {}
+    self.ConfigPath = ConfigFolder .. "/US_config.json"
+    self._autoSaveThread = nil
+    self._autoSaveDelay  = 15
+    if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
+    self:Load()
+    return self
+end
+
+function CustomConfig:Set(key, value) self.ConfigData[key] = value end
+
+function CustomConfig:Get(key, default)
+    local v = self.ConfigData[key]
+    if v ~= nil then return v end
+    return default
+end
+
+function CustomConfig:Save()
+    pcall(function()
+        writefile(self.ConfigPath, HttpService:JSONEncode(self.ConfigData))
+    end)
+end
+
+function CustomConfig:Load()
+    if isfile(self.ConfigPath) then
+        local ok, result = pcall(function()
+            return HttpService:JSONDecode(readfile(self.ConfigPath))
+        end)
+        if ok and type(result) == "table" then
+            self.ConfigData = result
+        else
+            self.ConfigData = {}
+        end
+    else
+        self.ConfigData = {}
+    end
+end
+
+function CustomConfig:AutoSave(interval)
+    if self._autoSaveThread then
+        pcall(function() task.cancel(self._autoSaveThread) end)
+        self._autoSaveThread = nil
+    end
+    if interval and interval > 0 then
+        self._autoSaveDelay  = interval
+        self._autoSaveThread = task.spawn(function()
+            while true do
+                task.wait(self._autoSaveDelay or 15)
+                pcall(function() self:Save() end)
+            end
+        end)
+    end
+end
+
+local Config = CustomConfig.new()
+if Config:Get("AutoSaveEnabled", true) then
+    Config:AutoSave(Config:Get("AutoSaveDelay", 15))
+end
+
+-- ============================================================
+-- SETTINGS TABLES
+-- ============================================================
+local settings = {
+    AutoSaveEnabled    = Config:Get("AutoSaveEnabled", true),
+    AutoSaveDelay      = Config:Get("AutoSaveDelay", 15),
+
+    -- Main (Unity)
+    GodMode            = Config:Get("GodMode", false),
+    FullBright         = Config:Get("FullBright", false),
+    NoFog              = Config:Get("NoFog", false),
+
+    -- Tool Giver
+    NoToolAppear       = Config:Get("NoToolAppear", false),
+    SelectedTool       = Config:Get("SelectedTool", ""),
+
+    -- Player
+    JumpPower          = Config:Get("JumpPower", 50),
+    WalkSpeed          = Config:Get("WalkSpeed", 16),
+    TPWalk             = Config:Get("TPWalk", false),
+    TPWalkSpeed        = Config:Get("TPWalkSpeed", 100),
+    Noclip             = Config:Get("Noclip", false),
+    InfJump            = Config:Get("InfJump", false),
+    Fly                = Config:Get("Fly", false),
+    FlySpeed           = Config:Get("FlySpeed", 50),
+    SelectedPlayer     = Config:Get("SelectedPlayer", ""),
+    Spectate           = Config:Get("Spectate", false),
+    Freecam            = Config:Get("Freecam", false),
+}
+
+-- ESP Settings
+local ESPSettings = {
+    Enabled        = Config:Get("ESPEnabled", true),
+    Range          = Config:Get("ESPRange", 500),
+    ShowName       = Config:Get("ESPShowName", true),
+    ShowDistance   = Config:Get("ESPShowDistance", true),
+    ShowHighlight  = Config:Get("ESPShowHighlight", true),
+    ShowTracer     = Config:Get("ESPShowTracer", false),
+    ShowBox3D      = Config:Get("ESPShowBox3D", false),
+    ShowSkeleton   = Config:Get("ESPShowSkeleton", false),
+    ShowYourself   = Config:Get("ESPShowYourself", false),
+    ShowMonster    = Config:Get("ESPShowMonster", true),
+    ShowNPC        = Config:Get("ESPShowNPC", true),
+    ShowPlayer     = Config:Get("ESPShowPlayer", true),
+    UpdateRate     = 0.1,
+}
+
+-- ============================================================
+-- TABS
+-- ============================================================
+local InfoTab     = Window:Tab({ Title = "Information", Icon = "info" })
+Window:Divider()
+local EspTab      = Window:Tab({ Title = "ESP",         Icon = "eye" })
+Window:Divider()
+local MainTab     = Window:Tab({ Title = "Main",        Icon = "rocket" })
+Window:Divider()
+local PlayerTab   = Window:Tab({ Title = "Player",      Icon = "user" })
+Window:Divider()
+local SettingTab  = Window:Tab({ Title = "Settings",    Icon = "settings" })
+
+Window:SelectTab(1)
+
+-- ============================================================
+-- THREAD MANAGER (Fix for toggles not stopping)
+-- ============================================================
+local ThreadManager = {}
+ThreadManager.__index = ThreadManager
+
+function ThreadManager.new()
+    return setmetatable({ running = false, thread = nil }, ThreadManager)
+end
+
+function ThreadManager:Start(loopFn)
+    self:Stop()
+    self.running = true
+    self.thread = task.spawn(function()
+        while self.running do
+            local ok, err = pcall(loopFn)
+            if not ok then
+                warn("[DYHUB] Thread error:", err)
+                break
+            end
+            if not self.running then break end
+            task.wait(0.05)
+        end
+        self.running = false
+        self.thread = nil
+    end)
+end
+
+function ThreadManager:Stop()
+    self.running = false
+    if self.thread then
+        pcall(function() task.cancel(self.thread) end)
+        self.thread = nil
+    end
+end
+
+function ThreadManager:IsRunning()
+    return self.running
+end
+
+-- ============================================================
+-- THREADS FOR TOGGLES
+-- ============================================================
+local godModeTM      = ThreadManager.new()
+local fullBrightTM   = ThreadManager.new()
+local noFogTM        = ThreadManager.new()
+local noToolTM       = ThreadManager.new()
+local noclipTM       = ThreadManager.new()
+local infJumpTM      = ThreadManager.new()
+local flyTM          = ThreadManager.new()
+local tpWalkTM       = ThreadManager.new()
+local espTM          = ThreadManager.new()
+local spectatorTM    = ThreadManager.new()
+local freecamTM      = ThreadManager.new()
+
+-- ============================================================
+-- MAIN TAB: TOOL GIVER
+-- ============================================================
+MainTab:Section({ Title = "Tool Giver", Icon = "package" })
+
+local selectedToolString = settings.SelectedTool
+
+local function refreshToolList()
+    local tools = {}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local backpack = player:FindFirstChild("Backpack")
+            if backpack then
+                for _, item in pairs(backpack:GetChildren()) do
+                    if item:IsA("Tool") then
+                        table.insert(tools, player.Name .. " | " .. item.Name)
+                    end
+                end
+            end
+            local char = player.Character
+            if char then
+                for _, item in pairs(char:GetChildren()) do
+                    if item:IsA("Tool") then
+                        table.insert(tools, player.Name .. " | " .. item.Name)
+                    end
+                end
+            end
+        end
+    end
+    return tools
+end
+
+MainTab:Paragraph({
+    Title = "Tool Giver",
+    Desc  = "Select a Tool from another player's Backpack, then use Give Tool to CUT and transfer it to your inventory. This is not a copy operation.",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+})
+
+local ToolDropdown = MainTab:Dropdown({
+    Title    = "Select Tool",
+    Desc     = "Choose a Tool from another player's inventory",
+    Values   = refreshToolList(),
+    Multi    = false,
+    Value    = (selectedToolString ~= "" and selectedToolString) or nil,
+    Callback = function(v)
+        selectedToolString = v or ""
+        settings.SelectedTool = selectedToolString
+        Config:Set("SelectedTool", selectedToolString)
+        Config:Save()
+    end
+})
+
+local function giveTool()
+    if not selectedToolString or selectedToolString == "" then
+        WindUI:Notify({Title = "Error", Content = "Please select a Tool first.", Duration = 2, Icon = "alert-triangle"})
+        return
+    end
+
+    local playerName, toolName = selectedToolString:match("^(.-) | (.*)$")
+    if not playerName or not toolName then
+        WindUI:Notify({Title = "Error", Content = "Invalid Tool format.", Duration = 2, Icon = "alert-triangle"})
+        return
+    end
+
+    local targetPlayer = Players:FindFirstChild(playerName)
+    if not targetPlayer then
+        WindUI:Notify({Title = "Error", Content = "Player '" .. playerName .. "' not found.", Duration = 2, Icon = "alert-triangle"})
+        return
+    end
+
+    local sourceTool = nil
+    local backpack = targetPlayer:FindFirstChild("Backpack")
+    if backpack then sourceTool = backpack:FindFirstChild(toolName) end
+    if not sourceTool and targetPlayer.Character then
+        sourceTool = targetPlayer.Character:FindFirstChild(toolName)
+    end
+
+    if not sourceTool then
+        WindUI:Notify({Title = "Error", Content = "Tool '" .. toolName .. "' not found in " .. playerName .. "'s inventory.", Duration = 3, Icon = "alert-triangle"})
+        return
+    end
+
+    local myBackpack = LocalPlayer:FindFirstChild("Backpack")
+    if not myBackpack then
+        WindUI:Notify({Title = "Error", Content = "Your Backpack could not be found.", Duration = 2, Icon = "alert-triangle"})
+        return
+    end
+
+    for _, item in pairs(myBackpack:GetChildren()) do
+        if item:IsA("Tool") and item.Name == toolName then
+            pcall(function() item:Destroy() end)
+        end
+    end
+
+    local ok, clonedTool = pcall(function()
+        local c = sourceTool:Clone()
+        c.Parent = myBackpack
+        return c
+    end)
+
+    if not ok or not clonedTool then
+        WindUI:Notify({Title = "Error", Content = "Failed to transfer Tool.", Duration = 2, Icon = "alert-triangle"})
+        return
+    end
+
+    pcall(function() sourceTool.Parent = nil end)
+
+    WindUI:Notify({
+        Title = "Success",
+        Content = "Acquired " .. toolName .. " from " .. playerName .. " (Cut).",
+        Duration = 3,
+        Icon = "check"
+    })
+end
+
+MainTab:Button({
+    Title    = "Refresh Tool List",
+    Desc     = "Scan for available Tools from all players",
+    Callback = function()
+        local newList = refreshToolList()
+        pcall(function() ToolDropdown:Refresh(newList) end)
+        WindUI:Notify({Title = "Refreshed", Content = "Found " .. #newList .. " Tool(s).", Duration = 2, Icon = "refresh-cw"})
+    end
+})
+
+MainTab:Button({
+    Title    = "Give Tool",
+    Desc     = "Transfer the selected Tool to your inventory (Cut operation)",
+    Callback = giveTool
+})
+
+MainTab:Toggle({
+    Title    = "No Tool Appear",
+    Desc     = "Automatically restore the selected Tool if it is lost (e.g. after death)",
+    Value    = settings.NoToolAppear,
+    Callback = function(state)
+        settings.NoToolAppear = state
+        Config:Set("NoToolAppear", state)
+        Config:Save()
+        if state then
+            noToolTM:Start(function()
+                if not selectedToolString or selectedToolString == "" then return end
+                local playerName, toolName = selectedToolString:match("^(.-) | (.*)$")
+                if not playerName or not toolName then return end
+
+                local myBackpack = LocalPlayer:FindFirstChild("Backpack")
+                if not myBackpack then return end
+
+                local hasTool = false
+                for _, item in pairs(myBackpack:GetChildren()) do
+                    if item:IsA("Tool") and item.Name == toolName then hasTool = true break end
+                end
+                if not hasTool and LocalPlayer.Character then
+                    for _, item in pairs(LocalPlayer.Character:GetChildren()) do
+                        if item:IsA("Tool") and item.Name == toolName then hasTool = true break end
+                    end
+                end
+
+                if not hasTool then
+                    local targetPlayer = Players:FindFirstChild(playerName)
+                    if targetPlayer then
+                        local sourceTool = nil
+                        local bp = targetPlayer:FindFirstChild("Backpack")
+                        if bp then sourceTool = bp:FindFirstChild(toolName) end
+                        if not sourceTool and targetPlayer.Character then
+                            sourceTool = targetPlayer.Character:FindFirstChild(toolName)
+                        end
+                        if sourceTool and myBackpack then
+                            pcall(function()
+                                local cloned = sourceTool:Clone()
+                                cloned.Parent = myBackpack
+                                sourceTool.Parent = nil
+                            end)
+                            WindUI:Notify({
+                                Title = "Tool Restored",
+                                Content = toolName .. " has been restored to your inventory.",
+                                Duration = 2,
+                                Icon = "shield"
+                            })
+                        end
+                    end
+                end
+            end)
+        else
+            noToolTM:Stop()
+        end
+    end
+})
+
+-- ============================================================
+-- MAIN TAB: UNITY (God Mode, Full Bright, No Fog)
+-- ============================================================
+MainTab:Section({ Title = "Unity", Icon = "shield" })
+
+-- God Mode
+MainTab:Toggle({
+    Title    = "God Mode",
+    Desc     = "Keeps your health at maximum at all times",
+    Value    = settings.GodMode,
+    Callback = function(state)
+        settings.GodMode = state
+        Config:Set("GodMode", state)
+        Config:Save()
+        if state then
+            godModeTM:Start(function()
+                local char = LocalPlayer.Character
+                if not char then return end
+                local hum = char:FindFirstChild("Humanoid")
+                if hum and hum.Parent and hum.Health > 0 and hum.Health < hum.MaxHealth then
+                    pcall(function() hum.Health = hum.MaxHealth end)
+                end
+            end)
+        else
+            godModeTM:Stop()
+        end
+    end
+})
+
+-- Full Bright
+MainTab:Toggle({
+    Title    = "Full Bright",
+    Desc     = "Removes darkness, lighting is always at maximum brightness",
+    Value    = settings.FullBright,
+    Callback = function(state)
+        settings.FullBright = state
+        Config:Set("FullBright", state)
+        Config:Save()
+        if state then
+            fullBrightTM:Start(function()
+                pcall(function()
+                    Lighting.Brightness       = 2
+                    Lighting.ClockTime        = 14
+                    Lighting.FogEnd           = 100000
+                    Lighting.FogStart         = 0
+                    Lighting.GlobalShadows    = false
+                    Lighting.Ambient          = Color3.new(1, 1, 1)
+                    Lighting.OutdoorAmbient   = Color3.new(1, 1, 1)
+                end)
+                task.wait(0.5)
+            end)
+        else
+            fullBrightTM:Stop()
+        end
+    end
+})
+
+-- No Fog
+MainTab:Toggle({
+    Title    = "No Fog",
+    Desc     = "Removes all fog from the environment",
+    Value    = settings.NoFog,
+    Callback = function(state)
+        settings.NoFog = state
+        Config:Set("NoFog", state)
+        Config:Save()
+        if state then
+            noFogTM:Start(function()
+                pcall(function()
+                    Lighting.FogEnd   = 100000
+                    Lighting.FogStart = 0
+                end)
+                task.wait(0.5)
+            end)
+        else
+            noFogTM:Stop()
+        end
+    end
+})
+
+-- ============================================================
+-- PLAYER TAB
+-- ============================================================
+
+-- ===== Visual Ability =====
+PlayerTab:Section({ Title = "Visual Ability", Icon = "zap" })
+
+PlayerTab:Slider({
+    Title    = "Jump Power",
+    Desc     = "Set the height of your jumps",
+    Value    = { Min = 0, Max = 500, Default = settings.JumpPower },
+    Step     = 5,
+    Callback = function(v)
+        settings.JumpPower = v
+        Config:Set("JumpPower", v)
+        Config:Save()
+        if Humanoid then pcall(function() Humanoid.JumpPower = v end) end
+    end
+})
+
+PlayerTab:Slider({
+    Title    = "Walk Speed",
+    Desc     = "Set your character's movement speed",
+    Value    = { Min = 0, Max = 500, Default = settings.WalkSpeed },
+    Step     = 1,
+    Callback = function(v)
+        settings.WalkSpeed = v
+        Config:Set("WalkSpeed", v)
+        Config:Save()
+        if Humanoid then pcall(function() Humanoid.WalkSpeed = v end) end
+    end
+})
+
+PlayerTab:Slider({
+    Title    = "TP Walk Speed",
+    Desc     = "Set the speed used for TP Walk",
+    Value    = { Min = 50, Max = 1000, Default = settings.TPWalkSpeed },
+    Step     = 10,
+    Callback = function(v)
+        settings.TPWalkSpeed = v
+        Config:Set("TPWalkSpeed", v)
+        Config:Save()
+    end
+})
+
+PlayerTab:Toggle({
+    Title    = "TP Walk",
+    Desc     = "Walk instantly at high speed (teleport walk)",
+    Value    = settings.TPWalk,
+    Callback = function(state)
+        settings.TPWalk = state
+        Config:Set("TPWalk", state)
+        Config:Save()
+        if state then
+            tpWalkTM:Start(function()
+                local char = LocalPlayer.Character
+                if not char then return end
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                local hum = char:FindFirstChild("Humanoid")
+                if not hrp or not hum or hum.Health <= 0 then return end
+                if hum.MoveDirection.Magnitude > 0 then
+                    pcall(function()
+                        hrp.CFrame = hrp.CFrame + (hum.MoveDirection * settings.TPWalkSpeed / 50)
+                    end)
+                end
+            end)
+        else
+            tpWalkTM:Stop()
+        end
+    end
+})
+
+PlayerTab:Toggle({
+    Title    = "Noclip",
+    Desc     = "Pass through any solid object",
+    Value    = settings.Noclip,
+    Callback = function(state)
+        settings.Noclip = state
+        Config:Set("Noclip", state)
+        Config:Save()
+        if state then
+            noclipTM:Start(function()
+                local char = LocalPlayer.Character
+                if not char then return end
+                for _, part in pairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        pcall(function() part.CanCollide = false end)
+                    end
+                end
+            end)
+        else
+            noclipTM:Stop()
+        end
+    end
+})
+
+PlayerTab:Toggle({
+    Title    = "Infinite Jump",
+    Desc     = "Jump unlimited times in the air",
+    Value    = settings.InfJump,
+    Callback = function(state)
+        settings.InfJump = state
+        Config:Set("InfJump", state)
+        Config:Save()
+        if state then
+            infJumpTM:Start(function()
+                if LocalPlayer.Character and Humanoid and Humanoid:GetState() == Enum.HumanoidStateType.Freefall then
+                    pcall(function() Humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
+                end
+            end)
+        else
+            infJumpTM:Stop()
+        end
+    end
+})
+
+-- Fly
+local flyBV     = nil
+local flyBG     = nil
+local flyMobileGui = nil
+
+local function createMobileFlyGui()
+    if flyMobileGui then return end
+    pcall(function()
+        flyMobileGui = Instance.new("ScreenGui")
+        flyMobileGui.Name = "DYHUB_FlyMobile"
+        flyMobileGui.ResetOnSpawn = false
+        flyMobileGui.IgnoreGuiInset = true
+        flyMobileGui.DisplayOrder = 999
+        flyMobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+        local upBtn = Instance.new("TextButton")
+        upBtn.Name = "FlyUp"
+        upBtn.Size = UDim2.new(0, 70, 0, 70)
+        upBtn.Position = UDim2.new(0, 20, 1, -240)
+        upBtn.AnchorPoint = Vector2.new(0, 0)
+        upBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        upBtn.BackgroundTransparency = 0.3
+        upBtn.Text = "UP"
+        upBtn.TextColor3 = Color3.new(1, 1, 1)
+        upBtn.TextSize = 18
+        upBtn.Font = Enum.Font.GothamBold
+        upBtn.Parent = flyMobileGui
+        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(1, 0); c.Parent = upBtn
+        local s = Instance.new("UIStroke"); s.Thickness = 2; s.Color = Color3.new(1, 1, 1); s.Transparency = 0.5; s.Parent = upBtn
+
+        local downBtn = Instance.new("TextButton")
+        downBtn.Name = "FlyDown"
+        downBtn.Size = UDim2.new(0, 70, 0, 70)
+        downBtn.Position = UDim2.new(0, 20, 1, -160)
+        downBtn.AnchorPoint = Vector2.new(0, 0)
+        downBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        downBtn.BackgroundTransparency = 0.3
+        downBtn.Text = "DOWN"
+        downBtn.TextColor3 = Color3.new(1, 1, 1)
+        downBtn.TextSize = 14
+        downBtn.Font = Enum.Font.GothamBold
+        downBtn.Parent = flyMobileGui
+        local c2 = Instance.new("UICorner"); c2.CornerRadius = UDim.new(1, 0); c2.Parent = downBtn
+        local s2 = Instance.new("UIStroke"); s2.Thickness = 2; s2.Color = Color3.new(1, 1, 1); s2.Transparency = 0.5; s2.Parent = downBtn
+
+        upBtn.MouseButton1Down:Connect(function() _G.DyFlyUp = true end)
+        upBtn.MouseButton1Up:Connect(function() _G.DyFlyUp = false end)
+        upBtn.TouchLongPress:Connect(function() _G.DyFlyUp = true end)
+        upBtn.TouchEnded:Connect(function() _G.DyFlyUp = false end)
+        downBtn.MouseButton1Down:Connect(function() _G.DyFlyDown = true end)
+        downBtn.MouseButton1Up:Connect(function() _G.DyFlyDown = false end)
+        downBtn.TouchLongPress:Connect(function() _G.DyFlyDown = true end)
+        downBtn.TouchEnded:Connect(function() _G.DyFlyDown = false end)
+    end)
+end
+
+local function destroyMobileFlyGui()
+    if flyMobileGui then
+        pcall(function() flyMobileGui:Destroy() end)
+        flyMobileGui = nil
+    end
+    _G.DyFlyUp = false
+    _G.DyFlyDown = false
+end
+
+PlayerTab:Toggle({
+    Title    = "Fly",
+    Desc     = "Fly freely in the air. Works on both PC and Mobile",
+    Value    = settings.Fly,
+    Callback = function(state)
+        settings.Fly = state
+        Config:Set("Fly", state)
+        Config:Save()
+
+        local char = LocalPlayer.Character
+        local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+        local hum  = char and char:FindFirstChild("Humanoid")
+
+        if state then
+            if not hrp or not hum then return end
+            if isMobile then createMobileFlyGui() end
+
+            flyBV = Instance.new("BodyVelocity")
+            flyBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            flyBV.Velocity = Vector3.new(0, 0, 0)
+            flyBV.Parent = hrp
+
+            flyBG = Instance.new("BodyGyro")
+            flyBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+            flyBG.D = 100
+            flyBG.P = 10000
+            flyBG.Parent = hrp
+
+            pcall(function() hum.PlatformStand = true end)
+
+            flyTM:Start(function()
+                local c = LocalPlayer.Character
+                if not c then return end
+                local h = c:FindFirstChild("HumanoidRootPart")
+                local hm = c:FindFirstChild("Humanoid")
+                if not h or not hm or hm.Health <= 0 then
+                    if flyBV then pcall(function() flyBV:Destroy() end) end
+                    if flyBG then pcall(function() flyBG:Destroy() end) end
+                    flyBV = nil; flyBG = nil
+                    return
+                end
+
+                if not flyBV or not flyBV.Parent then
+                    flyBV = Instance.new("BodyVelocity")
+                    flyBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+                    flyBV.Parent = h
+                end
+                if not flyBG or not flyBG.Parent then
+                    flyBG = Instance.new("BodyGyro")
+                    flyBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+                    flyBG.D = 100
+                    flyBG.P = 10000
+                    flyBG.Parent = h
+                end
+
+                local speed = settings.FlySpeed or 50
+                local camCF = Camera.CFrame
+                local moveDir = Vector3.new(0, 0, 0)
+
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                    moveDir = moveDir + camCF.LookVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                    moveDir = moveDir - camCF.LookVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                    moveDir = moveDir - camCF.RightVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                    moveDir = moveDir + camCF.RightVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) or _G.DyFlyUp then
+                    moveDir = moveDir + Vector3.new(0, 1, 0)
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or _G.DyFlyDown then
+                    moveDir = moveDir - Vector3.new(0, 1, 0)
+                end
+
+                pcall(function()
+                    flyBV.Velocity = moveDir * speed
+                    flyBG.CFrame = camCF
+                end)
+            end)
+        else
+            flyTM:Stop()
+            if flyBV then pcall(function() flyBV:Destroy() end) end
+            if flyBG then pcall(function() flyBG:Destroy() end) end
+            flyBV = nil; flyBG = nil
+            if hum then pcall(function() hum.PlatformStand = false end) end
+            if isMobile then destroyMobileFlyGui() end
+        end
+    end
+})
+
+PlayerTab:Slider({
+    Title    = "Fly Speed",
+    Desc     = "Speed used while flying",
+    Value    = { Min = 10, Max = 500, Default = settings.FlySpeed },
+    Step     = 5,
+    Callback = function(v)
+        settings.FlySpeed = v
+        Config:Set("FlySpeed", v)
+        Config:Save()
+    end
+})
+
+-- ===== Visual Player =====
+PlayerTab:Section({ Title = "Visual Player", Icon = "users" })
+
+local playerList = {}
+local function refreshPlayerList()
+    playerList = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            table.insert(playerList, p.Name)
+        end
+    end
+    return playerList
+end
+refreshPlayerList()
+
+local PlayerDropdown = PlayerTab:Dropdown({
+    Title    = "Select Player",
+    Desc     = "Select a player for Teleport or Spectate",
+    Values   = playerList,
+    Multi    = false,
+    Value    = (settings.SelectedPlayer ~= "" and settings.SelectedPlayer) or nil,
+    Callback = function(v)
+        settings.SelectedPlayer = v or ""
+        Config:Set("SelectedPlayer", settings.SelectedPlayer)
+        Config:Save()
+    end
+})
+
+PlayerTab:Button({
+    Title    = "Refresh Player List",
+    Desc     = "Update the list of selectable players",
+    Callback = function()
+        local newList = refreshPlayerList()
+        pcall(function() PlayerDropdown:Refresh(newList) end)
+        WindUI:Notify({Title = "Refreshed", Content = "Found " .. #newList .. " player(s).", Duration = 2, Icon = "refresh-cw"})
+    end
+})
+
+PlayerTab:Button({
+    Title    = "Teleport to Player",
+    Desc     = "Instantly teleport to the selected player",
+    Callback = function()
+        if settings.SelectedPlayer == "" then
+            WindUI:Notify({Title = "Error", Content = "Please select a player first.", Duration = 2, Icon = "alert-triangle"})
+            return
+        end
+        local target = Players:FindFirstChild(settings.SelectedPlayer)
+        if not target or not target.Character then
+            WindUI:Notify({Title = "Error", Content = "Player not found or has no character.", Duration = 2, Icon = "alert-triangle"})
+            return
+        end
+        local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
+        local myHRP     = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if targetHRP and myHRP then
+            pcall(function() myHRP.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3) end)
+            WindUI:Notify({Title = "Teleported", Content = "You have been teleported to " .. settings.SelectedPlayer, Duration = 2, Icon = "check"})
+        end
+    end
+})
+
+-- Spectate
+local function fixCamera()
+    spectatorTM:Stop()
+    freecamTM:Stop()
+    settings.Spectate = false
+    settings.Freecam  = false
+    Config:Set("Spectate", false)
+    Config:Set("Freecam", false)
+    Config:Save()
+    pcall(function()
+        Camera.CameraType = Enum.CameraType.Custom
+        local char = LocalPlayer.Character
+        if char then
+            local hum = char:FindFirstChild("Humanoid")
+            if hum then Camera.CameraSubject = hum end
+        end
+    end)
+end
+
+PlayerTab:Toggle({
+    Title    = "Spectate Player",
+    Desc     = "Spectate the selected player (camera follows them)",
+    Value    = settings.Spectate,
+    Callback = function(state)
+        settings.Spectate = state
+        Config:Set("Spectate", state)
+        Config:Save()
+        if state then
+            if settings.SelectedPlayer == "" then
+                WindUI:Notify({Title = "Error", Content = "Please select a player first.", Duration = 2, Icon = "alert-triangle"})
+                settings.Spectate = false
+                Config:Set("Spectate", false)
+                Config:Save()
+                return
+            end
+            spectatorTM:Start(function()
+                if not settings.Spectate then return end
+                local target = Players:FindFirstChild(settings.SelectedPlayer)
+                if target and target.Character then
+                    local hum = target.Character:FindFirstChild("Humanoid")
+                    if hum then
+                        pcall(function() Camera.CameraSubject = hum end)
+                    end
+                end
+            end)
+        else
+            spectatorTM:Stop()
+            fixCamera()
+        end
+    end
+})
+
+-- ===== Visual Misc =====
+PlayerTab:Section({ Title = "Visual Misc", Icon = "camera" })
+
+-- Freecam
+local freecamCFrame = CFrame.new()
+
+PlayerTab:Toggle({
+    Title    = "Freecam",
+    Desc     = "Detach the camera and move it freely",
+    Value    = settings.Freecam,
+    Callback = function(state)
+        settings.Freecam = state
+        Config:Set("Freecam", state)
+        Config:Save()
+        if state then
+            pcall(function() freecamCFrame = Camera.CFrame end)
+            pcall(function() Camera.CameraType = Enum.CameraType.Scriptable end)
+
+            freecamTM:Start(function()
+                if not settings.Freecam then return end
+                local moveDir = Vector3.new(0, 0, 0)
+                local speed = 1.5
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then speed = 4 end
+
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + Camera.CFrame.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - Camera.CFrame.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - Camera.CFrame.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + Camera.CFrame.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, 1, 0) end
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then moveDir = moveDir - Vector3.new(0, 1, 0) end
+
+                local delta = UserInputService:GetMouseDelta()
+                local rot = CFrame.Angles(0, -delta.X * 0.003, 0) * CFrame.Angles(-delta.Y * 0.003, 0, 0)
+                pcall(function()
+                    freecamCFrame = freecamCFrame + (moveDir * speed)
+                    freecamCFrame = CFrame.new(freecamCFrame.Position) * (rot * (freecamCFrame - CFrame.new(freecamCFrame.Position)))
+                    Camera.CFrame = freecamCFrame
+                end)
+            end)
+        else
+            freecamTM:Stop()
+            fixCamera()
+        end
+    end
+})
+
+PlayerTab:Button({
+    Title    = "Fix Camera",
+    Desc     = "Reset the camera to your character (stops Spectate and Freecam)",
+    Callback = function()
+        fixCamera()
+        WindUI:Notify({Title = "Camera Reset", Content = "Camera has been reset to your character.", Duration = 2, Icon = "check"})
+    end
+})
+
+-- ============================================================
+-- ESP TAB
+-- ============================================================
+EspTab:Section({ Title = "ESP Visual", Icon = "eye" })
+
+EspTab:Paragraph({
+    Title = "Humanoid ESP",
+    Desc  = "Displays Highlights, Names, Health, Distance, Tracers, 3D Boxes, and Skeletons for every Humanoid in the game.",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+})
+
+EspTab:Toggle({
+    Title    = "ESP Yourself",
+    Desc     = "Show ESP on your own character",
+    Value    = ESPSettings.ShowYourself,
+    Callback = function(state)
+        ESPSettings.ShowYourself = state
+        Config:Set("ESPShowYourself", state)
+        Config:Save()
+    end
+})
+
+EspTab:Toggle({
+    Title    = "ESP Monster",
+    Desc     = "Show ESP on monsters (Humanoid with WalkSpeed greater than 16, red color)",
+    Value    = ESPSettings.ShowMonster,
+    Callback = function(state)
+        ESPSettings.ShowMonster = state
+        Config:Set("ESPShowMonster", state)
+        Config:Save()
+    end
+})
+
+EspTab:Toggle({
+    Title    = "ESP NPC",
+    Desc     = "Show ESP on NPCs (Humanoid that is not a player, yellow color)",
+    Value    = ESPSettings.ShowNPC,
+    Callback = function(state)
+        ESPSettings.ShowNPC = state
+        Config:Set("ESPShowNPC", state)
+        Config:Save()
+    end
+})
+
+EspTab:Toggle({
+    Title    = "ESP Player",
+    Desc     = "Show ESP on other players (colored by their team, blue if no team)",
+    Value    = ESPSettings.ShowPlayer,
+    Callback = function(state)
+        ESPSettings.ShowPlayer = state
+        Config:Set("ESPShowPlayer", state)
+        Config:Save()
+    end
+})
+
+EspTab:Section({ Title = "ESP Setting", Icon = "sliders" })
+
+EspTab:Toggle({
+    Title    = "ESP Enabled",
+    Desc     = "Master toggle for the entire ESP system",
+    Value    = ESPSettings.Enabled,
+    Callback = function(state)
+        ESPSettings.Enabled = state
+        Config:Set("ESPEnabled", state)
+        Config:Save()
+    end
+})
+
+EspTab:Toggle({
+    Title    = "ESP Name",
+    Desc     = "Display the entity's name above their head",
+    Value    = ESPSettings.ShowName,
+    Callback = function(state)
+        ESPSettings.ShowName = state
+        Config:Set("ESPShowName", state)
+        Config:Save()
+    end
+})
+
+EspTab:Toggle({
+    Title    = "ESP Distance",
+    Desc     = "Display the distance to the entity in studs",
+    Value    = ESPSettings.ShowDistance,
+    Callback = function(state)
+        ESPSettings.ShowDistance = state
+        Config:Set("ESPShowDistance", state)
+        Config:Save()
+    end
+})
+
+EspTab:Toggle({
+    Title    = "ESP Highlight",
+    Desc     = "Apply a colored highlight outline to the entity",
+    Value    = ESPSettings.ShowHighlight,
+    Callback = function(state)
+        ESPSettings.ShowHighlight = state
+        Config:Set("ESPShowHighlight", state)
+        Config:Save()
+    end
+})
+
+EspTab:Toggle({
+    Title    = "ESP Tracer",
+    Desc     = "Draw a line from the bottom of the screen to the entity",
+    Value    = ESPSettings.ShowTracer,
+    Callback = function(state)
+        ESPSettings.ShowTracer = state
+        Config:Set("ESPShowTracer", state)
+        Config:Save()
+    end
+})
+
+EspTab:Toggle({
+    Title    = "ESP 3D Box",
+    Desc     = "Draw a 3D bounding box around the entity",
+    Value    = ESPSettings.ShowBox3D,
+    Callback = function(state)
+        ESPSettings.ShowBox3D = state
+        Config:Set("ESPShowBox3D", state)
+        Config:Save()
+    end
+})
+
+EspTab:Toggle({
+    Title    = "ESP Skeleton",
+    Desc     = "Draw lines connecting the entity's bones",
+    Value    = ESPSettings.ShowSkeleton,
+    Callback = function(state)
+        ESPSettings.ShowSkeleton = state
+        Config:Set("ESPShowSkeleton", state)
+        Config:Save()
+    end
+})
+
+EspTab:Slider({
+    Title    = "ESP Range",
+    Desc     = "Maximum distance (in studs) at which ESP is rendered",
+    Value    = { Min = 50, Max = 3000, Default = ESPSettings.Range },
+    Step     = 50,
+    Callback = function(v)
+        ESPSettings.Range = v
+        Config:Set("ESPRange", v)
+        Config:Save()
+    end
+})
+
+-- ============================================================
+-- ESP SYSTEM (Core Logic)
+-- ============================================================
+local ESPFolder = nil
+local ESPGUI    = nil
+
+pcall(function()
+    ESPGUI = Instance.new("ScreenGui")
+    ESPGUI.Name = "DYHUB_ESP"
+    ESPGUI.ResetOnSpawn = false
+    ESPGUI.IgnoreGuiInset = true
+    ESPGUI.DisplayOrder = 100
+    local okCore = pcall(function() return game:GetService("CoreGui") end)
+    ESPGUI.Parent = (okCore and game:GetService("CoreGui")) or LocalPlayer:WaitForChild("PlayerGui")
+
+    ESPFolder = Instance.new("Folder")
+    ESPFolder.Name = "ESP_Entities"
+    ESPFolder.Parent = ESPGUI
+end)
+
+local ESPTracked = {}
+local ESPData    = {}
+
+local function getESPRoot(model)
+    if not model then return nil end
+    return model:FindFirstChild("HumanoidRootPart")
+        or model:FindFirstChild("Head")
+        or model.PrimaryPart
+        or model:FindFirstChildWhichIsA("BasePart")
+end
+
+local function getEntityType(model)
+    local plr = Players:GetPlayerFromCharacter(model)
+    if plr then return "Player", plr end
+    local hum = model and model:FindFirstChildWhichIsA("Humanoid")
+    if hum and hum.WalkSpeed > 16 then return "Monster" end
+    return "NPC"
+end
+
+local function getEntityColor(typ, plr)
+    if typ == "Player" and plr and plr.Team and plr.Neutral == false then
+        return plr.TeamColor.Color
+    end
+    if typ == "Monster" then
+        return Color3.fromRGB(255, 60, 60)
+    end
+    if typ == "NPC" then
+        return Color3.fromRGB(255, 220, 60)
+    end
+    return Color3.fromRGB(70, 150, 255)
+end
+
+local function getSkeletonConnections(model)
+    if model:FindFirstChild("UpperTorso") then
+        return {
+            {"Head", "UpperTorso"},
+            {"UpperTorso", "LowerTorso"},
+            {"UpperTorso", "LeftUpperArm"},
+            {"LeftUpperArm", "LeftLowerArm"},
+            {"LeftLowerArm", "LeftHand"},
+            {"UpperTorso", "RightUpperArm"},
+            {"RightUpperArm", "RightLowerArm"},
+            {"RightLowerArm", "RightHand"},
+            {"LowerTorso", "LeftUpperLeg"},
+            {"LeftUpperLeg", "LeftLowerLeg"},
+            {"LeftLowerLeg", "LeftFoot"},
+            {"LowerTorso", "RightUpperLeg"},
+            {"RightUpperLeg", "RightLowerLeg"},
+            {"RightLowerLeg", "RightFoot"},
+        }
+    end
+    return {
+        {"Head", "Torso"},
+        {"Torso", "Left Arm"},
+        {"Torso", "Right Arm"},
+        {"Torso", "Left Leg"},
+        {"Torso", "Right Leg"},
+    }
+end
+
+local function getBoundingBox(model)
+    local success, cf, size = pcall(function() return model:GetBoundingBox() end)
+    if success and cf and size then return cf, size end
+    return CFrame.new(model:GetModelCFrame().Position), Vector3.new(4, 6, 4)
+end
+
+local function createESPEntity(hum)
+    if ESPData[hum] or not ESPFolder then return end
+
+    local folder = Instance.new("Folder")
+    folder.Name = "ESP_" .. hum:GetInstanceId()
+    folder.Parent = ESPFolder
+    ESPData[hum] = { Folder = folder, Lines = {} }
+end
+
+local function removeESPEntity(hum)
+    local data = ESPData[hum]
+    if not data then return end
+    pcall(function() data.Folder:Destroy() end)
+    ESPData[hum] = nil
+end
+
+local function clearAllESP()
+    for hum in pairs(ESPData) do
+        removeESPEntity(hum)
+    end
+end
+
+local function clearAllVisuals(data)
+    if not data then return end
+    for _, child in pairs(data.Folder:GetChildren()) do
+        pcall(function() child:Destroy() end)
+    end
+    data.Highlight = nil
+    data.Label     = nil
+    data.Lines     = {}
+end
+
+local function drawLine(parent, p1, p2, color, thickness)
+    local delta = p2 - p1
+    local length = delta.Magnitude
+    if length < 1 then return nil end
+    local angle = math.deg(math.atan2(delta.Y, delta.X))
+
+    local line = Instance.new("Frame")
+    line.Size = UDim2.new(0, length, 0, thickness or 1)
+    line.Position = UDim2.new(0, p1.X, 0, p1.Y)
+    line.Rotation = angle
+    line.AnchorPoint = Vector2.new(0, 0.5)
+    line.BackgroundColor3 = color
+    line.BorderSizePixel = 0
+    line.Parent = parent
+    return line
+end
+
+local function buildLinePool(data, count, parentName)
+    data.Lines[parentName] = data.Lines[parentName] or {}
+    local pool = data.Lines[parentName]
+    while #pool < count do
+        local l = Instance.new("Frame")
+        l.BackgroundColor3 = Color3.new(1, 1, 1)
+        l.BorderSizePixel = 0
+        l.Parent = data.Folder
+        table.insert(pool, l)
+    end
+    return pool
+end
+
+local function hideLines(data)
+    for _, pool in pairs(data.Lines) do
+        for _, line in ipairs(pool) do
+            line.Visible = false
+        end
+    end
+end
+
+local function trackHumanoid(hum)
+    if not hum or not hum:IsA("Humanoid") then return end
+    if ESPTracked[hum] then return end
+    ESPTracked[hum] = true
+    hum.Destroying:Connect(function()
+        ESPTracked[hum] = nil
+        removeESPEntity(hum)
+    end)
+    hum.Died:Connect(function()
+        removeESPEntity(hum)
+    end)
+end
+
+for _, obj in ipairs(Workspace:GetDescendants()) do
+    if obj:IsA("Humanoid") then trackHumanoid(obj) end
+end
+Workspace.DescendantAdded:Connect(function(obj)
+    if obj:IsA("Humanoid") then
+        task.wait(0.05)
+        trackHumanoid(obj)
+    end
+end)
+
+-- ESP Update Loop
+espTM:Start(function()
+    task.wait(ESPSettings.UpdateRate)
+
+    if not ESPSettings.Enabled then
+        clearAllESP()
+        return
+    end
+
+    local char = LocalPlayer.Character
+    local myHRP = char and char:FindFirstChild("HumanoidRootPart")
+    if not myHRP then
+        clearAllESP()
+        return
+    end
+
+    local viewport = Camera.ViewportSize
+    local maxRange = ESPSettings.Range or 500
+
+    for hum in pairs(ESPTracked) do
+        local model = hum.Parent
+
+        if not model or not model.Parent or hum.Health <= 0 then
+            ESPTracked[hum] = nil
+            removeESPEntity(hum)
+        else
+            local typ, plr = getEntityType(model)
+            local localChar = LocalPlayer.Character
+
+            if not ESPSettings.ShowYourself and model == localChar then
+                removeESPEntity(hum)
+            elseif typ == "Player" and not ESPSettings.ShowPlayer then
+                removeESPEntity(hum)
+            elseif typ == "Monster" and not ESPSettings.ShowMonster then
+                removeESPEntity(hum)
+            elseif typ == "NPC" and not ESPSettings.ShowNPC then
+                removeESPEntity(hum)
+            else
+                local root = getESPRoot(model)
+                if root then
+                    local dist = (myHRP.Position - root.Position).Magnitude
+                    if dist <= maxRange then
+                        createESPEntity(hum)
+                        local data = ESPData[hum]
+                        if not data then return end
+                        local color = getEntityColor(typ, plr)
+                        local folder = data.Folder
+
+                        -- Highlight
+                        if ESPSettings.ShowHighlight then
+                            if not data.Highlight or not data.Highlight.Parent then
+                                data.Highlight = Instance.new("Highlight")
+                                data.Highlight.Name = "Highlight"
+                                data.Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                                data.Highlight.FillTransparency = 0.72
+                                data.Highlight.OutlineTransparency = 0
+                                data.Highlight.Parent = folder
+                            end
+                            data.Highlight.Adornee = model
+                            data.Highlight.FillColor = color
+                            data.Highlight.OutlineColor = color
+                        else
+                            if data.Highlight then
+                                pcall(function() data.Highlight:Destroy() end)
+                                data.Highlight = nil
+                            end
+                        end
+
+                        -- Name + Distance Label
+                        if ESPSettings.ShowName or ESPSettings.ShowDistance then
+                            if not data.Label or not data.Label.Parent then
+                                local label = Instance.new("BillboardGui")
+                                label.Name = "Label"
+                                label.AlwaysOnTop = true
+                                label.Size = UDim2.new(0, 160, 0, 28)
+                                label.StudsOffset = Vector3.new(0, 3.2, 0)
+                                label.Parent = folder
+                                local text = Instance.new("TextLabel")
+                                text.Name = "Text"
+                                text.Size = UDim2.new(1, 0, 1, 0)
+                                text.BackgroundTransparency = 1
+                                text.TextColor3 = color
+                                text.TextStrokeTransparency = 0.35
+                                text.TextStrokeColor3 = Color3.new(0, 0, 0)
+                                text.TextSize = 12
+                                text.Font = Enum.Font.GothamSemibold
+                                text.Text = ""
+                                text.Parent = label
+                                data.Label = label
+                                data.Text  = text
+                            end
+                            data.Label.Adornee = root
+                            local text = ""
+                            if ESPSettings.ShowName then
+                                text = "[" .. model.Name .. " | HP: " .. math.floor(hum.Health) .. "]"
+                            end
+                            if ESPSettings.ShowDistance then
+                                text = text .. " [" .. math.floor(dist) .. " studs]"
+                            end
+                            if data.Text then
+                                data.Text.Text = text
+                                data.Text.TextColor3 = color
+                            end
+                        else
+                            if data.Label then
+                                pcall(function() data.Label:Destroy() end)
+                                data.Label = nil
+                                data.Text  = nil
+                            end
+                        end
+
+                        -- Tracer
+                        if ESPSettings.ShowTracer then
+                            local pool = buildLinePool(data, 1, "Tracer")
+                            local screenPos, onScreen = Camera:WorldToScreenPoint(root.Position)
+                            if onScreen then
+                                local startPos = Vector2.new(viewport.X / 2, viewport.Y)
+                                local endPos   = Vector2.new(screenPos.X, screenPos.Y)
+                                local line = pool[1]
+                                line.Visible = true
+                                local delta = endPos - startPos
+                                line.Size = UDim2.new(0, delta.Magnitude, 0, 1)
+                                line.Position = UDim2.new(0, startPos.X, 0, startPos.Y)
+                                line.Rotation = math.deg(math.atan2(delta.Y, delta.X))
+                                line.AnchorPoint = Vector2.new(0, 0.5)
+                                line.BackgroundColor3 = color
+                                line.BorderSizePixel = 0
+                            else
+                                pool[1].Visible = false
+                            end
+                        else
+                            if data.Lines["Tracer"] then
+                                for _, l in ipairs(data.Lines["Tracer"]) do l.Visible = false end
+                            end
+                        end
+
+                        -- 3D Box
+                        if ESPSettings.ShowBox3D then
+                            local pool = buildLinePool(data, 12, "Box3D")
+                            local cf, size = getBoundingBox(model)
+                            local half = size / 2
+                            local corners = {}
+                            for x = -1, 1, 2 do
+                                for y = -1, 1, 2 do
+                                    for z = -1, 1, 2 do
+                                        table.insert(corners, (cf * CFrame.new(half.X * x, half.Y * y, half.Z * z)).Position)
+                                    end
+                                end
+                            end
+                            local edges = {
+                                {1,2},{2,4},{4,3},{3,1},
+                                {5,6},{6,8},{8,7},{7,5},
+                                {1,5},{2,6},{4,8},{3,7},
+                            }
+                            local anyVisible = false
+                            for i, edge in ipairs(edges) do
+                                local p1v, on1 = Camera:WorldToScreenPoint(corners[edge[1]])
+                                local p2v, on2 = Camera:WorldToScreenPoint(corners[edge[2]])
+                                local line = pool[i]
+                                if on1 and on2 and p1v.Z > 0 and p2v.Z > 0 then
+                                    local p1 = Vector2.new(p1v.X, p1v.Y)
+                                    local p2 = Vector2.new(p2v.X, p2v.Y)
+                                    local delta = p2 - p1
+                                    line.Visible = true
+                                    line.Size = UDim2.new(0, delta.Magnitude, 0, 1)
+                                    line.Position = UDim2.new(0, p1.X, 0, p1.Y)
+                                    line.Rotation = math.deg(math.atan2(delta.Y, delta.X))
+                                    line.AnchorPoint = Vector2.new(0, 0.5)
+                                    line.BackgroundColor3 = color
+                                    line.BorderSizePixel = 0
+                                    anyVisible = true
+                                else
+                                    line.Visible = false
+                                end
+                            end
+                            if not anyVisible then
+                                for _, l in ipairs(pool) do l.Visible = false end
+                            end
+                        else
+                            if data.Lines["Box3D"] then
+                                for _, l in ipairs(data.Lines["Box3D"]) do l.Visible = false end
+                            end
+                        end
+
+                        -- Skeleton
+                        if ESPSettings.ShowSkeleton then
+                            local connections = getSkeletonConnections(model)
+                            local pool = buildLinePool(data, #connections, "Skeleton")
+                            local anyVisible = false
+                            for i, conn in ipairs(connections) do
+                                local p1 = model:FindFirstChild(conn[1])
+                                local p2 = model:FindFirstChild(conn[2])
+                                local line = pool[i]
+                                if p1 and p2 then
+                                    local sp1, on1 = Camera:WorldToScreenPoint(p1.Position)
+                                    local sp2, on2 = Camera:WorldToScreenPoint(p2.Position)
+                                    if on1 and on2 and sp1.Z > 0 and sp2.Z > 0 then
+                                        local v1 = Vector2.new(sp1.X, sp1.Y)
+                                        local v2 = Vector2.new(sp2.X, sp2.Y)
+                                        local delta = v2 - v1
+                                        line.Visible = true
+                                        line.Size = UDim2.new(0, delta.Magnitude, 0, 1)
+                                        line.Position = UDim2.new(0, v1.X, 0, v1.Y)
+                                        line.Rotation = math.deg(math.atan2(delta.Y, delta.X))
+                                        line.AnchorPoint = Vector2.new(0, 0.5)
+                                        line.BackgroundColor3 = color
+                                        line.BorderSizePixel = 0
+                                        anyVisible = true
+                                    else
+                                        line.Visible = false
+                                    end
+                                else
+                                    line.Visible = false
+                                end
+                            end
+                            if not anyVisible then
+                                for _, l in ipairs(pool) do l.Visible = false end
+                            end
+                        else
+                            if data.Lines["Skeleton"] then
+                                for _, l in ipairs(data.Lines["Skeleton"]) do l.Visible = false end
+                            end
+                        end
+                    else
+                        removeESPEntity(hum)
+                    end
+                else
+                    removeESPEntity(hum)
+                end
+            end
+        end
+    end
+end)
+
+-- ============================================================
+-- SETTINGS TAB
+-- ============================================================
+SettingTab:Section({ Title = "Save Config", Icon = "save" })
+
+SettingTab:Button({
+    Title    = "Save Config Now",
+    Desc     = "Save all current settings immediately",
+    Callback = function()
+        Config:Save()
+        WindUI:Notify({Title = "Config Saved", Content = "All settings have been saved successfully.", Duration = 2, Icon = "save"})
+    end
+})
+
+SettingTab:Toggle({
+    Title    = "Auto Save Config",
+    Desc     = "Automatically save your settings at the specified interval",
+    Value    = settings.AutoSaveEnabled,
+    Callback = function(state)
+        settings.AutoSaveEnabled = state
+        Config:Set("AutoSaveEnabled", state)
+        Config:Save()
+        if state then
+            Config:AutoSave(settings.AutoSaveDelay)
+        else
+            Config:AutoSave(0)
+        end
+    end
+})
+
+SettingTab:Input({
+    Title       = "Auto Save Delay",
+    Desc        = "Interval in seconds for Auto Save (minimum 1)",
+    Value       = tostring(settings.AutoSaveDelay),
+    Placeholder = "Default: 15",
+    Callback    = function(text)
+        local num = tonumber(text)
+        if num and num >= 1 then
+            settings.AutoSaveDelay = num
+            Config:Set("AutoSaveDelay", num)
+            Config:Save()
+            if settings.AutoSaveEnabled then Config:AutoSave(num) end
+            WindUI:Notify({Title = "Updated", Content = "Auto Save Delay set to " .. num .. " seconds.", Duration = 2, Icon = "check"})
+        else
+            WindUI:Notify({Title = "Invalid Input", Content = "Please enter a number greater than or equal to 1.", Duration = 2, Icon = "alert-triangle"})
+        end
+    end
+})
+
+SettingTab:Section({ Title = "Server Status", Icon = "server" })
+
+SettingTab:Button({
+    Title    = "Serverhop",
+    Desc     = "Teleport to a different random server",
+    Callback = function()
+        local servers = {}
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet(
+                "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
+            ))
+        end)
+        if success and result and result.data then
+            for _, server in ipairs(result.data) do
+                if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                    table.insert(servers, server.id)
+                end
+            end
+        end
+        if #servers > 0 then
+            WindUI:Notify({Title = "Serverhop", Content = "Teleporting to a new server...", Duration = 2, Icon = "server"})
+            task.wait(1)
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], LocalPlayer)
+        else
+            WindUI:Notify({Title = "Serverhop Failed", Content = "No available servers found.", Duration = 3, Icon = "alert-triangle"})
+        end
+    end
+})
+
+SettingTab:Button({
+    Title    = "Rejoin",
+    Desc     = "Rejoin the current game server",
+    Callback = function()
+        WindUI:Notify({Title = "Rejoin", Content = "Rejoining the current server...", Duration = 2, Icon = "refresh-cw"})
+        task.wait(1)
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    end
+})
+
+-- ============================================================
+-- INFORMATION TAB
+-- ============================================================
+InfoTab:Section({ Title = "Latest Update", TextXAlignment = "Center", TextSize = 17 })
+InfoTab:Divider()
+InfoTab:Paragraph({
+    Title = "Update: " .. ver .. " | " .. version,
+    Desc  = [[
+Added: Tool Giver with Cut operation (not Copy)
+Added: No Tool Appear automatic restoration
+Added: God Mode with persistent health
+Added: Full Bright and No Fog (toggle bug fixed)
+Added: Humanoid ESP with Highlight, Name, Distance, Tracer, 3D Box, Skeleton
+Added: Player tab with Fly (PC + Mobile), Noclip, TP Walk, Infinite Jump, Jump Power, Walk Speed
+Added: Spectate and Freecam with Fix Camera
+Improved: Thread management for reliable toggle behavior
+Improved: Config auto save and persistence
+    ]],
+})
+InfoTab:Divider()
+
+-- Discord Integration
+do
+    if not ui then ui = {} end
+    if not ui.Creator then ui.Creator = {} end
+
+    ui.Creator.Request = function(requestData)
+        local success, result = pcall(function()
+            if HttpService.RequestAsync then
+                local response = HttpService:RequestAsync({
+                    Url = requestData.Url,
+                    Method = requestData.Method or "GET",
+                    Headers = requestData.Headers or {}
+                })
+                return {Body = response.Body, StatusCode = response.StatusCode, Success = response.Success}
+            else
+                local body = HttpService:GetAsync(requestData.Url)
+                return {Body = body, StatusCode = 200, Success = true}
+            end
+        end)
+        if success then return result else error("HTTP Request failed: " .. tostring(result)) end
+    end
+
+    local InviteCode = "jWNDPNMmyB"
+    local DiscordAPI = "https://discord.com/api/v10/invites/" .. InviteCode .. "?with_counts=true&with_expiration=true"
+
+    local function LoadDiscordInfo()
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(ui.Creator.Request({
+                Url = DiscordAPI,
+                Method = "GET",
+                Headers = {["User-Agent"] = "RobloxBot/1.0", ["Accept"] = "application/json"}
+            }).Body)
+        end)
+
+        if success and result and result.guild then
+            local DiscordInfo = InfoTab:Paragraph({
+                Title = result.guild.name,
+                Desc = ' <font color="#52525b">●</font> Members: ' .. tostring(result.approximate_member_count) ..
+                       '\n <font color="#16a34a">●</font> Online: ' .. tostring(result.approximate_presence_count),
+                Image = "https://cdn.discordapp.com/icons/" .. result.guild.id .. "/" .. result.guild.icon .. ".png?size=1024",
+                ImageSize = 42,
+            })
+            InfoTab:Button({
+                Title = "Update Discord Info",
+                Callback = function()
+                    local ok, r = pcall(function()
+                        return HttpService:JSONDecode(ui.Creator.Request({Url = DiscordAPI, Method = "GET"}).Body)
+                    end)
+                    if ok and r and r.guild then
+                        DiscordInfo:SetDesc(' <font color="#52525b">●</font> Members: ' .. tostring(r.approximate_member_count) ..
+                                           '\n <font color="#16a34a">●</font> Online: ' .. tostring(r.approximate_presence_count))
+                        WindUI:Notify({Title = "Updated", Content = "Discord info refreshed.", Duration = 2, Icon = "refresh-cw"})
+                    end
+                end
+            })
+            InfoTab:Button({
+                Title = "Copy Discord Invite",
+                Callback = function()
+                    setclipboard("https://discord.gg/" .. InviteCode)
+                    WindUI:Notify({Title = "Copied", Content = "Discord invite copied to clipboard.", Duration = 2, Icon = "clipboard-check"})
+                end
+            })
+        else
+            InfoTab:Paragraph({
+                Title = "Error Fetching Discord Info",
+                Desc = "Unable to load Discord information.",
+                Image = "triangle-alert",
+                ImageSize = 26,
+                Color = "Red"
+            })
+        end
+    end
+    pcall(LoadDiscordInfo)
+end
+
+InfoTab:Divider()
+InfoTab:Section({Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17})
+InfoTab:Divider()
+InfoTab:Paragraph({
+    Title = "Main Owner",
+    Desc = "@dyumraisgoodguy",
+    Image = "rbxassetid://119789418015420",
+    ImageSize = 30
+})
+InfoTab:Paragraph({
+    Title = "Social",
+    Desc = "Copy the social media link to follow us",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+    Buttons = {{
+        Icon = "copy",
+        Title = "Copy Link",
+        Callback = function() setclipboard("https://guns.lol/DYHUB") end
+    }}
+})
+InfoTab:Paragraph({
+    Title = "Discord",
+    Desc = "Join our Discord for more scripts and updates",
+    Image = "rbxassetid://104487529937663",
+    ImageSize = 30,
+    Buttons = {{
+        Icon = "copy",
+        Title = "Copy Link",
+        Callback = function() setclipboard("https://discord.gg/jWNDPNMmyB") end
+    }}
+})
+
+-- ============================================================
+-- RESTORE ENABLED FEATURES ON RELOAD
+-- ============================================================
+task.defer(function()
+    if settings.JumpPower and Humanoid then
+        pcall(function() Humanoid.JumpPower = settings.JumpPower end)
+    end
+    if settings.WalkSpeed and Humanoid then
+        pcall(function() Humanoid.WalkSpeed = settings.WalkSpeed end)
+    end
+
+    if settings.GodMode then
+        task.defer(function()
+            if Character and Humanoid then
+                pcall(function() Humanoid.Health = Humanoid.MaxHealth end)
+            end
+            godModeTM:Start(function()
+                local c = LocalPlayer.Character
+                if not c then return end
+                local h = c:FindFirstChild("Humanoid")
+                if h and h.Parent and h.Health > 0 and h.Health < h.MaxHealth then
+                    pcall(function() h.Health = h.MaxHealth end)
+                end
+            end)
+        end)
+    end
+
+    if settings.FullBright then
+        fullBrightTM:Start(function()
+            pcall(function()
+                Lighting.Brightness = 2
+                Lighting.ClockTime = 14
+                Lighting.FogEnd = 100000
+                Lighting.FogStart = 0
+                Lighting.GlobalShadows = false
+                Lighting.Ambient = Color3.new(1, 1, 1)
+                Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+            end)
+            task.wait(0.5)
+        end)
+    end
+
+    if settings.NoFog then
+        noFogTM:Start(function()
+            pcall(function()
+                Lighting.FogEnd = 100000
+                Lighting.FogStart = 0
+            end)
+            task.wait(0.5)
+        end)
+    end
+
+    if settings.Noclip then
+        noclipTM:Start(function()
+            local c = LocalPlayer.Character
+            if not c then return end
+            for _, part in pairs(c:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    pcall(function() part.CanCollide = false end)
+                end
+            end
+        end)
+    end
+
+    if settings.InfJump then
+        infJumpTM:Start(function()
+            if LocalPlayer.Character and Humanoid and Humanoid:GetState() == Enum.HumanoidStateType.Freefall then
+                pcall(function() Humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
+            end
+        end)
+    end
+
+    if settings.NoToolAppear then
+        noToolTM:Start(function()
+            if not selectedToolString or selectedToolString == "" then return end
+            local pn, tn = selectedToolString:match("^(.-) | (.*)$")
+            if not pn or not tn then return end
+            local mb = LocalPlayer:FindFirstChild("Backpack")
+            if not mb then return end
+            local has = false
+            for _, it in pairs(mb:GetChildren()) do
+                if it:IsA("Tool") and it.Name == tn then has = true break end
+            end
+            if not has and LocalPlayer.Character then
+                for _, it in pairs(LocalPlayer.Character:GetChildren()) do
+                    if it:IsA("Tool") and it.Name == tn then has = true break end
+                end
+            end
+            if not has then
+                local tp = Players:FindFirstChild(pn)
+                if tp then
+                    local st = nil
+                    local b = tp:FindFirstChild("Backpack")
+                    if b then st = b:FindFirstChild(tn) end
+                    if not st and tp.Character then st = tp.Character:FindFirstChild(tn) end
+                    if st and mb then
+                        pcall(function()
+                            local c = st:Clone(); c.Parent = mb; st.Parent = nil
+                        end)
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+print("[DYHUB] Universal Script " .. version .. " | " .. ver .. " loaded successfully.")
+print("[DYHUB] Config active | Auto saving every " .. tostring(settings.AutoSaveDelay) .. " seconds")
