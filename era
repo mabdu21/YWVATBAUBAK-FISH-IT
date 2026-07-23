@@ -1,5 +1,13 @@
+--[[
+    ============================================================
+    DYHUB - Universal Script
+    File: DYHUB_US
+    Version: v01.28 | BETA
+    ============================================================
+]]
+
 local version = "BETA"
-local ver     = "v01.27"
+local ver     = "v01.28"
 
 -- ============================================================
 -- WAIT FOR LOAD
@@ -165,16 +173,13 @@ local settings = {
     AutoSaveEnabled    = Config:Get("AutoSaveEnabled", true),
     AutoSaveDelay      = Config:Get("AutoSaveDelay", 15),
 
-    -- Main (Unity)
     GodMode            = Config:Get("GodMode", false),
     FullBright         = Config:Get("FullBright", false),
     NoFog              = Config:Get("NoFog", false),
 
-    -- Tool Giver
     NoToolAppear       = Config:Get("NoToolAppear", false),
     SelectedTool       = Config:Get("SelectedTool", ""),
 
-    -- Player
     JumpPower          = Config:Get("JumpPower", 50),
     WalkSpeed          = Config:Get("WalkSpeed", 16),
     TPWalk             = Config:Get("TPWalk", false),
@@ -188,7 +193,6 @@ local settings = {
     Freecam            = Config:Get("Freecam", false),
 }
 
--- ESP Settings
 local ESPSettings = {
     Enabled        = Config:Get("ESPEnabled", true),
     Range          = Config:Get("ESPRange", 500),
@@ -210,10 +214,8 @@ local ESPSettings = {
 -- ============================================================
 local InfoTab     = Window:Tab({ Title = "Information", Icon = "info" })
 Window:Divider()
-local EspTab      = Window:Tab({ Title = "ESP",         Icon = "eye" })
-Window:Divider()
 local MainTab     = Window:Tab({ Title = "Main",        Icon = "rocket" })
-Window:Divider()
+local EspTab      = Window:Tab({ Title = "ESP",         Icon = "eye" })
 local PlayerTab   = Window:Tab({ Title = "Player",      Icon = "user" })
 Window:Divider()
 local SettingTab  = Window:Tab({ Title = "Settings",    Icon = "settings" })
@@ -221,7 +223,7 @@ local SettingTab  = Window:Tab({ Title = "Settings",    Icon = "settings" })
 Window:SelectTab(1)
 
 -- ============================================================
--- THREAD MANAGER (Fix for toggles not stopping)
+-- THREAD MANAGER
 -- ============================================================
 local ThreadManager = {}
 ThreadManager.__index = ThreadManager
@@ -261,7 +263,7 @@ function ThreadManager:IsRunning()
 end
 
 -- ============================================================
--- THREADS FOR TOGGLES
+-- THREADS
 -- ============================================================
 local godModeTM      = ThreadManager.new()
 local fullBrightTM   = ThreadManager.new()
@@ -276,12 +278,13 @@ local spectatorTM    = ThreadManager.new()
 local freecamTM      = ThreadManager.new()
 
 -- ============================================================
--- MAIN TAB: TOOL GIVER
+-- MAIN TAB: TOOL GIVER (REWRITTEN - TRUE CUT / MOVE)
 -- ============================================================
 MainTab:Section({ Title = "Tool Giver", Icon = "package" })
 
 local selectedToolString = settings.SelectedTool
 
+-- ฟังก์ชันสแกนหา Tool ทั้งหมด
 local function refreshToolList()
     local tools = {}
     for _, player in pairs(Players:GetPlayers()) do
@@ -309,7 +312,7 @@ end
 
 MainTab:Paragraph({
     Title = "Tool Giver",
-    Desc  = "Select a Tool from another player's Backpack, then use Give Tool to CUT and transfer it to your inventory. This is not a copy operation.",
+    Desc  = "Select a Tool from another player's inventory, then press Give Tool to CUT and move it into your own Backpack. The original item is removed from the source player to prevent duplication.",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
 })
@@ -328,6 +331,17 @@ local ToolDropdown = MainTab:Dropdown({
     end
 })
 
+-- ============================================================
+-- CORE TOOL GIVER FUNCTION (TRUE CUT / MOVE)
+-- ============================================================
+-- การทำงาน:
+-- 1. หาต้นฉบับจาก Backpack/Character ของเป้าหมาย
+-- 2. ลบของเดิมของเราที่ชื่อเหมือนกันทิ้ง (กัน Visual)
+-- 3. Clone ต้นฉบับมาเข้า Backpack เรา
+-- 4. ทำลายต้นฉบับทันที (CUT - ไม่เหลือต้นฉบับ)
+-- หมายเหตุ: Roblox Client ไม่สามารถย้าย Instance ข้าม Player โดยตรง
+-- การ Clone เป็นวิธีเดียวที่ทำได้ แต่เราทำลายต้นฉบับเสมอ = CUT จริง
+-- ============================================================
 local function giveTool()
     if not selectedToolString or selectedToolString == "" then
         WindUI:Notify({Title = "Error", Content = "Please select a Tool first.", Duration = 2, Icon = "alert-triangle"})
@@ -346,11 +360,23 @@ local function giveTool()
         return
     end
 
+    -- ค้นหาต้นฉบับจาก Backpack ก่อน แล้วจึง Character
     local sourceTool = nil
+    local sourceLocation = nil
     local backpack = targetPlayer:FindFirstChild("Backpack")
-    if backpack then sourceTool = backpack:FindFirstChild(toolName) end
+    if backpack then
+        local found = backpack:FindFirstChild(toolName)
+        if found and found:IsA("Tool") then
+            sourceTool = found
+            sourceLocation = "Backpack"
+        end
+    end
     if not sourceTool and targetPlayer.Character then
-        sourceTool = targetPlayer.Character:FindFirstChild(toolName)
+        local found = targetPlayer.Character:FindFirstChild(toolName)
+        if found and found:IsA("Tool") then
+            sourceTool = found
+            sourceLocation = "Character"
+        end
     end
 
     if not sourceTool then
@@ -364,28 +390,48 @@ local function giveTool()
         return
     end
 
+    -- ===== ขั้นตอนที่ 1: ลบของเก่าของเราที่ชื่อเหมือนกัน =====
+    -- ป้องกัน Visual Duplication (กันไม่ให้มีของซ้ำ 2 อัน)
     for _, item in pairs(myBackpack:GetChildren()) do
         if item:IsA("Tool") and item.Name == toolName then
             pcall(function() item:Destroy() end)
         end
     end
+    if LocalPlayer.Character then
+        for _, item in pairs(LocalPlayer.Character:GetChildren()) do
+            if item:IsA("Tool") and item.Name == toolName then
+                pcall(function() item:Destroy() end)
+            end
+        end
+    end
 
-    local ok, clonedTool = pcall(function()
-        local c = sourceTool:Clone()
-        c.Parent = myBackpack
-        return c
+    -- ===== ขั้นตอนที่ 2: CUT - ทำลายต้นฉบับก่อน =====
+    -- ทำลายต้นฉบับทันที เพื่อให้แน่ใจว่าไม่มีต้นฉบับเหลือ (CUT จริง ไม่ใช่ COPY)
+    local sourceClone = nil
+    pcall(function()
+        -- เก็บ Reference ของ properties ก่อนทำลาย
+        sourceClone = sourceTool:Clone()
+        sourceTool:Destroy()
     end)
 
-    if not ok or not clonedTool then
-        WindUI:Notify({Title = "Error", Content = "Failed to transfer Tool.", Duration = 2, Icon = "alert-triangle"})
+    if not sourceClone then
+        WindUI:Notify({Title = "Error", Content = "Failed to retrieve the Tool.", Duration = 2, Icon = "alert-triangle"})
         return
     end
 
-    pcall(function() sourceTool.Parent = nil end)
+    -- ===== ขั้นตอนที่ 3: ย้าย Clone เข้า Backpack ของเรา =====
+    local success, err = pcall(function()
+        sourceClone.Parent = myBackpack
+    end)
+
+    if not success or not sourceClone or not sourceClone.Parent then
+        WindUI:Notify({Title = "Error", Content = "Failed to transfer the Tool to your inventory.", Duration = 2, Icon = "alert-triangle"})
+        return
+    end
 
     WindUI:Notify({
         Title = "Success",
-        Content = "Acquired " .. toolName .. " from " .. playerName .. " (Cut).",
+        Content = "Acquired " .. toolName .. " from " .. playerName .. " (Cut from " .. sourceLocation .. ").",
         Duration = 3,
         Icon = "check"
     })
@@ -393,7 +439,7 @@ end
 
 MainTab:Button({
     Title    = "Refresh Tool List",
-    Desc     = "Scan for available Tools from all players",
+    Desc     = "Scan for all available Tools from other players",
     Callback = function()
         local newList = refreshToolList()
         pcall(function() ToolDropdown:Refresh(newList) end)
@@ -403,13 +449,14 @@ MainTab:Button({
 
 MainTab:Button({
     Title    = "Give Tool",
-    Desc     = "Transfer the selected Tool to your inventory (Cut operation)",
+    Desc     = "Cut and transfer the selected Tool from the source player to your Backpack",
     Callback = giveTool
 })
 
+-- No Tool Appear (แก้ไขให้ทำงานเหมือน CUT เดียวกัน)
 MainTab:Toggle({
     Title    = "No Tool Appear",
-    Desc     = "Automatically restore the selected Tool if it is lost (e.g. after death)",
+    Desc     = "Automatically restore the selected Tool if it disappears (e.g. after death or drop)",
     Value    = settings.NoToolAppear,
     Callback = function(state)
         settings.NoToolAppear = state
@@ -418,40 +465,45 @@ MainTab:Toggle({
         if state then
             noToolTM:Start(function()
                 if not selectedToolString or selectedToolString == "" then return end
-                local playerName, toolName = selectedToolString:match("^(.-) | (.*)$")
-                if not playerName or not toolName then return end
+                local pn, tn = selectedToolString:match("^(.-) | (.*)$")
+                if not pn or not tn then return end
 
-                local myBackpack = LocalPlayer:FindFirstChild("Backpack")
-                if not myBackpack then return end
+                local mb = LocalPlayer:FindFirstChild("Backpack")
+                if not mb then return end
 
-                local hasTool = false
-                for _, item in pairs(myBackpack:GetChildren()) do
-                    if item:IsA("Tool") and item.Name == toolName then hasTool = true break end
+                local has = false
+                for _, it in pairs(mb:GetChildren()) do
+                    if it:IsA("Tool") and it.Name == tn then has = true break end
                 end
-                if not hasTool and LocalPlayer.Character then
-                    for _, item in pairs(LocalPlayer.Character:GetChildren()) do
-                        if item:IsA("Tool") and item.Name == toolName then hasTool = true break end
+                if not has and LocalPlayer.Character then
+                    for _, it in pairs(LocalPlayer.Character:GetChildren()) do
+                        if it:IsA("Tool") and it.Name == tn then has = true break end
                     end
                 end
 
-                if not hasTool then
-                    local targetPlayer = Players:FindFirstChild(playerName)
-                    if targetPlayer then
-                        local sourceTool = nil
-                        local bp = targetPlayer:FindFirstChild("Backpack")
-                        if bp then sourceTool = bp:FindFirstChild(toolName) end
-                        if not sourceTool and targetPlayer.Character then
-                            sourceTool = targetPlayer.Character:FindFirstChild(toolName)
+                -- ถ้าเราไม่มี แต่ผู้เล่นต้นทางยังมี -> CUT มาใหม่
+                if not has then
+                    local tp = Players:FindFirstChild(pn)
+                    if tp then
+                        local st = nil
+                        local b = tp:FindFirstChild("Backpack")
+                        if b then
+                            local found = b:FindFirstChild(tn)
+                            if found and found:IsA("Tool") then st = found end
                         end
-                        if sourceTool and myBackpack then
+                        if not st and tp.Character then
+                            local found = tp.Character:FindFirstChild(tn)
+                            if found and found:IsA("Tool") then st = found end
+                        end
+                        if st and mb then
                             pcall(function()
-                                local cloned = sourceTool:Clone()
-                                cloned.Parent = myBackpack
-                                sourceTool.Parent = nil
+                                local cloned = st:Clone()
+                                st:Destroy()
+                                cloned.Parent = mb
                             end)
                             WindUI:Notify({
                                 Title = "Tool Restored",
-                                Content = toolName .. " has been restored to your inventory.",
+                                Content = tn .. " has been restored to your inventory.",
                                 Duration = 2,
                                 Icon = "shield"
                             })
@@ -466,11 +518,10 @@ MainTab:Toggle({
 })
 
 -- ============================================================
--- MAIN TAB: UNITY (God Mode, Full Bright, No Fog)
+-- MAIN TAB: UNITY
 -- ============================================================
 MainTab:Section({ Title = "Unity", Icon = "shield" })
 
--- God Mode
 MainTab:Toggle({
     Title    = "God Mode",
     Desc     = "Keeps your health at maximum at all times",
@@ -494,7 +545,6 @@ MainTab:Toggle({
     end
 })
 
--- Full Bright
 MainTab:Toggle({
     Title    = "Full Bright",
     Desc     = "Removes darkness, lighting is always at maximum brightness",
@@ -506,13 +556,13 @@ MainTab:Toggle({
         if state then
             fullBrightTM:Start(function()
                 pcall(function()
-                    Lighting.Brightness       = 2
-                    Lighting.ClockTime        = 14
-                    Lighting.FogEnd           = 100000
-                    Lighting.FogStart         = 0
-                    Lighting.GlobalShadows    = false
-                    Lighting.Ambient          = Color3.new(1, 1, 1)
-                    Lighting.OutdoorAmbient   = Color3.new(1, 1, 1)
+                    Lighting.Brightness     = 2
+                    Lighting.ClockTime      = 14
+                    Lighting.FogEnd         = 100000
+                    Lighting.FogStart       = 0
+                    Lighting.GlobalShadows  = false
+                    Lighting.Ambient        = Color3.new(1, 1, 1)
+                    Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
                 end)
                 task.wait(0.5)
             end)
@@ -522,7 +572,6 @@ MainTab:Toggle({
     end
 })
 
--- No Fog
 MainTab:Toggle({
     Title    = "No Fog",
     Desc     = "Removes all fog from the environment",
@@ -548,8 +597,6 @@ MainTab:Toggle({
 -- ============================================================
 -- PLAYER TAB
 -- ============================================================
-
--- ===== Visual Ability =====
 PlayerTab:Section({ Title = "Visual Ability", Icon = "zap" })
 
 PlayerTab:Slider({
@@ -661,71 +708,6 @@ PlayerTab:Toggle({
     end
 })
 
--- Fly
-local flyBV     = nil
-local flyBG     = nil
-local flyMobileGui = nil
-
-local function createMobileFlyGui()
-    if flyMobileGui then return end
-    pcall(function()
-        flyMobileGui = Instance.new("ScreenGui")
-        flyMobileGui.Name = "DYHUB_FlyMobile"
-        flyMobileGui.ResetOnSpawn = false
-        flyMobileGui.IgnoreGuiInset = true
-        flyMobileGui.DisplayOrder = 999
-        flyMobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-
-        local upBtn = Instance.new("TextButton")
-        upBtn.Name = "FlyUp"
-        upBtn.Size = UDim2.new(0, 70, 0, 70)
-        upBtn.Position = UDim2.new(0, 20, 1, -240)
-        upBtn.AnchorPoint = Vector2.new(0, 0)
-        upBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-        upBtn.BackgroundTransparency = 0.3
-        upBtn.Text = "UP"
-        upBtn.TextColor3 = Color3.new(1, 1, 1)
-        upBtn.TextSize = 18
-        upBtn.Font = Enum.Font.GothamBold
-        upBtn.Parent = flyMobileGui
-        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(1, 0); c.Parent = upBtn
-        local s = Instance.new("UIStroke"); s.Thickness = 2; s.Color = Color3.new(1, 1, 1); s.Transparency = 0.5; s.Parent = upBtn
-
-        local downBtn = Instance.new("TextButton")
-        downBtn.Name = "FlyDown"
-        downBtn.Size = UDim2.new(0, 70, 0, 70)
-        downBtn.Position = UDim2.new(0, 20, 1, -160)
-        downBtn.AnchorPoint = Vector2.new(0, 0)
-        downBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-        downBtn.BackgroundTransparency = 0.3
-        downBtn.Text = "DOWN"
-        downBtn.TextColor3 = Color3.new(1, 1, 1)
-        downBtn.TextSize = 14
-        downBtn.Font = Enum.Font.GothamBold
-        downBtn.Parent = flyMobileGui
-        local c2 = Instance.new("UICorner"); c2.CornerRadius = UDim.new(1, 0); c2.Parent = downBtn
-        local s2 = Instance.new("UIStroke"); s2.Thickness = 2; s2.Color = Color3.new(1, 1, 1); s2.Transparency = 0.5; s2.Parent = downBtn
-
-        upBtn.MouseButton1Down:Connect(function() _G.DyFlyUp = true end)
-        upBtn.MouseButton1Up:Connect(function() _G.DyFlyUp = false end)
-        upBtn.TouchLongPress:Connect(function() _G.DyFlyUp = true end)
-        upBtn.TouchEnded:Connect(function() _G.DyFlyUp = false end)
-        downBtn.MouseButton1Down:Connect(function() _G.DyFlyDown = true end)
-        downBtn.MouseButton1Up:Connect(function() _G.DyFlyDown = false end)
-        downBtn.TouchLongPress:Connect(function() _G.DyFlyDown = true end)
-        downBtn.TouchEnded:Connect(function() _G.DyFlyDown = false end)
-    end)
-end
-
-local function destroyMobileFlyGui()
-    if flyMobileGui then
-        pcall(function() flyMobileGui:Destroy() end)
-        flyMobileGui = nil
-    end
-    _G.DyFlyUp = false
-    _G.DyFlyDown = false
-end
-
 PlayerTab:Toggle({
     Title    = "Fly",
     Desc     = "Fly freely in the air. Works on both PC and Mobile",
@@ -741,40 +723,28 @@ PlayerTab:Toggle({
 
         if state then
             if not hrp or not hum then return end
-            if isMobile then createMobileFlyGui() end
-
-            flyBV = Instance.new("BodyVelocity")
-            flyBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            flyBV.Velocity = Vector3.new(0, 0, 0)
-            flyBV.Parent = hrp
-
-            flyBG = Instance.new("BodyGyro")
-            flyBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-            flyBG.D = 100
-            flyBG.P = 10000
-            flyBG.Parent = hrp
-
-            pcall(function() hum.PlatformStand = true end)
+            if isMobile then
+                WindUI:Notify({Title = "Fly", Content = "Use UP and DOWN buttons on screen to control altitude.", Duration = 4, Icon = "info"})
+            end
 
             flyTM:Start(function()
                 local c = LocalPlayer.Character
                 if not c then return end
                 local h = c:FindFirstChild("HumanoidRootPart")
                 local hm = c:FindFirstChild("Humanoid")
-                if not h or not hm or hm.Health <= 0 then
-                    if flyBV then pcall(function() flyBV:Destroy() end) end
-                    if flyBG then pcall(function() flyBG:Destroy() end) end
-                    flyBV = nil; flyBG = nil
-                    return
-                end
+                if not h or not hm or hm.Health <= 0 then return end
 
-                if not flyBV or not flyBV.Parent then
+                local flyBV = h:FindFirstChild("DY_FlyBV")
+                if not flyBV then
                     flyBV = Instance.new("BodyVelocity")
+                    flyBV.Name = "DY_FlyBV"
                     flyBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
                     flyBV.Parent = h
                 end
-                if not flyBG or not flyBG.Parent then
+                local flyBG = h:FindFirstChild("DY_FlyBG")
+                if not flyBG then
                     flyBG = Instance.new("BodyGyro")
+                    flyBG.Name = "DY_FlyBG"
                     flyBG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
                     flyBG.D = 100
                     flyBG.P = 10000
@@ -785,24 +755,12 @@ PlayerTab:Toggle({
                 local camCF = Camera.CFrame
                 local moveDir = Vector3.new(0, 0, 0)
 
-                if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-                    moveDir = moveDir + camCF.LookVector
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-                    moveDir = moveDir - camCF.LookVector
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-                    moveDir = moveDir - camCF.RightVector
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-                    moveDir = moveDir + camCF.RightVector
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.Space) or _G.DyFlyUp then
-                    moveDir = moveDir + Vector3.new(0, 1, 0)
-                end
-                if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or _G.DyFlyDown then
-                    moveDir = moveDir - Vector3.new(0, 1, 0)
-                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camCF.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - camCF.LookVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - camCF.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + camCF.RightVector end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, 1, 0) end
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0, 1, 0) end
 
                 pcall(function()
                     flyBV.Velocity = moveDir * speed
@@ -811,11 +769,14 @@ PlayerTab:Toggle({
             end)
         else
             flyTM:Stop()
-            if flyBV then pcall(function() flyBV:Destroy() end) end
-            if flyBG then pcall(function() flyBG:Destroy() end) end
-            flyBV = nil; flyBG = nil
+            if hrp then
+                for _, obj in pairs(hrp:GetChildren()) do
+                    if obj.Name == "DY_FlyBV" or obj.Name == "DY_FlyBG" then
+                        pcall(function() obj:Destroy() end)
+                    end
+                end
+            end
             if hum then pcall(function() hum.PlatformStand = false end) end
-            if isMobile then destroyMobileFlyGui() end
         end
     end
 })
@@ -832,16 +793,13 @@ PlayerTab:Slider({
     end
 })
 
--- ===== Visual Player =====
 PlayerTab:Section({ Title = "Visual Player", Icon = "users" })
 
 local playerList = {}
 local function refreshPlayerList()
     playerList = {}
     for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then
-            table.insert(playerList, p.Name)
-        end
+        if p ~= LocalPlayer then table.insert(playerList, p.Name) end
     end
     return playerList
 end
@@ -892,7 +850,6 @@ PlayerTab:Button({
     end
 })
 
--- Spectate
 local function fixCamera()
     spectatorTM:Stop()
     freecamTM:Stop()
@@ -913,7 +870,7 @@ end
 
 PlayerTab:Toggle({
     Title    = "Spectate Player",
-    Desc     = "Spectate the selected player (camera follows them)",
+    Desc     = "Camera follows the selected player",
     Value    = settings.Spectate,
     Callback = function(state)
         settings.Spectate = state
@@ -924,7 +881,6 @@ PlayerTab:Toggle({
                 WindUI:Notify({Title = "Error", Content = "Please select a player first.", Duration = 2, Icon = "alert-triangle"})
                 settings.Spectate = false
                 Config:Set("Spectate", false)
-                Config:Save()
                 return
             end
             spectatorTM:Start(function()
@@ -932,9 +888,7 @@ PlayerTab:Toggle({
                 local target = Players:FindFirstChild(settings.SelectedPlayer)
                 if target and target.Character then
                     local hum = target.Character:FindFirstChild("Humanoid")
-                    if hum then
-                        pcall(function() Camera.CameraSubject = hum end)
-                    end
+                    if hum then pcall(function() Camera.CameraSubject = hum end) end
                 end
             end)
         else
@@ -944,10 +898,8 @@ PlayerTab:Toggle({
     end
 })
 
--- ===== Visual Misc =====
 PlayerTab:Section({ Title = "Visual Misc", Icon = "camera" })
 
--- Freecam
 local freecamCFrame = CFrame.new()
 
 PlayerTab:Toggle({
@@ -961,13 +913,11 @@ PlayerTab:Toggle({
         if state then
             pcall(function() freecamCFrame = Camera.CFrame end)
             pcall(function() Camera.CameraType = Enum.CameraType.Scriptable end)
-
             freecamTM:Start(function()
                 if not settings.Freecam then return end
                 local moveDir = Vector3.new(0, 0, 0)
                 local speed = 1.5
                 if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then speed = 4 end
-
                 if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + Camera.CFrame.LookVector end
                 if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - Camera.CFrame.LookVector end
                 if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - Camera.CFrame.RightVector end
@@ -992,10 +942,10 @@ PlayerTab:Toggle({
 
 PlayerTab:Button({
     Title    = "Fix Camera",
-    Desc     = "Reset the camera to your character (stops Spectate and Freecam)",
+    Desc     = "Reset the camera to your character",
     Callback = function()
         fixCamera()
-        WindUI:Notify({Title = "Camera Reset", Content = "Camera has been reset to your character.", Duration = 2, Icon = "check"})
+        WindUI:Notify({Title = "Camera Reset", Content = "Camera has been reset.", Duration = 2, Icon = "check"})
     end
 })
 
@@ -1011,132 +961,24 @@ EspTab:Paragraph({
     ImageSize = 30,
 })
 
-EspTab:Toggle({
-    Title    = "ESP Yourself",
-    Desc     = "Show ESP on your own character",
-    Value    = ESPSettings.ShowYourself,
-    Callback = function(state)
-        ESPSettings.ShowYourself = state
-        Config:Set("ESPShowYourself", state)
-        Config:Save()
-    end
-})
-
-EspTab:Toggle({
-    Title    = "ESP Monster",
-    Desc     = "Show ESP on monsters (Humanoid with WalkSpeed greater than 16, red color)",
-    Value    = ESPSettings.ShowMonster,
-    Callback = function(state)
-        ESPSettings.ShowMonster = state
-        Config:Set("ESPShowMonster", state)
-        Config:Save()
-    end
-})
-
-EspTab:Toggle({
-    Title    = "ESP NPC",
-    Desc     = "Show ESP on NPCs (Humanoid that is not a player, yellow color)",
-    Value    = ESPSettings.ShowNPC,
-    Callback = function(state)
-        ESPSettings.ShowNPC = state
-        Config:Set("ESPShowNPC", state)
-        Config:Save()
-    end
-})
-
-EspTab:Toggle({
-    Title    = "ESP Player",
-    Desc     = "Show ESP on other players (colored by their team, blue if no team)",
-    Value    = ESPSettings.ShowPlayer,
-    Callback = function(state)
-        ESPSettings.ShowPlayer = state
-        Config:Set("ESPShowPlayer", state)
-        Config:Save()
-    end
-})
+EspTab:Toggle({Title = "ESP Yourself", Desc = "Show ESP on your own character", Value = ESPSettings.ShowYourself, Callback = function(s) ESPSettings.ShowYourself = s; Config:Set("ESPShowYourself", s); Config:Save() end})
+EspTab:Toggle({Title = "ESP Monster", Desc = "Show ESP on monsters (red)", Value = ESPSettings.ShowMonster, Callback = function(s) ESPSettings.ShowMonster = s; Config:Set("ESPShowMonster", s); Config:Save() end})
+EspTab:Toggle({Title = "ESP NPC", Desc = "Show ESP on NPCs (yellow)", Value = ESPSettings.ShowNPC, Callback = function(s) ESPSettings.ShowNPC = s; Config:Set("ESPShowNPC", s); Config:Save() end})
+EspTab:Toggle({Title = "ESP Player", Desc = "Show ESP on players (colored by team)", Value = ESPSettings.ShowPlayer, Callback = function(s) ESPSettings.ShowPlayer = s; Config:Set("ESPShowPlayer", s); Config:Save() end})
 
 EspTab:Section({ Title = "ESP Setting", Icon = "sliders" })
 
-EspTab:Toggle({
-    Title    = "ESP Enabled",
-    Desc     = "Master toggle for the entire ESP system",
-    Value    = ESPSettings.Enabled,
-    Callback = function(state)
-        ESPSettings.Enabled = state
-        Config:Set("ESPEnabled", state)
-        Config:Save()
-    end
-})
-
-EspTab:Toggle({
-    Title    = "ESP Name",
-    Desc     = "Display the entity's name above their head",
-    Value    = ESPSettings.ShowName,
-    Callback = function(state)
-        ESPSettings.ShowName = state
-        Config:Set("ESPShowName", state)
-        Config:Save()
-    end
-})
-
-EspTab:Toggle({
-    Title    = "ESP Distance",
-    Desc     = "Display the distance to the entity in studs",
-    Value    = ESPSettings.ShowDistance,
-    Callback = function(state)
-        ESPSettings.ShowDistance = state
-        Config:Set("ESPShowDistance", state)
-        Config:Save()
-    end
-})
-
-EspTab:Toggle({
-    Title    = "ESP Highlight",
-    Desc     = "Apply a colored highlight outline to the entity",
-    Value    = ESPSettings.ShowHighlight,
-    Callback = function(state)
-        ESPSettings.ShowHighlight = state
-        Config:Set("ESPShowHighlight", state)
-        Config:Save()
-    end
-})
-
-EspTab:Toggle({
-    Title    = "ESP Tracer",
-    Desc     = "Draw a line from the bottom of the screen to the entity",
-    Value    = ESPSettings.ShowTracer,
-    Callback = function(state)
-        ESPSettings.ShowTracer = state
-        Config:Set("ESPShowTracer", state)
-        Config:Save()
-    end
-})
-
-EspTab:Toggle({
-    Title    = "ESP 3D Box",
-    Desc     = "Draw a 3D bounding box around the entity",
-    Value    = ESPSettings.ShowBox3D,
-    Callback = function(state)
-        ESPSettings.ShowBox3D = state
-        Config:Set("ESPShowBox3D", state)
-        Config:Save()
-    end
-})
-
-EspTab:Toggle({
-    Title    = "ESP Skeleton",
-    Desc     = "Draw lines connecting the entity's bones",
-    Value    = ESPSettings.ShowSkeleton,
-    Callback = function(state)
-        ESPSettings.ShowSkeleton = state
-        Config:Set("ESPShowSkeleton", state)
-        Config:Save()
-    end
-})
+EspTab:Toggle({Title = "ESP Enabled", Desc = "Master toggle for ESP", Value = ESPSettings.Enabled, Callback = function(s) ESPSettings.Enabled = s; Config:Set("ESPEnabled", s); Config:Save() end})
+EspTab:Toggle({Title = "ESP Name", Desc = "Display name and HP", Value = ESPSettings.ShowName, Callback = function(s) ESPSettings.ShowName = s; Config:Set("ESPShowName", s); Config:Save() end})
+EspTab:Toggle({Title = "ESP Distance", Desc = "Display distance in studs", Value = ESPSettings.ShowDistance, Callback = function(s) ESPSettings.ShowDistance = s; Config:Set("ESPShowDistance", s); Config:Save() end})
+EspTab:Toggle({Title = "ESP Highlight", Desc = "Outline the entity", Value = ESPSettings.ShowHighlight, Callback = function(s) ESPSettings.ShowHighlight = s; Config:Set("ESPShowHighlight", s); Config:Save() end})
+EspTab:Toggle({Title = "ESP Tracer", Desc = "Draw line to entity", Value = ESPSettings.ShowTracer, Callback = function(s) ESPSettings.ShowTracer = s; Config:Set("ESPShowTracer", s); Config:Save() end})
+EspTab:Toggle({Title = "ESP 3D Box", Desc = "Draw 3D bounding box", Value = ESPSettings.ShowBox3D, Callback = function(s) ESPSettings.ShowBox3D = s; Config:Set("ESPShowBox3D", s); Config:Save() end})
+EspTab:Toggle({Title = "ESP Skeleton", Desc = "Draw bone lines", Value = ESPSettings.ShowSkeleton, Callback = function(s) ESPSettings.ShowSkeleton = s; Config:Set("ESPShowSkeleton", s); Config:Save() end})
 
 EspTab:Slider({
     Title    = "ESP Range",
-    Desc     = "Maximum distance (in studs) at which ESP is rendered",
+    Desc     = "Maximum distance in studs",
     Value    = { Min = 50, Max = 3000, Default = ESPSettings.Range },
     Step     = 50,
     Callback = function(v)
@@ -1147,23 +989,20 @@ EspTab:Slider({
 })
 
 -- ============================================================
--- ESP SYSTEM (Core Logic)
+-- ESP SYSTEM
 -- ============================================================
 local ESPFolder = nil
-local ESPGUI    = nil
-
 pcall(function()
-    ESPGUI = Instance.new("ScreenGui")
-    ESPGUI.Name = "DYHUB_ESP"
-    ESPGUI.ResetOnSpawn = false
-    ESPGUI.IgnoreGuiInset = true
-    ESPGUI.DisplayOrder = 100
-    local okCore = pcall(function() return game:GetService("CoreGui") end)
-    ESPGUI.Parent = (okCore and game:GetService("CoreGui")) or LocalPlayer:WaitForChild("PlayerGui")
-
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "DYHUB_ESP"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.DisplayOrder = 100
+    local ok = pcall(function() return game:GetService("CoreGui") end)
+    gui.Parent = (ok and game:GetService("CoreGui")) or LocalPlayer:WaitForChild("PlayerGui")
     ESPFolder = Instance.new("Folder")
     ESPFolder.Name = "ESP_Entities"
-    ESPFolder.Parent = ESPGUI
+    ESPFolder.Parent = gui
 end)
 
 local ESPTracked = {}
@@ -1186,55 +1025,35 @@ local function getEntityType(model)
 end
 
 local function getEntityColor(typ, plr)
-    if typ == "Player" and plr and plr.Team and plr.Neutral == false then
+    if typ == "Player" and plr and plr.Team and not plr.Neutral then
         return plr.TeamColor.Color
     end
-    if typ == "Monster" then
-        return Color3.fromRGB(255, 60, 60)
-    end
-    if typ == "NPC" then
-        return Color3.fromRGB(255, 220, 60)
-    end
+    if typ == "Monster" then return Color3.fromRGB(255, 60, 60) end
+    if typ == "NPC" then return Color3.fromRGB(255, 220, 60) end
     return Color3.fromRGB(70, 150, 255)
 end
 
 local function getSkeletonConnections(model)
     if model:FindFirstChild("UpperTorso") then
         return {
-            {"Head", "UpperTorso"},
-            {"UpperTorso", "LowerTorso"},
-            {"UpperTorso", "LeftUpperArm"},
-            {"LeftUpperArm", "LeftLowerArm"},
-            {"LeftLowerArm", "LeftHand"},
-            {"UpperTorso", "RightUpperArm"},
-            {"RightUpperArm", "RightLowerArm"},
-            {"RightLowerArm", "RightHand"},
-            {"LowerTorso", "LeftUpperLeg"},
-            {"LeftUpperLeg", "LeftLowerLeg"},
-            {"LeftLowerLeg", "LeftFoot"},
-            {"LowerTorso", "RightUpperLeg"},
-            {"RightUpperLeg", "RightLowerLeg"},
-            {"RightLowerLeg", "RightFoot"},
+            {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
+            {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
+            {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
+            {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
+            {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"},
         }
     end
-    return {
-        {"Head", "Torso"},
-        {"Torso", "Left Arm"},
-        {"Torso", "Right Arm"},
-        {"Torso", "Left Leg"},
-        {"Torso", "Right Leg"},
-    }
+    return {{"Head", "Torso"}, {"Torso", "Left Arm"}, {"Torso", "Right Arm"}, {"Torso", "Left Leg"}, {"Torso", "Right Leg"}}
 end
 
 local function getBoundingBox(model)
-    local success, cf, size = pcall(function() return model:GetBoundingBox() end)
-    if success and cf and size then return cf, size end
+    local ok, cf, size = pcall(function() return model:GetBoundingBox() end)
+    if ok and cf and size then return cf, size end
     return CFrame.new(model:GetModelCFrame().Position), Vector3.new(4, 6, 4)
 end
 
 local function createESPEntity(hum)
     if ESPData[hum] or not ESPFolder then return end
-
     local folder = Instance.new("Folder")
     folder.Name = "ESP_" .. hum:GetInstanceId()
     folder.Parent = ESPFolder
@@ -1249,41 +1068,12 @@ local function removeESPEntity(hum)
 end
 
 local function clearAllESP()
-    for hum in pairs(ESPData) do
-        removeESPEntity(hum)
-    end
+    for hum in pairs(ESPData) do removeESPEntity(hum) end
 end
 
-local function clearAllVisuals(data)
-    if not data then return end
-    for _, child in pairs(data.Folder:GetChildren()) do
-        pcall(function() child:Destroy() end)
-    end
-    data.Highlight = nil
-    data.Label     = nil
-    data.Lines     = {}
-end
-
-local function drawLine(parent, p1, p2, color, thickness)
-    local delta = p2 - p1
-    local length = delta.Magnitude
-    if length < 1 then return nil end
-    local angle = math.deg(math.atan2(delta.Y, delta.X))
-
-    local line = Instance.new("Frame")
-    line.Size = UDim2.new(0, length, 0, thickness or 1)
-    line.Position = UDim2.new(0, p1.X, 0, p1.Y)
-    line.Rotation = angle
-    line.AnchorPoint = Vector2.new(0, 0.5)
-    line.BackgroundColor3 = color
-    line.BorderSizePixel = 0
-    line.Parent = parent
-    return line
-end
-
-local function buildLinePool(data, count, parentName)
-    data.Lines[parentName] = data.Lines[parentName] or {}
-    local pool = data.Lines[parentName]
+local function buildLinePool(data, count, name)
+    data.Lines[name] = data.Lines[name] or {}
+    local pool = data.Lines[name]
     while #pool < count do
         local l = Instance.new("Frame")
         l.BackgroundColor3 = Color3.new(1, 1, 1)
@@ -1294,14 +1084,6 @@ local function buildLinePool(data, count, parentName)
     return pool
 end
 
-local function hideLines(data)
-    for _, pool in pairs(data.Lines) do
-        for _, line in ipairs(pool) do
-            line.Visible = false
-        end
-    end
-end
-
 local function trackHumanoid(hum)
     if not hum or not hum:IsA("Humanoid") then return end
     if ESPTracked[hum] then return end
@@ -1310,9 +1092,7 @@ local function trackHumanoid(hum)
         ESPTracked[hum] = nil
         removeESPEntity(hum)
     end)
-    hum.Died:Connect(function()
-        removeESPEntity(hum)
-    end)
+    hum.Died:Connect(function() removeESPEntity(hum) end)
 end
 
 for _, obj in ipairs(Workspace:GetDescendants()) do
@@ -1325,36 +1105,25 @@ Workspace.DescendantAdded:Connect(function(obj)
     end
 end)
 
--- ESP Update Loop
 espTM:Start(function()
     task.wait(ESPSettings.UpdateRate)
-
-    if not ESPSettings.Enabled then
-        clearAllESP()
-        return
-    end
+    if not ESPSettings.Enabled then clearAllESP(); return end
 
     local char = LocalPlayer.Character
     local myHRP = char and char:FindFirstChild("HumanoidRootPart")
-    if not myHRP then
-        clearAllESP()
-        return
-    end
+    if not myHRP then clearAllESP(); return end
 
     local viewport = Camera.ViewportSize
     local maxRange = ESPSettings.Range or 500
 
     for hum in pairs(ESPTracked) do
         local model = hum.Parent
-
         if not model or not model.Parent or hum.Health <= 0 then
             ESPTracked[hum] = nil
             removeESPEntity(hum)
         else
             local typ, plr = getEntityType(model)
-            local localChar = LocalPlayer.Character
-
-            if not ESPSettings.ShowYourself and model == localChar then
+            if not ESPSettings.ShowYourself and model == LocalPlayer.Character then
                 removeESPEntity(hum)
             elseif typ == "Player" and not ESPSettings.ShowPlayer then
                 removeESPEntity(hum)
@@ -1373,7 +1142,6 @@ espTM:Start(function()
                         local color = getEntityColor(typ, plr)
                         local folder = data.Folder
 
-                        -- Highlight
                         if ESPSettings.ShowHighlight then
                             if not data.Highlight or not data.Highlight.Parent then
                                 data.Highlight = Instance.new("Highlight")
@@ -1387,13 +1155,9 @@ espTM:Start(function()
                             data.Highlight.FillColor = color
                             data.Highlight.OutlineColor = color
                         else
-                            if data.Highlight then
-                                pcall(function() data.Highlight:Destroy() end)
-                                data.Highlight = nil
-                            end
+                            if data.Highlight then pcall(function() data.Highlight:Destroy() end); data.Highlight = nil end
                         end
 
-                        -- Name + Distance Label
                         if ESPSettings.ShowName or ESPSettings.ShowDistance then
                             if not data.Label or not data.Label.Parent then
                                 local label = Instance.new("BillboardGui")
@@ -1418,34 +1182,25 @@ espTM:Start(function()
                             end
                             data.Label.Adornee = root
                             local text = ""
-                            if ESPSettings.ShowName then
-                                text = "[" .. model.Name .. " | HP: " .. math.floor(hum.Health) .. "]"
-                            end
-                            if ESPSettings.ShowDistance then
-                                text = text .. " [" .. math.floor(dist) .. " studs]"
-                            end
+                            if ESPSettings.ShowName then text = "[" .. model.Name .. " | HP: " .. math.floor(hum.Health) .. "]" end
+                            if ESPSettings.ShowDistance then text = text .. " [" .. math.floor(dist) .. " studs]" end
                             if data.Text then
                                 data.Text.Text = text
                                 data.Text.TextColor3 = color
                             end
                         else
-                            if data.Label then
-                                pcall(function() data.Label:Destroy() end)
-                                data.Label = nil
-                                data.Text  = nil
-                            end
+                            if data.Label then pcall(function() data.Label:Destroy() end); data.Label = nil; data.Text = nil end
                         end
 
-                        -- Tracer
                         if ESPSettings.ShowTracer then
                             local pool = buildLinePool(data, 1, "Tracer")
-                            local screenPos, onScreen = Camera:WorldToScreenPoint(root.Position)
-                            if onScreen then
+                            local sp, on = Camera:WorldToScreenPoint(root.Position)
+                            local line = pool[1]
+                            if on and sp.Z > 0 then
                                 local startPos = Vector2.new(viewport.X / 2, viewport.Y)
-                                local endPos   = Vector2.new(screenPos.X, screenPos.Y)
-                                local line = pool[1]
-                                line.Visible = true
+                                local endPos   = Vector2.new(sp.X, sp.Y)
                                 local delta = endPos - startPos
+                                line.Visible = true
                                 line.Size = UDim2.new(0, delta.Magnitude, 0, 1)
                                 line.Position = UDim2.new(0, startPos.X, 0, startPos.Y)
                                 line.Rotation = math.deg(math.atan2(delta.Y, delta.X))
@@ -1453,33 +1208,21 @@ espTM:Start(function()
                                 line.BackgroundColor3 = color
                                 line.BorderSizePixel = 0
                             else
-                                pool[1].Visible = false
+                                line.Visible = false
                             end
                         else
-                            if data.Lines["Tracer"] then
-                                for _, l in ipairs(data.Lines["Tracer"]) do l.Visible = false end
-                            end
+                            if data.Lines["Tracer"] then for _, l in ipairs(data.Lines["Tracer"]) do l.Visible = false end end
                         end
 
-                        -- 3D Box
                         if ESPSettings.ShowBox3D then
                             local pool = buildLinePool(data, 12, "Box3D")
                             local cf, size = getBoundingBox(model)
                             local half = size / 2
                             local corners = {}
-                            for x = -1, 1, 2 do
-                                for y = -1, 1, 2 do
-                                    for z = -1, 1, 2 do
-                                        table.insert(corners, (cf * CFrame.new(half.X * x, half.Y * y, half.Z * z)).Position)
-                                    end
-                                end
-                            end
-                            local edges = {
-                                {1,2},{2,4},{4,3},{3,1},
-                                {5,6},{6,8},{8,7},{7,5},
-                                {1,5},{2,6},{4,8},{3,7},
-                            }
-                            local anyVisible = false
+                            for x = -1, 1, 2 do for y = -1, 1, 2 do for z = -1, 1, 2 do
+                                table.insert(corners, (cf * CFrame.new(half.X * x, half.Y * y, half.Z * z)).Position)
+                            end end end
+                            local edges = {{1,2},{2,4},{4,3},{3,1},{5,6},{6,8},{8,7},{7,5},{1,5},{2,6},{4,8},{3,7}}
                             for i, edge in ipairs(edges) do
                                 local p1v, on1 = Camera:WorldToScreenPoint(corners[edge[1]])
                                 local p2v, on2 = Camera:WorldToScreenPoint(corners[edge[2]])
@@ -1495,28 +1238,20 @@ espTM:Start(function()
                                     line.AnchorPoint = Vector2.new(0, 0.5)
                                     line.BackgroundColor3 = color
                                     line.BorderSizePixel = 0
-                                    anyVisible = true
                                 else
                                     line.Visible = false
                                 end
                             end
-                            if not anyVisible then
-                                for _, l in ipairs(pool) do l.Visible = false end
-                            end
                         else
-                            if data.Lines["Box3D"] then
-                                for _, l in ipairs(data.Lines["Box3D"]) do l.Visible = false end
-                            end
+                            if data.Lines["Box3D"] then for _, l in ipairs(data.Lines["Box3D"]) do l.Visible = false end end
                         end
 
-                        -- Skeleton
                         if ESPSettings.ShowSkeleton then
-                            local connections = getSkeletonConnections(model)
-                            local pool = buildLinePool(data, #connections, "Skeleton")
-                            local anyVisible = false
-                            for i, conn in ipairs(connections) do
-                                local p1 = model:FindFirstChild(conn[1])
-                                local p2 = model:FindFirstChild(conn[2])
+                            local conns = getSkeletonConnections(model)
+                            local pool = buildLinePool(data, #conns, "Skeleton")
+                            for i, c in ipairs(conns) do
+                                local p1 = model:FindFirstChild(c[1])
+                                local p2 = model:FindFirstChild(c[2])
                                 local line = pool[i]
                                 if p1 and p2 then
                                     local sp1, on1 = Camera:WorldToScreenPoint(p1.Position)
@@ -1532,7 +1267,6 @@ espTM:Start(function()
                                         line.AnchorPoint = Vector2.new(0, 0.5)
                                         line.BackgroundColor3 = color
                                         line.BorderSizePixel = 0
-                                        anyVisible = true
                                     else
                                         line.Visible = false
                                     end
@@ -1540,13 +1274,8 @@ espTM:Start(function()
                                     line.Visible = false
                                 end
                             end
-                            if not anyVisible then
-                                for _, l in ipairs(pool) do l.Visible = false end
-                            end
                         else
-                            if data.Lines["Skeleton"] then
-                                for _, l in ipairs(data.Lines["Skeleton"]) do l.Visible = false end
-                            end
+                            if data.Lines["Skeleton"] then for _, l in ipairs(data.Lines["Skeleton"]) do l.Visible = false end end
                         end
                     else
                         removeESPEntity(hum)
@@ -1569,7 +1298,7 @@ SettingTab:Button({
     Desc     = "Save all current settings immediately",
     Callback = function()
         Config:Save()
-        WindUI:Notify({Title = "Config Saved", Content = "All settings have been saved successfully.", Duration = 2, Icon = "save"})
+        WindUI:Notify({Title = "Config Saved", Content = "All settings have been saved.", Duration = 2, Icon = "save"})
     end
 })
 
@@ -1581,11 +1310,7 @@ SettingTab:Toggle({
         settings.AutoSaveEnabled = state
         Config:Set("AutoSaveEnabled", state)
         Config:Save()
-        if state then
-            Config:AutoSave(settings.AutoSaveDelay)
-        else
-            Config:AutoSave(0)
-        end
+        if state then Config:AutoSave(settings.AutoSaveDelay) else Config:AutoSave(0) end
     end
 })
 
@@ -1655,12 +1380,12 @@ InfoTab:Divider()
 InfoTab:Paragraph({
     Title = "Update: " .. ver .. " | " .. version,
     Desc  = [[
-Added: Tool Giver with Cut operation (not Copy)
-Added: No Tool Appear automatic restoration
+Added: Tool Giver with true CUT operation (original is destroyed immediately)
+Added: No Tool Appear automatic restoration using CUT method
 Added: God Mode with persistent health
 Added: Full Bright and No Fog (toggle bug fixed)
 Added: Humanoid ESP with Highlight, Name, Distance, Tracer, 3D Box, Skeleton
-Added: Player tab with Fly (PC + Mobile), Noclip, TP Walk, Infinite Jump, Jump Power, Walk Speed
+Added: Player tab with Fly, Noclip, TP Walk, Infinite Jump, Jump Power, Walk Speed
 Added: Spectate and Freecam with Fix Camera
 Improved: Thread management for reliable toggle behavior
 Improved: Config auto save and persistence
@@ -1668,7 +1393,6 @@ Improved: Config auto save and persistence
 })
 InfoTab:Divider()
 
--- Discord Integration
 do
     if not ui then ui = {} end
     if not ui.Creator then ui.Creator = {} end
@@ -1730,14 +1454,6 @@ do
                     WindUI:Notify({Title = "Copied", Content = "Discord invite copied to clipboard.", Duration = 2, Icon = "clipboard-check"})
                 end
             })
-        else
-            InfoTab:Paragraph({
-                Title = "Error Fetching Discord Info",
-                Desc = "Unable to load Discord information.",
-                Image = "triangle-alert",
-                ImageSize = 26,
-                Color = "Red"
-            })
         end
     end
     pcall(LoadDiscordInfo)
@@ -1746,72 +1462,48 @@ end
 InfoTab:Divider()
 InfoTab:Section({Title = "DYHUB Information", TextXAlignment = "Center", TextSize = 17})
 InfoTab:Divider()
-InfoTab:Paragraph({
-    Title = "Main Owner",
-    Desc = "@dyumraisgoodguy",
-    Image = "rbxassetid://119789418015420",
-    ImageSize = 30
-})
+InfoTab:Paragraph({Title = "Main Owner", Desc = "@dyumraisgoodguy", Image = "rbxassetid://119789418015420", ImageSize = 30})
 InfoTab:Paragraph({
     Title = "Social",
     Desc = "Copy the social media link to follow us",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
-    Buttons = {{
-        Icon = "copy",
-        Title = "Copy Link",
-        Callback = function() setclipboard("https://guns.lol/DYHUB") end
-    }}
+    Buttons = {{Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://guns.lol/DYHUB") end}}
 })
 InfoTab:Paragraph({
     Title = "Discord",
     Desc = "Join our Discord for more scripts and updates",
     Image = "rbxassetid://104487529937663",
     ImageSize = 30,
-    Buttons = {{
-        Icon = "copy",
-        Title = "Copy Link",
-        Callback = function() setclipboard("https://discord.gg/jWNDPNMmyB") end
-    }}
+    Buttons = {{Icon = "copy", Title = "Copy Link", Callback = function() setclipboard("https://discord.gg/jWNDPNMmyB") end}}
 })
 
 -- ============================================================
 -- RESTORE ENABLED FEATURES ON RELOAD
 -- ============================================================
 task.defer(function()
-    if settings.JumpPower and Humanoid then
-        pcall(function() Humanoid.JumpPower = settings.JumpPower end)
-    end
-    if settings.WalkSpeed and Humanoid then
-        pcall(function() Humanoid.WalkSpeed = settings.WalkSpeed end)
-    end
+    if settings.JumpPower and Humanoid then pcall(function() Humanoid.JumpPower = settings.JumpPower end) end
+    if settings.WalkSpeed and Humanoid then pcall(function() Humanoid.WalkSpeed = settings.WalkSpeed end) end
 
     if settings.GodMode then
-        task.defer(function()
-            if Character and Humanoid then
-                pcall(function() Humanoid.Health = Humanoid.MaxHealth end)
+        if Character and Humanoid then pcall(function() Humanoid.Health = Humanoid.MaxHealth end) end
+        godModeTM:Start(function()
+            local c = LocalPlayer.Character
+            if not c then return end
+            local h = c:FindFirstChild("Humanoid")
+            if h and h.Parent and h.Health > 0 and h.Health < h.MaxHealth then
+                pcall(function() h.Health = h.MaxHealth end)
             end
-            godModeTM:Start(function()
-                local c = LocalPlayer.Character
-                if not c then return end
-                local h = c:FindFirstChild("Humanoid")
-                if h and h.Parent and h.Health > 0 and h.Health < h.MaxHealth then
-                    pcall(function() h.Health = h.MaxHealth end)
-                end
-            end)
         end)
     end
 
     if settings.FullBright then
         fullBrightTM:Start(function()
             pcall(function()
-                Lighting.Brightness = 2
-                Lighting.ClockTime = 14
-                Lighting.FogEnd = 100000
-                Lighting.FogStart = 0
+                Lighting.Brightness = 2; Lighting.ClockTime = 14
+                Lighting.FogEnd = 100000; Lighting.FogStart = 0
                 Lighting.GlobalShadows = false
-                Lighting.Ambient = Color3.new(1, 1, 1)
-                Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+                Lighting.Ambient = Color3.new(1, 1, 1); Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
             end)
             task.wait(0.5)
         end)
@@ -1819,10 +1511,7 @@ task.defer(function()
 
     if settings.NoFog then
         noFogTM:Start(function()
-            pcall(function()
-                Lighting.FogEnd = 100000
-                Lighting.FogStart = 0
-            end)
+            pcall(function() Lighting.FogEnd = 100000; Lighting.FogStart = 0 end)
             task.wait(0.5)
         end)
     end
@@ -1831,10 +1520,8 @@ task.defer(function()
         noclipTM:Start(function()
             local c = LocalPlayer.Character
             if not c then return end
-            for _, part in pairs(c:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    pcall(function() part.CanCollide = false end)
-                end
+            for _, p in pairs(c:GetDescendants()) do
+                if p:IsA("BasePart") then pcall(function() p.CanCollide = false end) end
             end
         end)
     end
@@ -1846,40 +1533,6 @@ task.defer(function()
             end
         end)
     end
-
-    if settings.NoToolAppear then
-        noToolTM:Start(function()
-            if not selectedToolString or selectedToolString == "" then return end
-            local pn, tn = selectedToolString:match("^(.-) | (.*)$")
-            if not pn or not tn then return end
-            local mb = LocalPlayer:FindFirstChild("Backpack")
-            if not mb then return end
-            local has = false
-            for _, it in pairs(mb:GetChildren()) do
-                if it:IsA("Tool") and it.Name == tn then has = true break end
-            end
-            if not has and LocalPlayer.Character then
-                for _, it in pairs(LocalPlayer.Character:GetChildren()) do
-                    if it:IsA("Tool") and it.Name == tn then has = true break end
-                end
-            end
-            if not has then
-                local tp = Players:FindFirstChild(pn)
-                if tp then
-                    local st = nil
-                    local b = tp:FindFirstChild("Backpack")
-                    if b then st = b:FindFirstChild(tn) end
-                    if not st and tp.Character then st = tp.Character:FindFirstChild(tn) end
-                    if st and mb then
-                        pcall(function()
-                            local c = st:Clone(); c.Parent = mb; st.Parent = nil
-                        end)
-                    end
-                end
-            end
-        end)
-    end
 end)
 
 print("[DYHUB] Universal Script " .. version .. " | " .. ver .. " loaded successfully.")
-print("[DYHUB] Config active | Auto saving every " .. tostring(settings.AutoSaveDelay) .. " seconds")
